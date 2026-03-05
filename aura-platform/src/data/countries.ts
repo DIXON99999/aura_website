@@ -120,6 +120,7 @@ export const countries: Country[] = [
   createCountry('New Zealand', 'NZ'),
 
   // Africa
+  createCountry('Botswana', 'BW'),
   createCountry('South Africa', 'ZA'),
   createCountry('Egypt', 'EG'),
   createCountry('Morocco', 'MA'),

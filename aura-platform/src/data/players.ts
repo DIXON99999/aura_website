@@ -28,6 +28,8 @@ const countryMap: Record<string, string> = {
   'South Korea': 'country-kr',
   'China': 'country-cn',
   'Saudi Arabia': 'country-sa',
+  'Botswana': 'country-bw',
+  'New Zealand': 'country-nz',
 }
 
 // Team name to organisation ID mapping
@@ -56,6 +58,10 @@ const teamMap: Record<string, string> = {
   'Team Vitality': 'org-vitality',
   'Dignitas': 'org-dig',
   'Team Falcons': 'org-falcons',
+  'Chiefs': 'org-chiefs',
+  'Rivals': 'org-rivals',
+  'Fury': 'org-fury',
+  'Retired': undefined,
 }
 
 interface PlayerInput {
@@ -149,6 +155,16 @@ const playerData: PlayerInput[] = [
   // Fortnite players
   { nickname: "Bugha", name: "Kyle Giersdorf", country: "USA", team: "Dignitas", game: "fortnite" },
   { nickname: "Pollo", name: "Ahmad Zaki", country: "Saudi Arabia", team: "Team Falcons", game: "fortnite" },
+
+  // Marvel Rivals players
+  { nickname: "duep", name: "duep", country: "Australia", team: "Gen.G", game: "marvel-rivals" },
+  { nickname: "zenstarry", name: "zenstarry", country: "Australia", team: "Gen.G", game: "marvel-rivals" },
+  { nickname: "donald", name: "donald", country: "Australia", team: "Chiefs", game: "marvel-rivals" },
+  { nickname: "six", name: "six", country: "Botswana", team: "Rivals", game: "marvel-rivals" },
+  { nickname: "fmcl", name: "fmcl", country: "New Zealand", team: "Gen.G", game: "marvel-rivals" },
+  { nickname: "daxu", name: "daxu", country: "Australia", team: "Fury", game: "marvel-rivals" },
+  { nickname: "skittles", name: "skittles", country: "Australia", team: "Gen.G", game: "marvel-rivals" },
+  { nickname: "mattyaf", name: "mattyaf", country: "France", team: "Retired", game: "marvel-rivals" },
 ]
 
 export const players: Player[] = playerData.map(createPlayer)

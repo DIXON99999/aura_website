@@ -56,4 +56,9 @@ export const organisations: Organisation[] = [
   createOrganisation('Global Esports', 'ge'),
   createOrganisation('Talon Esports', 'talon'),
   createOrganisation('Dignitas', 'dig'),
+
+  // Marvel Rivals orgs
+  createOrganisation('Chiefs', 'chiefs'),
+  createOrganisation('Rivals', 'rivals'),
+  createOrganisation('Fury', 'fury'),
 ]
