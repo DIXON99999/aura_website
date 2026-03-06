@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Nav } from '@/components/layout'
 import { useSeedData } from '@/hooks'
+import { useInitialized, useAuthStore, useAuraStore } from '@/stores'
 import {
   HomePage,
   PlayersPage,
@@ -13,10 +15,40 @@ import {
   ProfilePage,
   SignInPage,
   SignUpPage,
+  EventsPage,
+  EventPage,
+  CreateEventPage,
+  EditEventPage,
+  MyEventsPage,
 } from '@/pages'
 
 function App() {
   useSeedData()
+  const initialized = useInitialized()
+  const checkSession = useAuthStore((s) => s.checkSession)
+  const user = useAuthStore((s) => s.user)
+  const loadUserProfile = useAuraStore((s) => s.loadUserProfile)
+  const userProfiles = useAuraStore((s) => s.userProfiles)
+
+  // Check session on mount
+  useEffect(() => {
+    checkSession()
+  }, [checkSession])
+
+  // Load user profile when user is available
+  useEffect(() => {
+    if (user && !userProfiles[user.id]) {
+      loadUserProfile(user.id)
+    }
+  }, [user, userProfiles, loadUserProfile])
+
+  if (!initialized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <BrowserRouter>
@@ -33,6 +65,11 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/events/:id" element={<EventPage />} />
+          <Route path="/events/:id/edit" element={<EditEventPage />} />
+          <Route path="/create-event" element={<CreateEventPage />} />
+          <Route path="/my-events" element={<MyEventsPage />} />
           <Route path="/:entityType/:slug" element={<EntityPage />} />
         </Routes>
       </div>

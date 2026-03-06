@@ -33,7 +33,7 @@ const countryMap: Record<string, string> = {
 }
 
 // Team name to organisation ID mapping
-const teamMap: Record<string, string> = {
+const teamMap: Record<string, string | undefined> = {
   'Vitality': 'org-vitality',
   'Spirit': 'org-team-spirit',
   'Falcons': 'org-falcons',

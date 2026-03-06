@@ -10,12 +10,16 @@ export function SignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setLoading(true)
 
-    const result = signIn(email, password)
+    const result = await signIn(email, password)
+    setLoading(false)
+
     if (result.success) {
       navigate('/profile')
     } else {
@@ -36,6 +40,7 @@ export function SignInPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
           <div>
@@ -45,6 +50,7 @@ export function SignInPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
 
@@ -52,8 +58,8 @@ export function SignInPage() {
             <p className="text-sm text-red-500 text-center">{error}</p>
           )}
 
-          <Button type="submit" className="w-full">
-            Sign In
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
 

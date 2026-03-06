@@ -56,12 +56,12 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
   const visitorId = useVisitorId()
   const authUser = useAuthStore((s) => s.user)
   const vote = useAuraStore((s) => s.vote)
-  const removeVote = useAuraStore((s) => s.removeVote)
   const getVisitorVote = useAuraStore((s) => s.getVisitorVote)
   const games = useAuraStore((s) => s.games)
   const organisations = useAuraStore((s) => s.organisations)
   const countries = useAuraStore((s) => s.countries)
 
+  const credits = useAuraStore((s) => s.credits)
   const currentVote = visitorId ? getVisitorVote(visitorId, entity.id, entityType) : undefined
 
   // Check if this is the user's own profile
@@ -70,13 +70,21 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
     authUser &&
     (entity as Player).visitorId === authUser.id
 
-  const handleVote = (direction: VoteDirection) => {
+  const handleVote = async (direction: VoteDirection) => {
     if (!visitorId || isOwnProfile) return
 
-    if (currentVote?.direction === direction) {
-      removeVote(visitorId, entity.id, entityType)
-    } else {
-      vote(visitorId, entity.id, entityType, direction)
+    // Check credits before voting
+    if (direction === VoteDirection.UP && credits.upvotesRemaining <= 0) {
+      return
+    }
+    if (direction === VoteDirection.DOWN && credits.downvotesRemaining <= 0) {
+      return
+    }
+
+    try {
+      await vote(visitorId, entity.id, entityType, direction)
+    } catch (error) {
+      console.error('Vote failed:', error)
     }
   }
 
@@ -200,13 +208,14 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
         {!isOwnProfile && (
           <button
             onClick={() => handleVote(VoteDirection.UP)}
-            disabled={!visitorId}
+            disabled={!visitorId || credits.upvotesRemaining <= 0}
             className={cn(
-              'p-1.5 rounded transition-colors',
-              currentVote?.direction === VoteDirection.UP
-                ? 'text-green-500 bg-green-500/20'
-                : 'text-muted-foreground hover:text-green-500 hover:bg-green-500/10'
+              'p-1.5 rounded transition-colors text-green-500',
+              credits.upvotesRemaining <= 0
+                ? 'opacity-30 cursor-not-allowed'
+                : 'opacity-60 hover:opacity-100 hover:bg-green-500/10'
             )}
+            title={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
           >
             <ChevronUp className="w-5 h-5" />
           </button>
@@ -220,13 +229,14 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
         {!isOwnProfile && (
           <button
             onClick={() => handleVote(VoteDirection.DOWN)}
-            disabled={!visitorId}
+            disabled={!visitorId || credits.downvotesRemaining <= 0}
             className={cn(
-              'p-1.5 rounded transition-colors',
-              currentVote?.direction === VoteDirection.DOWN
-                ? 'text-red-500 bg-red-500/20'
-                : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10'
+              'p-1.5 rounded transition-colors text-red-500',
+              credits.downvotesRemaining <= 0
+                ? 'opacity-30 cursor-not-allowed'
+                : 'opacity-60 hover:opacity-100 hover:bg-red-500/10'
             )}
+            title={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
           >
             <ChevronDown className="w-5 h-5" />
           </button>

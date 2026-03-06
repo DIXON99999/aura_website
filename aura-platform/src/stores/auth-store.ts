@@ -1,134 +1,121 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { api, setSessionToken, type User, type Entity } from '@/lib/api'
 
-interface User {
+interface LinkedPlayer {
   id: string
-  email: string
-  createdAt: Date
+  name: string
+  slug: string
 }
 
 interface AuthState {
   user: User | null
-  users: Record<string, { email: string; passwordHash: string; createdAt: Date }>
+  linkedPlayer: LinkedPlayer | null
+  loading: boolean
 
-  signUp: (email: string, password: string) => { success: boolean; error?: string }
-  signIn: (email: string, password: string) => { success: boolean; error?: string }
-  signOut: () => void
-  deleteAccount: () => void
-}
-
-// Simple hash function for demo (use bcrypt in production)
-function hashPassword(password: string): string {
-  let hash = 0
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return hash.toString(36)
+  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  signOut: () => Promise<void>
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>
+  checkSession: () => Promise<void>
+  linkPlayer: (playerId: string) => Promise<void>
+  loadLinkedPlayer: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      users: {},
+      linkedPlayer: null,
+      loading: false,
 
-      signUp: (email: string, password: string) => {
-        const state = get()
-        const normalizedEmail = email.toLowerCase().trim()
-
-        // Check if email already exists
-        const existingUser = Object.values(state.users).find(
-          u => u.email.toLowerCase() === normalizedEmail
-        )
-        if (existingUser) {
-          return { success: false, error: 'Email already registered' }
+      signUp: async (email: string, password: string) => {
+        try {
+          const result = await api.signUp(email, password)
+          setSessionToken(result.session.id)
+          set({ user: result.user })
+          get().loadLinkedPlayer()
+          return { success: true }
+        } catch (error) {
+          return { success: false, error: (error as Error).message }
         }
-
-        // Validate email
-        if (!normalizedEmail.includes('@')) {
-          return { success: false, error: 'Invalid email address' }
-        }
-
-        // Validate password
-        if (password.length < 6) {
-          return { success: false, error: 'Password must be at least 6 characters' }
-        }
-
-        const userId = `user-${crypto.randomUUID().slice(0, 8)}`
-        const passwordHash = hashPassword(password)
-
-        set((state) => ({
-          users: {
-            ...state.users,
-            [userId]: {
-              email: normalizedEmail,
-              passwordHash,
-              createdAt: new Date(),
-            },
-          },
-          user: {
-            id: userId,
-            email: normalizedEmail,
-            createdAt: new Date(),
-          },
-        }))
-
-        return { success: true }
       },
 
-      signIn: (email: string, password: string) => {
-        const state = get()
-        const normalizedEmail = email.toLowerCase().trim()
-        const passwordHash = hashPassword(password)
-
-        // Find user by email
-        const userEntry = Object.entries(state.users).find(
-          ([, u]) => u.email.toLowerCase() === normalizedEmail
-        )
-
-        if (!userEntry) {
-          return { success: false, error: 'Email not found' }
+      signIn: async (email: string, password: string) => {
+        try {
+          const result = await api.signIn(email, password)
+          setSessionToken(result.session.id)
+          set({ user: result.user })
+          get().loadLinkedPlayer()
+          return { success: true }
+        } catch (error) {
+          return { success: false, error: (error as Error).message }
         }
-
-        const [userId, userData] = userEntry
-
-        if (userData.passwordHash !== passwordHash) {
-          return { success: false, error: 'Incorrect password' }
-        }
-
-        set({
-          user: {
-            id: userId,
-            email: userData.email,
-            createdAt: userData.createdAt,
-          },
-        })
-
-        return { success: true }
       },
 
-      signOut: () => {
-        set({ user: null })
+      signOut: async () => {
+        try {
+          await api.signOut()
+        } catch {
+          // Ignore errors
+        }
+        setSessionToken(null)
+        set({ user: null, linkedPlayer: null })
       },
 
-      deleteAccount: () => {
-        const state = get()
-        if (!state.user) return
+      deleteAccount: async () => {
+        try {
+          await api.deleteAccount()
+          setSessionToken(null)
+          set({ user: null })
+          return { success: true }
+        } catch (error) {
+          return { success: false, error: (error as Error).message }
+        }
+      },
 
-        const userId = state.user.id
-        const newUsers = { ...state.users }
-        delete newUsers[userId]
+      checkSession: async () => {
+        set({ loading: true })
+        try {
+          const result = await api.getMe()
+          set({ user: result.user, loading: false })
+          // Load linked player if user has playerId
+          get().loadLinkedPlayer()
+        } catch {
+          setSessionToken(null)
+          set({ user: null, linkedPlayer: null, loading: false })
+        }
+      },
 
-        set({
-          user: null,
-          users: newUsers,
-        })
+      linkPlayer: async (playerId: string) => {
+        try {
+          const result = await api.linkPlayer(playerId)
+          set({ user: result.user })
+          // Load the linked player data
+          get().loadLinkedPlayer()
+        } catch (error) {
+          console.error('Failed to link player:', error)
+        }
+      },
+
+      loadLinkedPlayer: async () => {
+        const user = get().user
+        if (!user?.playerId) {
+          set({ linkedPlayer: null })
+          return
+        }
+        try {
+          const player = await api.getPlayer(user.playerId)
+          set({ linkedPlayer: { id: player.id, name: player.name, slug: player.slug } })
+        } catch (error) {
+          console.error('Failed to load linked player:', error)
+          set({ linkedPlayer: null })
+        }
       },
     }),
     {
       name: 'aura-auth',
+      partialize: (state) => ({ user: state.user, linkedPlayer: state.linkedPlayer }),
     }
   )
 )

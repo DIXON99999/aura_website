@@ -1,11 +1,9 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
+import { api, type Entity } from '@/lib/api'
 import {
   type EntitiesState,
-  type Entity,
   type EntityType,
-  type Vote,
   type Country,
   type Game,
   type Region,
@@ -19,27 +17,41 @@ import {
   type Player,
   EntityTypes,
   VoteDirection,
-  AURA_PROPAGATION_FACTOR,
-  VOTE_VALUE,
 } from '@/types'
 
 // ============================================================================
 // STORE STATE INTERFACE
 // ============================================================================
 
+interface Credits {
+  upvotesRemaining: number
+  downvotesRemaining: number
+}
+
 interface AuraStoreState extends EntitiesState {
-  // Actions - Entity CRUD
-  addEntity: <T extends Entity>(entity: T) => void
-  removeEntity: (entityType: EntityType, entityId: string) => void
-  updateEntity: <T extends Entity>(entityType: EntityType, entityId: string, updates: Partial<T>) => void
+  // Loading states
+  loading: boolean
+  initialized: boolean
+
+  // Credits
+  credits: Credits
+
+  // Actions - Data fetching
+  fetchAllData: () => Promise<void>
+  refreshEntity: (entityType: EntityType, entityId: string) => Promise<void>
 
   // Actions - Voting
-  vote: (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => void
-  removeVote: (visitorId: string, entityId: string, entityType: EntityType) => void
-  getVisitorVote: (visitorId: string, entityId: string, entityType: EntityType) => Vote | undefined
+  vote: (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => Promise<void>
+  removeVote: (visitorId: string, entityId: string, entityType: EntityType) => Promise<void>
+  getVisitorVote: (visitorId: string, entityId: string, entityType: EntityType) => import('@/types').Vote | undefined
+  loadVisitorVotes: (visitorId: string) => Promise<void>
+
+  // Actions - Credits
+  loadCredits: (visitorId: string) => Promise<void>
+  refreshCredits: (visitorId: string) => Promise<void>
 
   // Actions - User Profile
-  createUserProfile: (visitorId: string) => Player
+  createUserProfile: (visitorId: string) => Promise<Player>
   updateUserProfile: (visitorId: string, updates: {
     name?: string
     countryId?: string
@@ -48,48 +60,84 @@ interface AuraStoreState extends EntitiesState {
     regionId?: string
     gameIds?: string[]
     associatedEntityIds?: string[]
-  }) => void
+  }) => Promise<void>
   getUserProfile: (visitorId: string) => Player | undefined
+  loadUserProfile: (visitorId: string) => Promise<Player | undefined>
+  clearUserProfile: (visitorId: string) => void
 
   // Getters
-  getEntity: (entityType: EntityType, entityId: string) => Entity | undefined
-  getEntitiesByType: (entityType: EntityType) => Entity[]
-  getRelatedEntities: (entity: Entity) => Entity[]
-
-  // Aura helpers
-  calculatePropagatedAura: (entity: Entity, deltaAura: number) => Map<string, number>
+  getEntity: (entityType: EntityType, entityId: string) => import('@/types').Entity | undefined
+  getEntitiesByType: (entityType: EntityType) => import('@/types').Entity[]
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
-function getEntityMap(state: EntitiesState, entityType: EntityType): Record<string, Entity> {
+function getEntityMap(state: EntitiesState, entityType: EntityType): Record<string, import('@/types').Entity> {
   switch (entityType) {
-    case EntityTypes.COUNTRY:
-      return state.countries
-    case EntityTypes.GAME:
-      return state.games
-    case EntityTypes.REGION:
-      return state.regions
-    case EntityTypes.ORGANISATION:
-      return state.organisations
-    case EntityTypes.ORGANISATION_GAME:
-      return state.organisationGames
-    case EntityTypes.ROLE:
-      return state.roles
-    case EntityTypes.WEAPON:
-      return state.weapons
-    case EntityTypes.CHARACTER:
-      return state.characters
-    case EntityTypes.BRAND:
-      return state.brands
-    case EntityTypes.PERIPHERAL:
-      return state.peripherals
-    case EntityTypes.PLAYER:
-      return state.players
+    case EntityTypes.COUNTRY: return state.countries
+    case EntityTypes.GAME: return state.games
+    case EntityTypes.REGION: return state.regions
+    case EntityTypes.ORGANISATION: return state.organisations
+    case EntityTypes.ORGANISATION_GAME: return state.organisationGames
+    case EntityTypes.ROLE: return state.roles
+    case EntityTypes.WEAPON: return state.weapons
+    case EntityTypes.CHARACTER: return state.characters
+    case EntityTypes.BRAND: return state.brands
+    case EntityTypes.PERIPHERAL: return state.peripherals
+    case EntityTypes.PLAYER: return state.players
+    default: throw new Error(`Unknown entity type: ${entityType}`)
+  }
+}
+
+function apiEntityToStoreEntity(e: Entity): import('@/types').Entity {
+  const base = {
+    id: e.id,
+    name: e.name,
+    slug: e.slug,
+    auraScore: e.auraScore,
+    createdAt: new Date(e.createdAt),
+    imageUrl: e.imageUrl,
+    aliases: e.aliases,
+  }
+
+  switch (e.type) {
+    case 'country':
+      return { ...base, type: EntityTypes.COUNTRY, flagCode: e.flagCode! } as Country
+    case 'game':
+      return { ...base, type: EntityTypes.GAME, gameType: e.gameType! } as Game
+    case 'region':
+      return { ...base, type: EntityTypes.REGION, gameId: e.gameId! } as Region
+    case 'organisation':
+      return { ...base, type: EntityTypes.ORGANISATION } as Organisation
+    case 'organisationGame':
+      return { ...base, type: EntityTypes.ORGANISATION_GAME, organisationId: e.organisationId!, gameId: e.gameId! } as OrganisationGame
+    case 'role':
+      return { ...base, type: EntityTypes.ROLE, gameId: e.gameId! } as Role
+    case 'weapon':
+      return { ...base, type: EntityTypes.WEAPON, gameId: e.gameId! } as Weapon
+    case 'character':
+      return { ...base, type: EntityTypes.CHARACTER, gameId: e.gameId! } as Character
+    case 'brand':
+      return { ...base, type: EntityTypes.BRAND } as Brand
+    case 'peripheral':
+      return { ...base, type: EntityTypes.PERIPHERAL, peripheralType: e.peripheralType!, brandId: e.brandId! } as Peripheral
+    case 'player':
+      return {
+        ...base,
+        type: EntityTypes.PLAYER,
+        countryId: e.countryId || '',
+        organisationId: e.organisationId,
+        mainGameId: e.mainGameId || '',
+        regionId: e.regionId || '',
+        gameIds: e.gameIds || [],
+        associatedEntityIds: e.associatedEntityIds,
+        isUserProfile: e.isUserProfile,
+        visitorId: e.visitorId,
+      } as Player
     default:
-      throw new Error(`Unknown entity type: ${entityType}`)
+      throw new Error(`Unknown entity type: ${e.type}`)
   }
 }
 
@@ -97,67 +145,39 @@ function generateVoteKey(visitorId: string, entityId: string, entityType: Entity
   return `${visitorId}:${entityType}:${entityId}`
 }
 
-function generateVoteId(): string {
-  return crypto.randomUUID()
-}
-
-// ============================================================================
-// AURA PROPAGATION LOGIC
-// ============================================================================
-
-function getParentEntities(entity: Entity): Array<{ type: EntityType; id: string }> {
+// Get parent entities that receive propagated aura
+function getParentEntities(state: EntitiesState, entityType: EntityType, entityId: string): Array<{ type: EntityType; id: string }> {
   const parents: Array<{ type: EntityType; id: string }> = []
 
-  switch (entity.type) {
-    case EntityTypes.PLAYER: {
-      const player = entity as Player
-      // Player votes affect: organisation, country, region, main game
-      if (player.organisationId) {
-        parents.push({ type: EntityTypes.ORGANISATION, id: player.organisationId })
-      }
-      parents.push({ type: EntityTypes.COUNTRY, id: player.countryId })
-      parents.push({ type: EntityTypes.REGION, id: player.regionId })
-      parents.push({ type: EntityTypes.GAME, id: player.mainGameId })
-      break
+  if (entityType === EntityTypes.PLAYER) {
+    const player = state.players[entityId]
+    if (player) {
+      if (player.organisationId) parents.push({ type: EntityTypes.ORGANISATION, id: player.organisationId })
+      if (player.countryId) parents.push({ type: EntityTypes.COUNTRY, id: player.countryId })
+      if (player.regionId) parents.push({ type: EntityTypes.REGION, id: player.regionId })
+      if (player.mainGameId) parents.push({ type: EntityTypes.GAME, id: player.mainGameId })
     }
-
-    case EntityTypes.ORGANISATION_GAME: {
-      const orgGame = entity as OrganisationGame
-      // OrganisationGame votes affect: parent organisation and game
+  } else if (entityType === EntityTypes.ORGANISATION_GAME) {
+    const orgGame = state.organisationGames[entityId]
+    if (orgGame) {
       parents.push({ type: EntityTypes.ORGANISATION, id: orgGame.organisationId })
       parents.push({ type: EntityTypes.GAME, id: orgGame.gameId })
-      break
     }
-
-    case EntityTypes.REGION: {
-      const region = entity as Region
-      // Region votes affect: game
-      parents.push({ type: EntityTypes.GAME, id: region.gameId })
-      break
-    }
-
-    case EntityTypes.ROLE:
-    case EntityTypes.WEAPON:
-    case EntityTypes.CHARACTER: {
-      const gameEntity = entity as Role | Weapon | Character
-      // Game-specific entities affect: game
-      parents.push({ type: EntityTypes.GAME, id: gameEntity.gameId })
-      break
-    }
-
-    case EntityTypes.PERIPHERAL: {
-      const peripheral = entity as Peripheral
-      // Peripheral votes affect: brand
-      parents.push({ type: EntityTypes.BRAND, id: peripheral.brandId })
-      break
-    }
-
-    // Top-level entities (no parents)
-    case EntityTypes.COUNTRY:
-    case EntityTypes.GAME:
-    case EntityTypes.ORGANISATION:
-    case EntityTypes.BRAND:
-      break
+  } else if (entityType === EntityTypes.REGION) {
+    const region = state.regions[entityId]
+    if (region) parents.push({ type: EntityTypes.GAME, id: region.gameId })
+  } else if (entityType === EntityTypes.ROLE) {
+    const role = state.roles[entityId]
+    if (role) parents.push({ type: EntityTypes.GAME, id: role.gameId })
+  } else if (entityType === EntityTypes.WEAPON) {
+    const weapon = state.weapons[entityId]
+    if (weapon) parents.push({ type: EntityTypes.GAME, id: weapon.gameId })
+  } else if (entityType === EntityTypes.CHARACTER) {
+    const char = state.characters[entityId]
+    if (char) parents.push({ type: EntityTypes.GAME, id: char.gameId })
+  } else if (entityType === EntityTypes.PERIPHERAL) {
+    const peripheral = state.peripherals[entityId]
+    if (peripheral) parents.push({ type: EntityTypes.BRAND, id: peripheral.brandId })
   }
 
   return parents
@@ -168,8 +188,7 @@ function getParentEntities(entity: Entity): Array<{ type: EntityType; id: string
 // ============================================================================
 
 export const useAuraStore = create<AuraStoreState>()(
-  persist(
-    immer((set, get) => ({
+  immer((set, get) => ({
     // Initial empty state
     countries: {},
     games: {},
@@ -184,251 +203,336 @@ export const useAuraStore = create<AuraStoreState>()(
     players: {},
     votes: {},
     userProfiles: {},
+    loading: false,
+    initialized: false,
+    credits: { upvotesRemaining: 20, downvotesRemaining: 10 },
 
     // ========================================================================
-    // ENTITY CRUD
+    // DATA FETCHING
     // ========================================================================
 
-    addEntity: <T extends Entity>(entity: T) => {
-      set((state) => {
-        switch (entity.type) {
+    fetchAllData: async () => {
+      const state = get()
+      if (state.loading || state.initialized) return
+
+      set((draft) => { draft.loading = true })
+
+      try {
+        const [
+          countries,
+          games,
+          regions,
+          organisations,
+          organisationGames,
+          brands,
+          peripherals,
+          roles,
+          weapons,
+          characters,
+          players,
+        ] = await Promise.all([
+          api.getCountries(),
+          api.getGames(),
+          api.getRegions(),
+          api.getOrganisations(),
+          api.getOrganisationGames(),
+          api.getBrands(),
+          api.getPeripherals(),
+          api.getRoles(),
+          api.getWeapons(),
+          api.getCharacters(),
+          api.getPlayers(),
+        ])
+
+        set((draft) => {
+          for (const e of countries) {
+            draft.countries[e.id] = apiEntityToStoreEntity(e) as Country
+          }
+          for (const e of games) {
+            draft.games[e.id] = apiEntityToStoreEntity(e) as Game
+          }
+          for (const e of regions) {
+            draft.regions[e.id] = apiEntityToStoreEntity(e) as Region
+          }
+          for (const e of organisations) {
+            draft.organisations[e.id] = apiEntityToStoreEntity(e) as Organisation
+          }
+          for (const e of organisationGames) {
+            draft.organisationGames[e.id] = apiEntityToStoreEntity(e) as OrganisationGame
+          }
+          for (const e of brands) {
+            draft.brands[e.id] = apiEntityToStoreEntity(e) as Brand
+          }
+          for (const e of peripherals) {
+            draft.peripherals[e.id] = apiEntityToStoreEntity(e) as Peripheral
+          }
+          for (const e of roles) {
+            draft.roles[e.id] = apiEntityToStoreEntity(e) as Role
+          }
+          for (const e of weapons) {
+            draft.weapons[e.id] = apiEntityToStoreEntity(e) as Weapon
+          }
+          for (const e of characters) {
+            draft.characters[e.id] = apiEntityToStoreEntity(e) as Character
+          }
+          for (const e of players) {
+            draft.players[e.id] = apiEntityToStoreEntity(e) as Player
+          }
+          draft.loading = false
+          draft.initialized = true
+        })
+      } catch (error) {
+        console.error('Failed to fetch data:', error)
+        set((draft) => { draft.loading = false })
+      }
+    },
+
+    refreshEntity: async (entityType: EntityType, entityId: string) => {
+      // Refetch from API and update local state
+      try {
+        let entity: Entity | null = null
+
+        switch (entityType) {
           case EntityTypes.COUNTRY:
-            state.countries[entity.id] = entity as Country
+            entity = await api.getCountry(entityId)
             break
           case EntityTypes.GAME:
-            state.games[entity.id] = entity as Game
+            entity = await api.getGame(entityId)
             break
           case EntityTypes.REGION:
-            state.regions[entity.id] = entity as Region
+            entity = await api.getRegion(entityId)
             break
           case EntityTypes.ORGANISATION:
-            state.organisations[entity.id] = entity as Organisation
-            break
-          case EntityTypes.ORGANISATION_GAME:
-            state.organisationGames[entity.id] = entity as OrganisationGame
-            break
-          case EntityTypes.ROLE:
-            state.roles[entity.id] = entity as Role
-            break
-          case EntityTypes.WEAPON:
-            state.weapons[entity.id] = entity as Weapon
-            break
-          case EntityTypes.CHARACTER:
-            state.characters[entity.id] = entity as Character
+            entity = await api.getOrganisation(entityId)
             break
           case EntityTypes.BRAND:
-            state.brands[entity.id] = entity as Brand
+            entity = await api.getBrand(entityId)
             break
           case EntityTypes.PERIPHERAL:
-            state.peripherals[entity.id] = entity as Peripheral
+            entity = await api.getPeripheral(entityId)
             break
           case EntityTypes.PLAYER:
-            state.players[entity.id] = entity as Player
+            entity = await api.getPlayer(entityId)
             break
         }
-      })
-    },
 
-    removeEntity: (entityType: EntityType, entityId: string) => {
-      set((state) => {
-        const entityMap = getEntityMap(state, entityType)
-        delete entityMap[entityId]
-      })
-    },
-
-    updateEntity: <T extends Entity>(entityType: EntityType, entityId: string, updates: Partial<T>) => {
-      set((state) => {
-        const entityMap = getEntityMap(state, entityType)
-        if (entityMap[entityId]) {
-          Object.assign(entityMap[entityId], updates)
+        if (entity) {
+          set((draft) => {
+            const map = getEntityMap(draft, entityType)
+            map[entityId] = apiEntityToStoreEntity(entity!)
+          })
         }
-      })
+      } catch (error) {
+        console.error('Failed to refresh entity:', error)
+      }
     },
 
     // ========================================================================
     // VOTING
     // ========================================================================
 
-    vote: (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => {
+    vote: async (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => {
+      // Check credits first
       const state = get()
-      const voteKey = generateVoteKey(visitorId, entityId, entityType)
+      if (direction === VoteDirection.UP && state.credits.upvotesRemaining <= 0) {
+        throw new Error('No upvote credits remaining')
+      }
+      if (direction === VoteDirection.DOWN && state.credits.downvotesRemaining <= 0) {
+        throw new Error('No downvote credits remaining')
+      }
 
-      // Check for existing vote
-      const existingVote = state.votes[voteKey]
-
+      // Optimistic update
       set((draft) => {
         const entity = getEntityMap(draft, entityType)[entityId]
         if (!entity) return
 
-        let auraDelta = 0
-
-        if (existingVote) {
-          // If same direction, do nothing (already voted)
-          if (existingVote.direction === direction) return
-
-          // Switching vote direction: remove old vote effect, apply new
-          const oldEffect = existingVote.direction === VoteDirection.UP ? VOTE_VALUE : -VOTE_VALUE
-          const newEffect = direction === VoteDirection.UP ? VOTE_VALUE : -VOTE_VALUE
-          auraDelta = newEffect - oldEffect // Will be +2 or -2
-
-          // Update existing vote
-          draft.votes[voteKey] = {
-            ...existingVote,
-            direction,
-            timestamp: new Date(),
-          }
-        } else {
-          // New vote
-          auraDelta = direction === VoteDirection.UP ? VOTE_VALUE : -VOTE_VALUE
-
-          const newVote: Vote = {
-            id: generateVoteId(),
-            visitorId,
-            entityId,
-            entityType,
-            direction,
-            timestamp: new Date(),
-          }
-          draft.votes[voteKey] = newVote
-        }
-
-        // Apply aura change to voted entity
+        const auraDelta = direction === VoteDirection.UP ? 1 : -1
         entity.auraScore += auraDelta
 
-        // Propagate aura to parent entities
-        const parents = getParentEntities(entity)
-        const propagatedDelta = auraDelta * AURA_PROPAGATION_FACTOR
-
-        for (const parent of parents) {
-          const parentEntity = getEntityMap(draft, parent.type)[parent.id]
-          if (parentEntity) {
-            parentEntity.auraScore += propagatedDelta
-          }
+        // Deduct credit
+        if (direction === VoteDirection.UP) {
+          draft.credits.upvotesRemaining -= 1
+        } else {
+          draft.credits.downvotesRemaining -= 1
         }
       })
+
+      // Sync with backend
+      try {
+        const result = await api.vote({ visitorId, entityId, entityType, direction })
+        // Update credits from response
+        set((draft) => {
+          draft.credits.upvotesRemaining = result.credits.upvotesRemaining
+          draft.credits.downvotesRemaining = result.credits.downvotesRemaining
+        })
+        // Refresh the entity and its parents to get accurate scores
+        const newState = get()
+        newState.refreshEntity(entityType, entityId)
+        const parents = getParentEntities(newState, entityType, entityId)
+        for (const parent of parents) {
+          newState.refreshEntity(parent.type, parent.id)
+        }
+      } catch (error) {
+        // Revert optimistic update on error
+        set((draft) => {
+          const entity = getEntityMap(draft, entityType)[entityId]
+          if (entity) {
+            const auraDelta = direction === VoteDirection.UP ? -1 : 1
+            entity.auraScore += auraDelta
+          }
+          if (direction === VoteDirection.UP) {
+            draft.credits.upvotesRemaining += 1
+          } else {
+            draft.credits.downvotesRemaining += 1
+          }
+        })
+        throw error
+      }
     },
 
-    removeVote: (visitorId: string, entityId: string, entityType: EntityType) => {
-      const state = get()
+    removeVote: async (visitorId: string, entityId: string, entityType: EntityType) => {
       const voteKey = generateVoteKey(visitorId, entityId, entityType)
-      const existingVote = state.votes[voteKey]
+      const existingVote = get().votes[voteKey]
 
       if (!existingVote) return
 
+      // Optimistic update
       set((draft) => {
         const entity = getEntityMap(draft, entityType)[entityId]
         if (!entity) return
 
-        // Reverse the vote effect
-        const auraDelta = existingVote.direction === VoteDirection.UP ? -VOTE_VALUE : VOTE_VALUE
+        const auraDelta = existingVote.direction === VoteDirection.UP ? -1 : 1
         entity.auraScore += auraDelta
-
-        // Reverse propagation to parents
-        const parents = getParentEntities(entity)
-        const propagatedDelta = auraDelta * AURA_PROPAGATION_FACTOR
-
-        for (const parent of parents) {
-          const parentEntity = getEntityMap(draft, parent.type)[parent.id]
-          if (parentEntity) {
-            parentEntity.auraScore += propagatedDelta
-          }
-        }
-
-        // Remove the vote
         delete draft.votes[voteKey]
       })
+
+      // Sync with backend
+      try {
+        await api.removeVote({ visitorId, entityId, entityType })
+        // Refresh the entity and its parents to get accurate scores
+        const state = get()
+        state.refreshEntity(entityType, entityId)
+        const parents = getParentEntities(state, entityType, entityId)
+        for (const parent of parents) {
+          state.refreshEntity(parent.type, parent.id)
+        }
+      } catch (error) {
+        console.error('Failed to remove vote:', error)
+      }
     },
 
     getVisitorVote: (visitorId: string, entityId: string, entityType: EntityType) => {
-      const state = get()
       const voteKey = generateVoteKey(visitorId, entityId, entityType)
-      return state.votes[voteKey]
+      return get().votes[voteKey]
+    },
+
+    loadVisitorVotes: async (visitorId: string) => {
+      try {
+        const votes = await api.getVisitorVotes(visitorId)
+        set((draft) => {
+          for (const v of votes) {
+            const voteKey = `${v.visitorId}:${v.entityType}:${v.entityId}`
+            draft.votes[voteKey] = {
+              id: v.id,
+              visitorId: v.visitorId,
+              entityId: v.entityId,
+              entityType: v.entityType as EntityType,
+              direction: v.direction as VoteDirection,
+              timestamp: new Date(v.timestamp),
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Failed to load votes:', error)
+      }
+    },
+
+    loadCredits: async (visitorId: string) => {
+      try {
+        const credits = await api.getCredits(visitorId)
+        set((draft) => {
+          draft.credits = credits
+        })
+      } catch (error) {
+        console.error('Failed to load credits:', error)
+      }
+    },
+
+    refreshCredits: async (visitorId: string) => {
+      try {
+        const credits = await api.refreshCredits(visitorId)
+        set((draft) => {
+          draft.credits = credits
+        })
+      } catch (error) {
+        console.error('Failed to refresh credits:', error)
+      }
     },
 
     // ========================================================================
     // USER PROFILE
     // ========================================================================
 
-    createUserProfile: (visitorId: string) => {
-      const state = get()
-
-      // Check if profile already exists
-      const existingProfileId = state.userProfiles[visitorId]
-      if (existingProfileId && state.players[existingProfileId]) {
-        return state.players[existingProfileId]
+    createUserProfile: async (visitorId: string) => {
+      const existingProfileId = get().userProfiles[visitorId]
+      if (existingProfileId && get().players[existingProfileId]) {
+        return get().players[existingProfileId]
       }
 
-      const playerId = `player-user-${visitorId.slice(0, 8)}`
-      const newPlayer: Player = {
-        id: playerId,
-        name: '',
-        slug: `user-${visitorId.slice(0, 8)}`,
-        auraScore: 0,
-        createdAt: new Date(),
-        type: EntityTypes.PLAYER,
-        countryId: '',
-        mainGameId: '',
-        regionId: '',
-        gameIds: [],
-        isUserProfile: true,
-        visitorId,
+      try {
+        const entity = await api.createUserProfile({ visitorId })
+        const player = apiEntityToStoreEntity(entity) as Player
+
+        set((draft) => {
+          draft.players[player.id] = player
+          draft.userProfiles[visitorId] = player.id
+        })
+
+        return player
+      } catch (error) {
+        console.error('Failed to create profile:', error)
+        throw error
       }
-
-      set((draft) => {
-        draft.players[playerId] = newPlayer
-        draft.userProfiles[visitorId] = playerId
-      })
-
-      return newPlayer
     },
 
-    updateUserProfile: (visitorId: string, updates: {
-      name?: string
-      countryId?: string
-      organisationId?: string | null
-      mainGameId?: string
-      regionId?: string
-      gameIds?: string[]
-      associatedEntityIds?: string[]
-    }) => {
-      const state = get()
-      const playerId = state.userProfiles[visitorId]
+    updateUserProfile: async (visitorId: string, updates) => {
+      const playerId = get().userProfiles[visitorId]
       if (!playerId) return
 
-      set((draft) => {
-        const player = draft.players[playerId]
-        if (!player) return
+      try {
+        const entity = await api.updatePlayer(playerId, updates)
+        const player = apiEntityToStoreEntity(entity) as Player
 
-        if (updates.name !== undefined) {
-          player.name = updates.name
-          player.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${visitorId.slice(0, 8)}`
-        }
-        if (updates.countryId !== undefined) {
-          player.countryId = updates.countryId
-        }
-        if (updates.organisationId !== undefined) {
-          player.organisationId = updates.organisationId || undefined
-        }
-        if (updates.mainGameId !== undefined) {
-          player.mainGameId = updates.mainGameId
-        }
-        if (updates.regionId !== undefined) {
-          player.regionId = updates.regionId
-        }
-        if (updates.gameIds !== undefined) {
-          player.gameIds = updates.gameIds
-        }
-        if (updates.associatedEntityIds !== undefined) {
-          player.associatedEntityIds = updates.associatedEntityIds
-        }
-      })
+        set((draft) => {
+          draft.players[playerId] = player
+        })
+      } catch (error) {
+        console.error('Failed to update profile:', error)
+      }
     },
 
     getUserProfile: (visitorId: string) => {
-      const state = get()
-      const playerId = state.userProfiles[visitorId]
+      const playerId = get().userProfiles[visitorId]
       if (!playerId) return undefined
-      return state.players[playerId]
+      return get().players[playerId]
+    },
+
+    loadUserProfile: async (visitorId: string) => {
+      try {
+        const entity = await api.getUserProfile(visitorId)
+        if (!entity) return undefined
+
+        const player = apiEntityToStoreEntity(entity) as Player
+
+        set((draft) => {
+          draft.players[player.id] = player
+          draft.userProfiles[visitorId] = player.id
+        })
+
+        return player
+      } catch {
+        return undefined
+      }
     },
 
     // ========================================================================
@@ -436,147 +540,13 @@ export const useAuraStore = create<AuraStoreState>()(
     // ========================================================================
 
     getEntity: (entityType: EntityType, entityId: string) => {
-      const state = get()
-      return getEntityMap(state, entityType)[entityId]
+      return getEntityMap(get(), entityType)[entityId]
     },
 
     getEntitiesByType: (entityType: EntityType) => {
-      const state = get()
-      return Object.values(getEntityMap(state, entityType))
+      return Object.values(getEntityMap(get(), entityType))
     },
-
-    getRelatedEntities: (entity: Entity) => {
-      const state = get()
-      const related: Entity[] = []
-
-      switch (entity.type) {
-        case EntityTypes.PLAYER: {
-          const player = entity as Player
-          if (player.organisationId && state.organisations[player.organisationId]) {
-            related.push(state.organisations[player.organisationId])
-          }
-          if (state.countries[player.countryId]) {
-            related.push(state.countries[player.countryId])
-          }
-          if (state.regions[player.regionId]) {
-            related.push(state.regions[player.regionId])
-          }
-          if (state.games[player.mainGameId]) {
-            related.push(state.games[player.mainGameId])
-          }
-          break
-        }
-
-        case EntityTypes.ORGANISATION: {
-          // Find all OrganisationGames for this org
-          for (const orgGame of Object.values(state.organisationGames)) {
-            if (orgGame.organisationId === entity.id) {
-              related.push(orgGame)
-            }
-          }
-          // Find all players in this org
-          for (const player of Object.values(state.players)) {
-            if (player.organisationId === entity.id) {
-              related.push(player)
-            }
-          }
-          break
-        }
-
-        case EntityTypes.GAME: {
-          // Find all regions for this game
-          for (const region of Object.values(state.regions)) {
-            if (region.gameId === entity.id) {
-              related.push(region)
-            }
-          }
-          // Find all roles, weapons, characters for this game
-          for (const role of Object.values(state.roles)) {
-            if (role.gameId === entity.id) {
-              related.push(role)
-            }
-          }
-          for (const weapon of Object.values(state.weapons)) {
-            if (weapon.gameId === entity.id) {
-              related.push(weapon)
-            }
-          }
-          for (const character of Object.values(state.characters)) {
-            if (character.gameId === entity.id) {
-              related.push(character)
-            }
-          }
-          break
-        }
-
-        case EntityTypes.BRAND: {
-          // Find all peripherals for this brand
-          for (const peripheral of Object.values(state.peripherals)) {
-            if (peripheral.brandId === entity.id) {
-              related.push(peripheral)
-            }
-          }
-          break
-        }
-
-        case EntityTypes.COUNTRY: {
-          // Find all players from this country
-          for (const player of Object.values(state.players)) {
-            if (player.countryId === entity.id) {
-              related.push(player)
-            }
-          }
-          break
-        }
-
-        case EntityTypes.REGION: {
-          const region = entity as Region
-          // Add parent game
-          if (state.games[region.gameId]) {
-            related.push(state.games[region.gameId])
-          }
-          // Find all players in this region
-          for (const player of Object.values(state.players)) {
-            if (player.regionId === entity.id) {
-              related.push(player)
-            }
-          }
-          break
-        }
-      }
-
-      return related
-    },
-
-    // ========================================================================
-    // AURA HELPERS
-    // ========================================================================
-
-    calculatePropagatedAura: (entity: Entity, deltaAura: number) => {
-      const propagationMap = new Map<string, number>()
-
-      const parents = getParentEntities(entity)
-      const propagatedDelta = deltaAura * AURA_PROPAGATION_FACTOR
-
-      for (const parent of parents) {
-        const key = `${parent.type}:${parent.id}`
-        propagationMap.set(key, propagatedDelta)
-      }
-
-      return propagationMap
-    },
-  })),
-    {
-      name: 'aura-data',
-      partialize: (state) => ({
-        votes: state.votes,
-        userProfiles: state.userProfiles,
-        players: Object.fromEntries(
-          Object.entries(state.players).filter(([, p]) => p.isUserProfile)
-        ),
-      }),
-    }
-  )
+  }))
 )
 
 // ============================================================================
@@ -595,3 +565,6 @@ export const useBrands = () => useAuraStore((state) => state.brands)
 export const usePeripherals = () => useAuraStore((state) => state.peripherals)
 export const usePlayers = () => useAuraStore((state) => state.players)
 export const useVotes = () => useAuraStore((state) => state.votes)
+export const useLoading = () => useAuraStore((state) => state.loading)
+export const useInitialized = () => useAuraStore((state) => state.initialized)
+export const useCredits = () => useAuraStore((state) => state.credits)

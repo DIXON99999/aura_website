@@ -1,59 +1,25 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useAuraStore } from '@/stores'
-import {
-  countries,
-  games,
-  regions,
-  organisations,
-  organisationGames,
-  players,
-  brands,
-  peripherals,
-  roles,
-  weapons,
-  characters,
-} from '@/data'
+import { useVisitorId } from './use-visitor-id'
 
 export function useSeedData() {
-  const addEntity = useAuraStore((s) => s.addEntity)
-  const seeded = useRef(false)
+  const fetchAllData = useAuraStore((s) => s.fetchAllData)
+  const loadVisitorVotes = useAuraStore((s) => s.loadVisitorVotes)
+  const loadUserProfile = useAuraStore((s) => s.loadUserProfile)
+  const initialized = useAuraStore((s) => s.initialized)
+  const visitorId = useVisitorId()
 
   useEffect(() => {
-    if (seeded.current) return
-    seeded.current = true
+    if (!initialized) {
+      fetchAllData()
+    }
+  }, [fetchAllData, initialized])
 
-    for (const country of countries) {
-      addEntity(country)
+  // Load visitor-specific data when visitorId is available
+  useEffect(() => {
+    if (visitorId && initialized) {
+      loadVisitorVotes(visitorId)
+      loadUserProfile(visitorId)
     }
-    for (const game of games) {
-      addEntity(game)
-    }
-    for (const region of regions) {
-      addEntity(region)
-    }
-    for (const org of organisations) {
-      addEntity(org)
-    }
-    for (const orgGame of organisationGames) {
-      addEntity(orgGame)
-    }
-    for (const player of players) {
-      addEntity(player)
-    }
-    for (const brand of brands) {
-      addEntity(brand)
-    }
-    for (const peripheral of peripherals) {
-      addEntity(peripheral)
-    }
-    for (const role of roles) {
-      addEntity(role)
-    }
-    for (const weapon of weapons) {
-      addEntity(weapon)
-    }
-    for (const character of characters) {
-      addEntity(character)
-    }
-  }, [addEntity])
+  }, [visitorId, initialized, loadVisitorVotes, loadUserProfile])
 }

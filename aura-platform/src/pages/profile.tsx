@@ -111,7 +111,6 @@ export function ProfilePage() {
 
   const createUserProfile = useAuraStore((s) => s.createUserProfile)
   const updateUserProfile = useAuraStore((s) => s.updateUserProfile)
-  const removeEntity = useAuraStore((s) => s.removeEntity)
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
   const regions = useAuraStore((s) => s.regions)
@@ -315,14 +314,13 @@ export function ProfilePage() {
     updateUserProfile(user.id, { mainGameId: gameId })
   }
 
-  const handleSignOut = () => {
-    signOut()
+  const handleSignOut = async () => {
+    await signOut()
     navigate('/')
   }
 
-  const handleDeleteAccount = () => {
-    removeEntity('player', profile.id)
-    deleteAccount()
+  const handleDeleteAccount = async () => {
+    await deleteAccount()
     navigate('/')
   }
 

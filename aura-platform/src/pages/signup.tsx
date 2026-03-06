@@ -11,8 +11,9 @@ export function SignUpPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
@@ -21,7 +22,10 @@ export function SignUpPage() {
       return
     }
 
-    const result = signUp(email, password)
+    setLoading(true)
+    const result = await signUp(email, password)
+    setLoading(false)
+
     if (result.success) {
       navigate('/profile')
     } else {
@@ -42,6 +46,7 @@ export function SignUpPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
           <div>
@@ -52,6 +57,7 @@ export function SignUpPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              disabled={loading}
             />
           </div>
           <div>
@@ -61,6 +67,7 @@ export function SignUpPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
 
@@ -68,8 +75,8 @@ export function SignUpPage() {
             <p className="text-sm text-red-500 text-center">{error}</p>
           )}
 
-          <Button type="submit" className="w-full">
-            Sign Up
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Creating account...' : 'Sign Up'}
           </Button>
         </form>
 

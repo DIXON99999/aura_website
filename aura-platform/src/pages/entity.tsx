@@ -246,8 +246,8 @@ export function EntityPage() {
   const visitorId = useVisitorId()
   const authUser = useAuthStore((s) => s.user)
   const vote = useAuraStore((s) => s.vote)
-  const removeVote = useAuraStore((s) => s.removeVote)
   const getVisitorVote = useAuraStore((s) => s.getVisitorVote)
+  const credits = useAuraStore((s) => s.credits)
 
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
@@ -296,12 +296,21 @@ export function EntityPage() {
     authUser &&
     (entity as Player).visitorId === authUser.id
 
-  const handleVote = (direction: VoteDirection) => {
+  const handleVote = async (direction: VoteDirection) => {
     if (!visitorId || isOwnProfile) return
-    if (currentVote?.direction === direction) {
-      removeVote(visitorId, entity.id, type)
-    } else {
-      vote(visitorId, entity.id, type, direction)
+
+    // Check credits before voting
+    if (direction === VoteDirection.UP && credits.upvotesRemaining <= 0) {
+      return
+    }
+    if (direction === VoteDirection.DOWN && credits.downvotesRemaining <= 0) {
+      return
+    }
+
+    try {
+      await vote(visitorId, entity.id, type, direction)
+    } catch (error) {
+      console.error('Vote failed:', error)
     }
   }
 
@@ -406,13 +415,14 @@ export function EntityPage() {
             {!isOwnProfile && (
               <button
                 onClick={() => handleVote(VoteDirection.UP)}
-                disabled={!visitorId}
+                disabled={!visitorId || credits.upvotesRemaining <= 0}
                 className={cn(
-                  'p-3 rounded-lg transition-colors',
-                  currentVote?.direction === VoteDirection.UP
-                    ? 'text-green-500 bg-green-500/20'
-                    : 'text-muted-foreground hover:text-green-500 hover:bg-green-500/10'
+                  'p-3 rounded-lg transition-colors text-green-500',
+                  credits.upvotesRemaining <= 0
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'opacity-60 hover:opacity-100 hover:bg-green-500/10'
                 )}
+                title={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
               >
                 <ChevronUp className="w-8 h-8" />
               </button>
@@ -426,13 +436,14 @@ export function EntityPage() {
             {!isOwnProfile && (
               <button
                 onClick={() => handleVote(VoteDirection.DOWN)}
-                disabled={!visitorId}
+                disabled={!visitorId || credits.downvotesRemaining <= 0}
                 className={cn(
-                  'p-3 rounded-lg transition-colors',
-                  currentVote?.direction === VoteDirection.DOWN
-                    ? 'text-red-500 bg-red-500/20'
-                    : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10'
+                  'p-3 rounded-lg transition-colors text-red-500',
+                  credits.downvotesRemaining <= 0
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'opacity-60 hover:opacity-100 hover:bg-red-500/10'
                 )}
+                title={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
               >
                 <ChevronDown className="w-8 h-8" />
               </button>
