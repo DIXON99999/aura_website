@@ -20,6 +20,10 @@ import {
   CreateEventPage,
   EditEventPage,
   MyEventsPage,
+  AuraFarmsPage,
+  AuraFarmPage,
+  CreateAuraFarmPage,
+  MyAuraFarmsPage,
 } from '@/pages'
 
 function App() {
@@ -70,6 +74,10 @@ function App() {
           <Route path="/events/:id/edit" element={<EditEventPage />} />
           <Route path="/create-event" element={<CreateEventPage />} />
           <Route path="/my-events" element={<MyEventsPage />} />
+          <Route path="/aura-farms" element={<AuraFarmsPage />} />
+          <Route path="/aura-farms/:id" element={<AuraFarmPage />} />
+          <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
+          <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
           <Route path="/:entityType/:slug" element={<EntityPage />} />
         </Routes>
       </div>

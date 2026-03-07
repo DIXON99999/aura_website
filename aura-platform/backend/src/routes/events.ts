@@ -59,6 +59,8 @@ db.run(`
 try { db.run(`ALTER TABLE sub_event_comments ADD COLUMN username TEXT`) } catch {}
 try { db.run(`ALTER TABLE sub_event_comments ADD COLUMN parent_id TEXT`) } catch {}
 try { db.run(`ALTER TABLE sub_event_comments ADD COLUMN vote_count INTEGER NOT NULL DEFAULT 0`) } catch {}
+try { db.run(`ALTER TABLE sub_event_comments ADD COLUMN image_url TEXT`) } catch {}
+try { db.run(`ALTER TABLE sub_event_comments ADD COLUMN user_id TEXT`) } catch {}
 
 db.run(`
   CREATE TABLE IF NOT EXISTS sub_event_comment_votes (
@@ -71,6 +73,28 @@ db.run(`
 `)
 
 const app = new Hono()
+
+// Credit system constants
+const DEFAULT_UPVOTES = 20
+const DEFAULT_DOWNVOTES = 10
+
+interface DbVisitorCredits {
+  visitor_id: string
+  upvotes_remaining: number
+  downvotes_remaining: number
+}
+
+function getOrCreateCredits(visitorId: string): DbVisitorCredits {
+  let credits = db.query('SELECT * FROM visitor_credits WHERE visitor_id = ?').get(visitorId) as DbVisitorCredits | null
+  if (!credits) {
+    db.run(
+      'INSERT INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) VALUES (?, ?, ?)',
+      visitorId, DEFAULT_UPVOTES, DEFAULT_DOWNVOTES
+    )
+    credits = { visitor_id: visitorId, upvotes_remaining: DEFAULT_UPVOTES, downvotes_remaining: DEFAULT_DOWNVOTES }
+  }
+  return credits
+}
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -104,15 +128,39 @@ app.get('/', async (c) => {
 
   const events = db.query(query).all(...params) as DbEvent[]
 
-  return c.json(events.map(e => ({
-    id: e.id,
-    name: e.name,
-    slug: e.slug,
-    gameId: e.game_id,
-    ownerId: e.owner_id,
-    isPublic: e.is_public === 1,
-    createdAt: new Date(e.created_at),
-  })))
+  return c.json(events.map(e => {
+    // Get owner's linked player name or fall back to email username
+    let ownerName: string | null = null
+    const owner = db.query('SELECT email, player_id FROM users WHERE id = ?').get(e.owner_id) as { email: string; player_id: string | null } | null
+    if (owner?.player_id) {
+      const player = db.query('SELECT name FROM players WHERE id = ?').get(owner.player_id) as { name: string } | null
+      ownerName = player?.name || null
+    }
+    // Fall back to user profile name from user_profiles table
+    if (!ownerName) {
+      const profile = db.query('SELECT player_id FROM user_profiles WHERE visitor_id = ?').get(e.owner_id) as { player_id: string } | null
+      if (profile?.player_id) {
+        const player = db.query('SELECT name FROM players WHERE id = ?').get(profile.player_id) as { name: string } | null
+        ownerName = player?.name || null
+      }
+    }
+    // Fall back to email username
+    if (!ownerName && owner?.email) {
+      ownerName = owner.email.split('@')[0]
+    }
+    return {
+      id: e.id,
+      name: e.name,
+      slug: e.slug,
+      gameId: e.game_id,
+      ownerId: e.owner_id,
+      ownerName,
+      isPublic: e.is_public === 1,
+      description: (e as any).description || null,
+      imageUrl: (e as any).image_url || null,
+      createdAt: new Date(e.created_at),
+    }
+  }))
 })
 
 // GET /events/my - Get user's events
@@ -126,15 +174,39 @@ app.get('/my', async (c) => {
 
   const events = db.query('SELECT * FROM events WHERE owner_id = ? ORDER BY created_at DESC').all(userId) as DbEvent[]
 
-  return c.json(events.map(e => ({
-    id: e.id,
-    name: e.name,
-    slug: e.slug,
-    gameId: e.game_id,
-    ownerId: e.owner_id,
-    isPublic: e.is_public === 1,
-    createdAt: new Date(e.created_at),
-  })))
+  return c.json(events.map(e => {
+    // Get owner's linked player name or fall back to email username
+    let ownerName: string | null = null
+    const owner = db.query('SELECT email, player_id FROM users WHERE id = ?').get(e.owner_id) as { email: string; player_id: string | null } | null
+    if (owner?.player_id) {
+      const player = db.query('SELECT name FROM players WHERE id = ?').get(owner.player_id) as { name: string } | null
+      ownerName = player?.name || null
+    }
+    // Fall back to user profile name from user_profiles table
+    if (!ownerName) {
+      const profile = db.query('SELECT player_id FROM user_profiles WHERE visitor_id = ?').get(e.owner_id) as { player_id: string } | null
+      if (profile?.player_id) {
+        const player = db.query('SELECT name FROM players WHERE id = ?').get(profile.player_id) as { name: string } | null
+        ownerName = player?.name || null
+      }
+    }
+    // Fall back to email username
+    if (!ownerName && owner?.email) {
+      ownerName = owner.email.split('@')[0]
+    }
+    return {
+      id: e.id,
+      name: e.name,
+      slug: e.slug,
+      gameId: e.game_id,
+      ownerId: e.owner_id,
+      ownerName,
+      isPublic: e.is_public === 1,
+      description: (e as any).description || null,
+      imageUrl: (e as any).image_url || null,
+      createdAt: new Date(e.created_at),
+    }
+  }))
 })
 
 // GET /events/:id - Get event with participants
@@ -184,13 +256,36 @@ app.get('/:id', async (c) => {
     }
   })
 
+  // Get owner's linked player name or fall back to email username
+  let ownerName: string | null = null
+  const owner = db.query('SELECT email, player_id FROM users WHERE id = ?').get(event.owner_id) as { email: string; player_id: string | null } | null
+  if (owner?.player_id) {
+    const player = db.query('SELECT name FROM players WHERE id = ?').get(owner.player_id) as { name: string } | null
+    ownerName = player?.name || null
+  }
+  // Fall back to user profile name from user_profiles table
+  if (!ownerName) {
+    const profile = db.query('SELECT player_id FROM user_profiles WHERE visitor_id = ?').get(event.owner_id) as { player_id: string } | null
+    if (profile?.player_id) {
+      const player = db.query('SELECT name FROM players WHERE id = ?').get(profile.player_id) as { name: string } | null
+      ownerName = player?.name || null
+    }
+  }
+  // Fall back to email username
+  if (!ownerName && owner?.email) {
+    ownerName = owner.email.split('@')[0]
+  }
+
   return c.json({
     id: event.id,
     name: event.name,
     slug: event.slug,
     gameId: event.game_id,
     ownerId: event.owner_id,
+    ownerName,
     isPublic: event.is_public === 1,
+    description: (event as any).description || null,
+    imageUrl: (event as any).image_url || null,
     createdAt: new Date(event.created_at),
     participants: participantsWithDetails,
   })
@@ -206,7 +301,7 @@ app.post('/', async (c) => {
   }
 
   const body = await c.req.json()
-  const { name, gameId, isPublic, participants } = body
+  const { name, gameId, isPublic, participants, description, imageUrl } = body
 
   if (!name || !gameId) {
     return c.json({ error: 'Name and game are required' }, 400)
@@ -217,8 +312,8 @@ app.post('/', async (c) => {
   const now = Date.now()
 
   db.run(
-    'INSERT INTO events (id, name, slug, game_id, owner_id, is_public, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    eventId, name, slug, gameId, userId, isPublic ? 1 : 0, now
+    'INSERT INTO events (id, name, slug, game_id, owner_id, is_public, description, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    eventId, name, slug, gameId, userId, isPublic ? 1 : 0, description || null, imageUrl || null, now
   )
 
   // Add participants
@@ -239,6 +334,8 @@ app.post('/', async (c) => {
     gameId,
     ownerId: userId,
     isPublic: !!isPublic,
+    description: description || null,
+    imageUrl: imageUrl || null,
     createdAt: new Date(now),
   })
 })
@@ -264,7 +361,7 @@ app.patch('/:id', async (c) => {
   }
 
   const body = await c.req.json()
-  const { name, isPublic } = body
+  const { name, isPublic, description, imageUrl } = body
 
   if (name) {
     db.run('UPDATE events SET name = ?, slug = ? WHERE id = ?', name, generateSlug(name), id)
@@ -272,6 +369,14 @@ app.patch('/:id', async (c) => {
 
   if (isPublic !== undefined) {
     db.run('UPDATE events SET is_public = ? WHERE id = ?', isPublic ? 1 : 0, id)
+  }
+
+  if (description !== undefined) {
+    db.run('UPDATE events SET description = ? WHERE id = ?', description || null, id)
+  }
+
+  if (imageUrl !== undefined) {
+    db.run('UPDATE events SET image_url = ? WHERE id = ?', imageUrl || null, id)
   }
 
   const updated = db.query('SELECT * FROM events WHERE id = ?').get(id) as DbEvent
@@ -283,6 +388,8 @@ app.patch('/:id', async (c) => {
     gameId: updated.game_id,
     ownerId: updated.owner_id,
     isPublic: updated.is_public === 1,
+    description: (updated as any).description || null,
+    imageUrl: (updated as any).image_url || null,
     createdAt: new Date(updated.created_at),
   })
 })
@@ -385,6 +492,16 @@ app.delete('/:id/participants/:participantId', async (c) => {
     )
   }
 
+  // Delete participant from all sub-events first
+  const subEventParticipants = db.query(
+    'SELECT id FROM sub_event_participants WHERE leaderboard_participant_id = ?'
+  ).all(participantId) as { id: string }[]
+
+  for (const sep of subEventParticipants) {
+    db.run('DELETE FROM sub_event_votes WHERE participant_id = ?', sep.id)
+  }
+  db.run('DELETE FROM sub_event_participants WHERE leaderboard_participant_id = ?', participantId)
+
   // Delete votes for this participant
   db.run('DELETE FROM event_votes WHERE participant_id = ?', participantId)
   db.run('DELETE FROM event_participants WHERE id = ?', participantId)
@@ -392,7 +509,7 @@ app.delete('/:id/participants/:participantId', async (c) => {
   return c.json({ success: true })
 })
 
-// POST /events/:id/vote - Vote on participant
+// POST /events/:id/vote - Vote on participant (uses credits)
 app.post('/:id/vote', async (c) => {
   const eventId = c.req.param('id')
   const body = await c.req.json()
@@ -417,13 +534,24 @@ app.post('/:id/vote', async (c) => {
     'SELECT * FROM event_votes WHERE visitor_id = ? AND event_id = ? AND participant_id = ?'
   ).get(visitorId, eventId, participantId) as DbEventVote | null
 
+  // Check credits for new votes
+  const credits = getOrCreateCredits(visitorId)
+  if (!existingVote) {
+    if (direction === 'UP' && credits.upvotes_remaining <= 0) {
+      return c.json({ error: 'No upvote credits remaining' }, 400)
+    }
+    if (direction === 'DOWN' && credits.downvotes_remaining <= 0) {
+      return c.json({ error: 'No downvote credits remaining' }, 400)
+    }
+  }
+
   const delta = direction === 'UP' ? 1 : -1
 
   if (existingVote) {
     if (existingVote.direction === direction) {
       return c.json({ error: 'Already voted' }, 400)
     }
-    // Change vote direction - double the delta
+    // Change vote direction - double the delta (no credit cost for changing)
     db.run('UPDATE event_votes SET direction = ?, timestamp = ? WHERE id = ?', direction, Date.now(), existingVote.id)
     db.run('UPDATE event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta * 2, participantId)
 
@@ -432,7 +560,13 @@ app.post('/:id/vote', async (c) => {
       db.run('UPDATE players SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta * 2, participant.player_id)
     }
   } else {
-    // New vote
+    // New vote - deduct credit
+    if (direction === 'UP') {
+      db.run('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+    } else {
+      db.run('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+    }
+
     const voteId = generateId()
     db.run(
       'INSERT INTO event_votes (id, visitor_id, event_id, participant_id, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
@@ -447,11 +581,16 @@ app.post('/:id/vote', async (c) => {
   }
 
   const updated = db.query('SELECT * FROM event_participants WHERE id = ?').get(participantId) as DbEventParticipant
+  const updatedCredits = getOrCreateCredits(visitorId)
 
   return c.json({
     participantId,
     auraScore: updated.aura_score,
     direction,
+    credits: {
+      upvotesRemaining: updatedCredits.upvotes_remaining,
+      downvotesRemaining: updatedCredits.downvotes_remaining,
+    },
   })
 })
 
@@ -552,16 +691,24 @@ app.get('/:id/sub-events/:subEventId', async (c) => {
     ).get(p.leaderboard_participant_id) as DbEventParticipant | null
 
     let playerData = null
-    if (leaderboardParticipant?.player_id) {
-      const player = db.query('SELECT * FROM players WHERE id = ?').get(leaderboardParticipant.player_id) as DbPlayer | null
-      if (player) {
-        playerData = {
-          id: player.id,
-          name: player.name,
-          slug: player.slug,
-          globalAuraScore: player.aura_score,
+    let tempName: string | null = null
+
+    if (leaderboardParticipant) {
+      tempName = leaderboardParticipant.temp_name || null
+      if (leaderboardParticipant.player_id) {
+        const player = db.query('SELECT * FROM players WHERE id = ?').get(leaderboardParticipant.player_id) as DbPlayer | null
+        if (player) {
+          playerData = {
+            id: player.id,
+            name: player.name,
+            slug: player.slug,
+            globalAuraScore: player.aura_score,
+          }
         }
       }
+    } else {
+      // Leaderboard participant was deleted - provide fallback name
+      tempName = 'Removed Participant'
     }
 
     return {
@@ -569,7 +716,7 @@ app.get('/:id/sub-events/:subEventId', async (c) => {
       subEventId: p.sub_event_id,
       leaderboardParticipantId: p.leaderboard_participant_id,
       auraScore: p.aura_score,
-      tempName: leaderboardParticipant?.temp_name || null,
+      tempName,
       player: playerData,
       createdAt: new Date(p.created_at),
     }
@@ -592,10 +739,12 @@ app.get('/:id/sub-events/:subEventId', async (c) => {
       id: c.id,
       subEventId: c.sub_event_id,
       visitorId: c.visitor_id,
+      userId: c.user_id || null,
       username: c.username || 'Anonymous',
       content: c.content,
       parentId: c.parent_id || null,
       voteCount: c.vote_count || 0,
+      imageUrl: c.image_url || null,
       createdAt: new Date(c.created_at),
     })),
   })
@@ -869,7 +1018,7 @@ app.delete('/:id/sub-events/:subEventId/participants/:participantId', async (c) 
   return c.json({ success: true })
 })
 
-// POST /events/:id/sub-events/:subEventId/vote - Vote on sub-event participant
+// POST /events/:id/sub-events/:subEventId/vote - Vote on sub-event participant (unlimited but uses credits)
 app.post('/:id/sub-events/:subEventId/vote', async (c) => {
   const leaderboardId = c.req.param('id')
   const subEventId = c.req.param('subEventId')
@@ -896,57 +1045,55 @@ app.post('/:id/sub-events/:subEventId/vote', async (c) => {
     return c.json({ error: 'Participant not found' }, 404)
   }
 
+  // Check credits
+  const credits = getOrCreateCredits(visitorId)
+  if (direction === 'UP' && credits.upvotes_remaining <= 0) {
+    return c.json({ error: 'No upvote credits remaining' }, 400)
+  }
+  if (direction === 'DOWN' && credits.downvotes_remaining <= 0) {
+    return c.json({ error: 'No downvote credits remaining' }, 400)
+  }
+
+  // Deduct credit
+  if (direction === 'UP') {
+    db.run('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+  } else {
+    db.run('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+  }
+
   // Get leaderboard participant for updating main score
   const leaderboardParticipant = db.query(
     'SELECT * FROM event_participants WHERE id = ?'
   ).get(subParticipant.leaderboard_participant_id) as DbEventParticipant | null
 
-  // Check existing vote
-  const existingVote = db.query(
-    'SELECT * FROM sub_event_votes WHERE visitor_id = ? AND sub_event_id = ? AND participant_id = ?'
-  ).get(visitorId, subEventId, participantId) as DbSubEventVote | null
-
   const delta = direction === 'UP' ? 1 : -1
 
-  if (existingVote) {
-    if (existingVote.direction === direction) {
-      return c.json({ error: 'Already voted' }, 400)
-    }
-    // Change vote direction - double the delta
-    const scoreDelta = delta * 2
-    db.run('UPDATE sub_event_votes SET direction = ?, timestamp = ? WHERE id = ?', direction, Date.now(), existingVote.id)
-    db.run('UPDATE sub_event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', scoreDelta, participantId)
+  // Unlimited voting for sub-events - each vote adds to the score (can vote multiple times on same person)
+  const voteId = generateId()
+  db.run(
+    'INSERT INTO sub_event_votes (id, visitor_id, sub_event_id, participant_id, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+    voteId, visitorId, subEventId, participantId, direction, Date.now()
+  )
+  db.run('UPDATE sub_event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, participantId)
 
-    // Update leaderboard participant score
-    db.run('UPDATE event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', scoreDelta, subParticipant.leaderboard_participant_id)
+  // Update leaderboard participant score
+  db.run('UPDATE event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, subParticipant.leaderboard_participant_id)
 
-    // Update player global score if real player
-    if (leaderboardParticipant?.player_id) {
-      db.run('UPDATE players SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', scoreDelta, leaderboardParticipant.player_id)
-    }
-  } else {
-    // New vote
-    const voteId = generateId()
-    db.run(
-      'INSERT INTO sub_event_votes (id, visitor_id, sub_event_id, participant_id, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-      voteId, visitorId, subEventId, participantId, direction, Date.now()
-    )
-    db.run('UPDATE sub_event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, participantId)
-
-    // Update leaderboard participant score
-    db.run('UPDATE event_participants SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, subParticipant.leaderboard_participant_id)
-
-    // Update player global score if real player
-    if (leaderboardParticipant?.player_id) {
-      db.run('UPDATE players SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, leaderboardParticipant.player_id)
-    }
+  // Update player global score if real player
+  if (leaderboardParticipant?.player_id) {
+    db.run('UPDATE players SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?', delta, leaderboardParticipant.player_id)
   }
 
   const updated = db.query('SELECT * FROM sub_event_participants WHERE id = ?').get(participantId) as DbSubEventParticipant
+  const updatedCredits = getOrCreateCredits(visitorId)
 
   return c.json({
     participantId,
     auraScore: updated.aura_score,
+    credits: {
+      upvotesRemaining: updatedCredits.upvotes_remaining,
+      downvotesRemaining: updatedCredits.downvotes_remaining,
+    },
     direction,
   })
 })
@@ -1021,28 +1168,30 @@ app.get('/:id/sub-events/:subEventId/votes', async (c) => {
 app.post('/:id/sub-events/:subEventId/comments', async (c) => {
   const subEventId = c.req.param('subEventId')
   const body = await c.req.json()
-  const { visitorId, content, username, parentId } = body
+  const { visitorId, content, username, parentId, imageUrl, userId } = body
 
-  if (!visitorId || !content?.trim()) {
-    return c.json({ error: 'Visitor ID and content are required' }, 400)
+  if (!visitorId || (!content?.trim() && !imageUrl)) {
+    return c.json({ error: 'Visitor ID and content or image are required' }, 400)
   }
 
   const commentId = generateId()
   const now = Date.now()
 
   db.run(
-    'INSERT INTO sub_event_comments (id, sub_event_id, visitor_id, username, content, parent_id, vote_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    commentId, subEventId, visitorId, username || 'Anonymous', content.trim(), parentId || null, 0, now
+    'INSERT INTO sub_event_comments (id, sub_event_id, visitor_id, username, content, parent_id, vote_count, image_url, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    commentId, subEventId, visitorId, username || 'Anonymous', content?.trim() || '', parentId || null, 0, imageUrl || null, userId || null, now
   )
 
   return c.json({
     id: commentId,
     subEventId,
     visitorId,
+    userId: userId || null,
     username: username || 'Anonymous',
-    content: content.trim(),
+    content: content?.trim() || '',
     parentId: parentId || null,
     voteCount: 0,
+    imageUrl: imageUrl || null,
     createdAt: new Date(now),
   })
 })
@@ -1123,7 +1272,7 @@ app.get('/:id/sub-events/:subEventId/comments/votes', async (c) => {
 app.delete('/:id/sub-events/:subEventId/comments/:commentId', async (c) => {
   const commentId = c.req.param('commentId')
   const body = await c.req.json()
-  const { visitorId } = body
+  const { visitorId, userId } = body
 
   const comment = db.query('SELECT * FROM sub_event_comments WHERE id = ?').get(commentId) as DbSubEventComment | null
 
@@ -1131,8 +1280,19 @@ app.delete('/:id/sub-events/:subEventId/comments/:commentId', async (c) => {
     return c.json({ error: 'Comment not found' }, 404)
   }
 
-  // Only the comment author can delete their own comment
-  if (comment.visitor_id !== visitorId) {
+  // Hybrid delete permission:
+  // - If comment was made by a signed-in user (has user_id), only that user can delete
+  // - If comment was made anonymously (no user_id), check visitorId
+  let canDelete = false
+  if (comment.user_id) {
+    // Comment was made by authenticated user - require matching userId
+    canDelete = comment.user_id === userId
+  } else {
+    // Comment was made anonymously - check visitorId
+    canDelete = comment.visitor_id === visitorId
+  }
+
+  if (!canDelete) {
     return c.json({ error: 'Not authorized' }, 403)
   }
 

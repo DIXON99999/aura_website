@@ -4,7 +4,8 @@
       "Bash(bunx create-vite:*)",
       "Bash(bun install:*)",
       "Bash(bun add:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(bun:*)"
     ]
   }
 }

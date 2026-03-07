@@ -41,14 +41,15 @@ interface AuraStoreState extends EntitiesState {
   refreshEntity: (entityType: EntityType, entityId: string) => Promise<void>
 
   // Actions - Voting
-  vote: (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => Promise<void>
+  vote: (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection, userId?: string) => Promise<void>
   removeVote: (visitorId: string, entityId: string, entityType: EntityType) => Promise<void>
   getVisitorVote: (visitorId: string, entityId: string, entityType: EntityType) => import('@/types').Vote | undefined
   loadVisitorVotes: (visitorId: string) => Promise<void>
 
   // Actions - Credits
   loadCredits: (visitorId: string) => Promise<void>
-  refreshCredits: (visitorId: string) => Promise<void>
+  refreshCredits: (visitorId: string, userId?: string) => Promise<void>
+  setCredits: (credits: Credits) => void
 
   // Actions - User Profile
   createUserProfile: (visitorId: string) => Promise<Player>
@@ -331,7 +332,7 @@ export const useAuraStore = create<AuraStoreState>()(
     // VOTING
     // ========================================================================
 
-    vote: async (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection) => {
+    vote: async (visitorId: string, entityId: string, entityType: EntityType, direction: VoteDirection, userId?: string) => {
       // Check credits first
       const state = get()
       if (direction === VoteDirection.UP && state.credits.upvotesRemaining <= 0) {
@@ -359,7 +360,7 @@ export const useAuraStore = create<AuraStoreState>()(
 
       // Sync with backend
       try {
-        const result = await api.vote({ visitorId, entityId, entityType, direction })
+        const result = await api.vote({ visitorId, entityId, entityType, direction, userId })
         // Update credits from response
         set((draft) => {
           draft.credits.upvotesRemaining = result.credits.upvotesRemaining
@@ -458,15 +459,22 @@ export const useAuraStore = create<AuraStoreState>()(
       }
     },
 
-    refreshCredits: async (visitorId: string) => {
+    refreshCredits: async (visitorId: string, userId?: string) => {
       try {
-        const credits = await api.refreshCredits(visitorId)
+        const credits = await api.refreshCredits(visitorId, userId)
         set((draft) => {
           draft.credits = credits
         })
       } catch (error) {
         console.error('Failed to refresh credits:', error)
+        throw error
       }
+    },
+
+    setCredits: (credits: Credits) => {
+      set((draft) => {
+        draft.credits = credits
+      })
     },
 
     // ========================================================================
@@ -476,6 +484,12 @@ export const useAuraStore = create<AuraStoreState>()(
     createUserProfile: async (visitorId: string) => {
       const existingProfileId = get().userProfiles[visitorId]
       if (existingProfileId && get().players[existingProfileId]) {
+        // Ensure player is linked to user's database record
+        try {
+          await api.linkPlayer(existingProfileId)
+        } catch {
+          // Ignore if not authenticated or already linked
+        }
         return get().players[existingProfileId]
       }
 
@@ -487,6 +501,13 @@ export const useAuraStore = create<AuraStoreState>()(
           draft.players[player.id] = player
           draft.userProfiles[visitorId] = player.id
         })
+
+        // Link the player to the user's database record so ownerName shows on created content
+        try {
+          await api.linkPlayer(player.id)
+        } catch {
+          // Ignore if not authenticated or already linked
+        }
 
         return player
       } catch (error) {

@@ -117,6 +117,8 @@ function getEntityFromStores(
       return { entity: Object.values(weapons).find(e => e.slug === slug), type: EntityTypes.WEAPON }
     case 'character':
       return { entity: Object.values(characters).find(e => e.slug === slug), type: EntityTypes.CHARACTER }
+    case 'brand':
+      return { entity: Object.values(stores.brands).find(e => e.slug === slug), type: EntityTypes.BRAND }
     default:
       return { entity: undefined, type: EntityTypes.PLAYER }
   }
@@ -308,7 +310,7 @@ export function EntityPage() {
     }
 
     try {
-      await vote(visitorId, entity.id, type, direction)
+      await vote(visitorId, entity.id, type, direction, authUser?.id)
     } catch (error) {
       console.error('Vote failed:', error)
     }

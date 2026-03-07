@@ -106,12 +106,16 @@ app.get('/credits', (c) => {
   })
 })
 
-// POST /votes/credits/refresh - Refresh visitor's credits
+// POST /votes/credits/refresh - Refresh visitor's credits (only for signed-in users)
 app.post('/credits/refresh', async (c) => {
   const body = await c.req.json()
-  const { visitorId } = body
+  const { visitorId, userId } = body
   if (!visitorId) {
     return c.json({ error: 'Missing visitorId' }, 400)
+  }
+  // Only allow refresh for signed-in users
+  if (!userId) {
+    return c.json({ error: 'Sign in to refresh your vote credits' }, 403)
   }
   db.run(
     'INSERT OR REPLACE INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) VALUES (?, ?, ?)',
@@ -157,10 +161,10 @@ app.get('/', (c) => {
   return c.json({ error: 'Missing parameters' }, 400)
 })
 
-// POST /votes - Use credits system (multiple votes allowed)
+// POST /votes - Use credits system (multiple votes allowed for signed-in users)
 app.post('/', async (c) => {
   const body = await c.req.json()
-  const { visitorId, entityId, entityType, direction } = body
+  const { visitorId, entityId, entityType, direction, userId } = body
 
   if (!visitorId || !entityId || !entityType || !direction) {
     return c.json({ error: 'Missing required fields' }, 400)

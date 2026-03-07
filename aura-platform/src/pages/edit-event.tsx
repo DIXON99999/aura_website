@@ -4,7 +4,8 @@ import { useAuthStore } from '@/stores'
 import { api, type EventWithParticipants, type Entity } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { X, Search, UserPlus, Save, Check } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { X, Search, UserPlus, Save, Check, Upload } from 'lucide-react'
 
 export function EditEventPage() {
   const { id } = useParams<{ id: string }>()
@@ -12,6 +13,8 @@ export function EditEventPage() {
   const user = useAuthStore((s) => s.user)
   const [event, setEvent] = useState<EventWithParticipants | null>(null)
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
   const [isPublic, setIsPublic] = useState(false)
   const [players, setPlayers] = useState<Entity[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -19,8 +22,34 @@ export function EditEventPage() {
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const playerSearchRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setError('')
+
+    try {
+      const result = await api.uploadImage(file)
+      // Convert relative URL to full URL for preview
+      const fullUrl = result.imageUrl.startsWith('/')
+        ? `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}${result.imageUrl.replace('/api', '')}`
+        : result.imageUrl
+      setImageUrl(fullUrl)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   useEffect(() => {
     if (!user) {
@@ -37,6 +66,8 @@ export function EditEventPage() {
         }
         setEvent(eventData)
         setName(eventData.name)
+        setDescription(eventData.description || '')
+        setImageUrl(eventData.imageUrl || '')
         setIsPublic(eventData.isPublic)
       })
       .catch(() => navigate('/my-events'))
@@ -118,7 +149,12 @@ export function EditEventPage() {
     setError('')
 
     try {
-      await api.updateEvent(event.id, { name, isPublic })
+      await api.updateEvent(event.id, {
+        name,
+        isPublic,
+        description: description.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
+      })
       navigate(`/events/${event.id}`)
     } catch (err) {
       setError((err as Error).message)
@@ -138,7 +174,7 @@ export function EditEventPage() {
   if (!event) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="text-muted-foreground">Event not found</div>
+        <div className="text-muted-foreground">Leaderboard not found</div>
       </div>
     )
   }
@@ -146,16 +182,77 @@ export function EditEventPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Edit Event</h1>
+        <h1 className="text-2xl font-bold mb-6">Edit Leaderboard</h1>
 
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Event Name</label>
+            <label className="block text-sm font-medium mb-2">Leaderboard Name</label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Enter event name"
+              placeholder="Enter leaderboard name"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe your leaderboard (optional)"
+              rows={3}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Cover Image</label>
+            <div className="flex gap-2">
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="Enter image URL (optional)"
+                disabled={saving || uploading}
+                className="flex-1"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={saving || uploading}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {uploading ? 'Uploading...' : 'Upload'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Upload an image or paste a URL. Max 5MB (JPEG, PNG, GIF, WebP)
+            </p>
+            {imageUrl && (
+              <div className="mt-2 relative aspect-video w-full max-w-xs rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={imageUrl}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -166,7 +263,7 @@ export function EditEventPage() {
                 onChange={(e) => setIsPublic(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-sm">Make this event public</span>
+              <span className="text-sm">Make this leaderboard public</span>
             </label>
           </div>
 

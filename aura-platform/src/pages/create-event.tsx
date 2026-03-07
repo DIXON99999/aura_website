@@ -4,7 +4,8 @@ import { useAuthStore } from '@/stores'
 import { api, type Entity } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { X, Search, UserPlus, Check } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { X, Search, UserPlus, Check, Upload, Link as LinkIcon } from 'lucide-react'
 
 interface Participant {
   type: 'player' | 'temp'
@@ -17,6 +18,8 @@ export function CreateEventPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
   const [gameId, setGameId] = useState('')
   const [isPublic, setIsPublic] = useState(false)
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -28,9 +31,35 @@ export function CreateEventPage() {
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
   const [showGameSearch, setShowGameSearch] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const gameSearchRef = useRef<HTMLDivElement>(null)
   const playerSearchRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setError('')
+
+    try {
+      const result = await api.uploadImage(file)
+      // Convert relative URL to full URL for preview
+      const fullUrl = result.imageUrl.startsWith('/')
+        ? `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}${result.imageUrl.replace('/api', '')}`
+        : result.imageUrl
+      setImageUrl(fullUrl)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   useEffect(() => {
     if (!user) {
@@ -121,6 +150,8 @@ export function CreateEventPage() {
         name: name.trim(),
         gameId,
         isPublic,
+        description: description.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
         participants: participants.map(p =>
           p.type === 'player'
             ? { playerId: p.playerId }
@@ -140,17 +171,79 @@ export function CreateEventPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Create Event</h1>
+        <h1 className="text-2xl font-bold mb-6">Create Custom Leaderboard</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Event Name</label>
+            <label className="block text-sm font-medium mb-2">Leaderboard Name</label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Enter event name"
+              placeholder="Enter leaderboard name"
               disabled={loading}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe your leaderboard (optional)"
+              disabled={loading}
+              rows={3}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Cover Image</label>
+            <div className="flex gap-2">
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="Enter image URL (optional)"
+                disabled={loading || uploading}
+                className="flex-1"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || uploading}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {uploading ? 'Uploading...' : 'Upload'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Upload an image or paste a URL. Max 5MB (JPEG, PNG, GIF, WebP)
+            </p>
+            {imageUrl && (
+              <div className="mt-2 relative aspect-video w-full max-w-xs rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={imageUrl}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -200,10 +293,10 @@ export function CreateEventPage() {
                 className="w-4 h-4"
                 disabled={loading}
               />
-              <span className="text-sm">Make this event public</span>
+              <span className="text-sm">Make this leaderboard public</span>
             </label>
             <p className="text-xs text-muted-foreground mt-1">
-              Public events can be found and viewed by anyone
+              Public leaderboards can be found and viewed by anyone
             </p>
           </div>
 
@@ -317,7 +410,7 @@ export function CreateEventPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Event'}
+              {loading ? 'Creating...' : 'Create Leaderboard'}
             </Button>
           </div>
         </form>

@@ -27,10 +27,11 @@ export function PeripheralsPage() {
   const filteredPeripherals = useMemo(() => {
     let result = Object.values(peripherals)
 
-    // Filter by type
+    // Filter by type (case-insensitive comparison)
     if (filters.types.length > 0) {
+      const typesLower = filters.types.map(t => t.toLowerCase())
       result = result.filter((p) =>
-        filters.types.includes((p as Peripheral).peripheralType)
+        typesLower.includes((p as Peripheral).peripheralType?.toLowerCase())
       )
     }
 

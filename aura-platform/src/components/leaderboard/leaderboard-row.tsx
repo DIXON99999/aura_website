@@ -82,7 +82,7 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
     }
 
     try {
-      await vote(visitorId, entity.id, entityType, direction)
+      await vote(visitorId, entity.id, entityType, direction, authUser?.id)
     } catch (error) {
       console.error('Vote failed:', error)
     }

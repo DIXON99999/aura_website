@@ -200,9 +200,63 @@ db.run(`
     game_id TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     is_public INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    image_url TEXT,
     created_at INTEGER NOT NULL
   )
 `)
+
+// Add columns if they don't exist (for existing databases)
+try { db.run('ALTER TABLE events ADD COLUMN description TEXT') } catch {}
+try { db.run('ALTER TABLE events ADD COLUMN image_url TEXT') } catch {}
+
+// Seed CS2 weapons
+const cs2Weapons = [
+  { id: 'weapon-cs2-ak47', name: 'AK-47', slug: 'cs2-ak47' },
+  { id: 'weapon-cs2-m4a4', name: 'M4A4', slug: 'cs2-m4a4' },
+  { id: 'weapon-cs2-m4a1s', name: 'M4A1-S', slug: 'cs2-m4a1s' },
+  { id: 'weapon-cs2-awp', name: 'AWP', slug: 'cs2-awp' },
+  { id: 'weapon-cs2-desert-eagle', name: 'Desert Eagle', slug: 'cs2-desert-eagle' },
+  { id: 'weapon-cs2-usp-s', name: 'USP-S', slug: 'cs2-usp-s' },
+  { id: 'weapon-cs2-glock', name: 'Glock-18', slug: 'cs2-glock' },
+  { id: 'weapon-cs2-p2000', name: 'P2000', slug: 'cs2-p2000' },
+  { id: 'weapon-cs2-famas', name: 'FAMAS', slug: 'cs2-famas' },
+  { id: 'weapon-cs2-galil', name: 'Galil AR', slug: 'cs2-galil' },
+  { id: 'weapon-cs2-sg553', name: 'SG 553', slug: 'cs2-sg553' },
+  { id: 'weapon-cs2-aug', name: 'AUG', slug: 'cs2-aug' },
+  { id: 'weapon-cs2-ssg08', name: 'SSG 08', slug: 'cs2-ssg08' },
+  { id: 'weapon-cs2-scar20', name: 'SCAR-20', slug: 'cs2-scar20' },
+  { id: 'weapon-cs2-g3sg1', name: 'G3SG1', slug: 'cs2-g3sg1' },
+  { id: 'weapon-cs2-mac10', name: 'MAC-10', slug: 'cs2-mac10' },
+  { id: 'weapon-cs2-mp9', name: 'MP9', slug: 'cs2-mp9' },
+  { id: 'weapon-cs2-mp7', name: 'MP7', slug: 'cs2-mp7' },
+  { id: 'weapon-cs2-ump45', name: 'UMP-45', slug: 'cs2-ump45' },
+  { id: 'weapon-cs2-p90', name: 'P90', slug: 'cs2-p90' },
+  { id: 'weapon-cs2-pp-bizon', name: 'PP-Bizon', slug: 'cs2-pp-bizon' },
+  { id: 'weapon-cs2-mp5sd', name: 'MP5-SD', slug: 'cs2-mp5sd' },
+  { id: 'weapon-cs2-nova', name: 'Nova', slug: 'cs2-nova' },
+  { id: 'weapon-cs2-xm1014', name: 'XM1014', slug: 'cs2-xm1014' },
+  { id: 'weapon-cs2-mag7', name: 'MAG-7', slug: 'cs2-mag7' },
+  { id: 'weapon-cs2-sawedoff', name: 'Sawed-Off', slug: 'cs2-sawedoff' },
+  { id: 'weapon-cs2-m249', name: 'M249', slug: 'cs2-m249' },
+  { id: 'weapon-cs2-negev', name: 'Negev', slug: 'cs2-negev' },
+  { id: 'weapon-cs2-p250', name: 'P250', slug: 'cs2-p250' },
+  { id: 'weapon-cs2-tec9', name: 'Tec-9', slug: 'cs2-tec9' },
+  { id: 'weapon-cs2-fiveseven', name: 'Five-SeveN', slug: 'cs2-fiveseven' },
+  { id: 'weapon-cs2-cz75', name: 'CZ75-Auto', slug: 'cs2-cz75' },
+  { id: 'weapon-cs2-dualberettas', name: 'Dual Berettas', slug: 'cs2-dualberettas' },
+  { id: 'weapon-cs2-r8revolver', name: 'R8 Revolver', slug: 'cs2-r8revolver' },
+  { id: 'weapon-cs2-knife', name: 'Knife', slug: 'cs2-knife' },
+]
+
+const gameCs2Id = 'game-cs2'
+const now = Date.now()
+for (const w of cs2Weapons) {
+  db.run(
+    'INSERT OR IGNORE INTO weapons (id, name, slug, game_id, aura_score, created_at) VALUES (?, ?, ?, ?, 0, ?)',
+    w.id, w.name, w.slug, gameCs2Id, now
+  )
+}
 
 db.run(`
   CREATE TABLE IF NOT EXISTS event_participants (
@@ -399,10 +453,12 @@ export interface DbSubEventComment {
   id: string
   sub_event_id: string
   visitor_id: string
+  user_id: string | null
   username: string | null
   content: string
   parent_id: string | null
   vote_count: number
+  image_url: string | null
   created_at: number
 }
 
@@ -419,6 +475,51 @@ export interface DbSubEventVote {
   visitor_id: string
   sub_event_id: string
   participant_id: string
+  direction: string
+  timestamp: number
+}
+
+// Aura Farms tables
+db.run(`
+  CREATE TABLE IF NOT EXISTS aura_farms (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    entity_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    image_url TEXT,
+    aura_score REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  )
+`)
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS aura_farm_votes (
+    id TEXT PRIMARY KEY,
+    visitor_id TEXT NOT NULL,
+    farm_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    timestamp INTEGER NOT NULL
+  )
+`)
+
+export interface DbAuraFarm {
+  id: string
+  title: string
+  description: string | null
+  entity_id: string
+  entity_type: string
+  owner_id: string
+  image_url: string | null
+  aura_score: number
+  created_at: number
+}
+
+export interface DbAuraFarmVote {
+  id: string
+  visitor_id: string
+  farm_id: string
   direction: string
   timestamp: number
 }

@@ -4,7 +4,7 @@ import { api, type EventWithParticipants, type SubEvent, type SubEventWithPartic
 import { useAuthStore, useAuraStore } from '@/stores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ChevronUp, ChevronDown, Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon } from 'lucide-react'
+import { ChevronUp, ChevronDown, Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -158,18 +158,37 @@ function ImageUpload({
   )
 }
 
-// Comment Component with replies
+// Helper to format relative time
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const diff = now.getTime() - new Date(date).getTime()
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (seconds < 60) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
+  return new Date(date).toLocaleDateString()
+}
+
+// Comment Component with replies - Modern Reddit style
 function CommentItem({
   comment,
   allComments,
   visitorId,
+  currentUserId,
   isOwner,
   commentVotes,
   replyingTo,
   replyContent,
+  replyImageUrl,
   onVote,
   onReply,
   onReplyContentChange,
+  onReplyImageChange,
   onSubmitReply,
   onCancelReply,
   onDelete,
@@ -178,123 +197,265 @@ function CommentItem({
   comment: SubEventComment
   allComments: SubEventComment[]
   visitorId: string
+  currentUserId?: string
   isOwner: boolean
   commentVotes: Map<string, 'UP' | 'DOWN'>
   replyingTo: string | null
   replyContent: string
+  replyImageUrl: string
   onVote: (commentId: string, direction: 'UP' | 'DOWN') => void
   onReply: (parentId: string) => void
   onReplyContentChange: (content: string) => void
+  onReplyImageChange: (url: string) => void
   onSubmitReply: (parentId: string) => void
   onCancelReply: () => void
   onDelete: (commentId: string) => void
   depth?: number
 }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const [showImageInput, setShowImageInput] = useState(false)
+  const [imageUrlInput, setImageUrlInput] = useState('')
   const replies = allComments.filter(c => c.parentId === comment.id)
   const vote = commentVotes.get(comment.id)
-  // Only the comment author can delete their own comment
-  const canDelete = comment.visitorId === visitorId
+  const canDelete = comment.userId
+    ? comment.userId === currentUserId
+    : comment.visitorId === visitorId
   const isReplying = replyingTo === comment.id
+  const replyFileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleReplyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      onReplyImageChange(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const avatarColor = comment.username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360
 
   return (
-    <div className={`${depth > 0 ? 'ml-6 border-l-2 border-border pl-4' : ''}`}>
+    <div className={depth > 0 ? 'pl-4 border-l-2 border-border/60 hover:border-border ml-3' : ''}>
       <div className="py-2">
-        <div className="flex items-start gap-2">
-          <div className="flex flex-col items-center gap-0.5">
-            <button
-              onClick={() => onVote(comment.id, 'UP')}
-              className={`p-0.5 rounded hover:bg-accent ${vote === 'UP' ? 'text-green-500' : 'text-muted-foreground'}`}
-            >
-              <ChevronUp className="w-4 h-4" />
-            </button>
-            <span className={`text-xs font-medium ${
-              comment.voteCount > 0 ? 'text-green-500' :
-              comment.voteCount < 0 ? 'text-red-500' :
-              'text-muted-foreground'
-            }`}>
-              {comment.voteCount}
-            </span>
-            <button
-              onClick={() => onVote(comment.id, 'DOWN')}
-              className={`p-0.5 rounded hover:bg-accent ${vote === 'DOWN' ? 'text-red-500' : 'text-muted-foreground'}`}
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
+        {/* Header with avatar */}
+        <div className="flex items-center gap-2 mb-1">
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0"
+            style={{ backgroundColor: `hsl(${avatarColor}, 50%, 50%)` }}
+          >
+            {comment.username.charAt(0).toUpperCase()}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium">{comment.username}</span>
-              <span className="text-xs text-muted-foreground">
-                {new Date(comment.createdAt).toLocaleString()}
-              </span>
-            </div>
-            <p className="text-sm mb-2">{comment.content}</p>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-medium text-foreground hover:underline cursor-pointer">
+              {comment.username}
+            </span>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-muted-foreground">
+              {formatRelativeTime(comment.createdAt)}
+            </span>
+            {collapsed && (
+              <button
+                onClick={() => setCollapsed(false)}
+                className="text-primary text-xs ml-1 hover:underline"
+              >
+                expand
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!collapsed && (
+          <>
+            {/* Content */}
+            {comment.content && (
+              <p className="text-sm leading-relaxed mb-2 pl-8">{comment.content}</p>
+            )}
+
+            {/* Image/GIF */}
+            {comment.imageUrl && (
+              <div className="mb-2 pl-8">
+                <img
+                  src={comment.imageUrl}
+                  alt="Comment media"
+                  className="rounded-lg max-h-96 max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                  onClick={() => window.open(comment.imageUrl!, '_blank')}
+                />
+              </div>
+            )}
+
+            {/* Actions bar - Modern Reddit style */}
+            <div className="flex items-center gap-0.5 pl-8 text-muted-foreground">
+              {/* Votes */}
+              <div className="flex items-center rounded-full bg-accent/50 hover:bg-accent">
+                <button
+                  onClick={() => onVote(comment.id, 'UP')}
+                  className={`p-1.5 rounded-full transition-colors ${vote === 'UP' ? 'text-green-500' : 'hover:text-green-500 hover:bg-green-500/10'}`}
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+                <span className={`text-xs font-semibold min-w-[1rem] text-center ${
+                  vote === 'UP' ? 'text-green-500' : vote === 'DOWN' ? 'text-red-500' : ''
+                }`}>
+                  {comment.voteCount}
+                </span>
+                <button
+                  onClick={() => onVote(comment.id, 'DOWN')}
+                  className={`p-1.5 rounded-full transition-colors ${vote === 'DOWN' ? 'text-red-500' : 'hover:text-red-500 hover:bg-red-500/10'}`}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+
               <button
                 onClick={() => onReply(comment.id)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-accent rounded-full transition-colors"
               >
-                <Reply className="w-3 h-3" />
+                <MessageSquare className="w-4 h-4" />
                 Reply
               </button>
+
+              <button
+                onClick={() => setCollapsed(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-accent rounded-full transition-colors"
+              >
+                Collapse
+              </button>
+
               {canDelete && (
                 <button
                   onClick={() => onDelete(comment.id)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-destructive/10 hover:text-destructive rounded-full transition-colors"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-4 h-4" />
                   Delete
                 </button>
               )}
             </div>
+
+            {/* Reply input - Modern style */}
             {isReplying && (
-              <div className="mt-2 flex gap-2">
-                <Input
-                  value={replyContent}
-                  onChange={(e) => onReplyContentChange(e.target.value)}
-                  placeholder="Write a reply..."
-                  autoFocus
-                  className="h-8 text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      onSubmitReply(comment.id)
-                    }
-                    if (e.key === 'Escape') {
-                      onCancelReply()
-                    }
-                  }}
-                />
-                <Button size="sm" className="h-8" onClick={() => onSubmitReply(comment.id)} disabled={!replyContent.trim()}>
-                  Reply
-                </Button>
-                <Button size="sm" variant="ghost" className="h-8" onClick={onCancelReply}>
-                  <X className="w-4 h-4" />
-                </Button>
+              <div className="mt-3 pl-8">
+                <div className="border rounded-xl bg-card overflow-hidden">
+                  {replyImageUrl && (
+                    <div className="p-3 border-b bg-accent/30">
+                      <div className="relative inline-block">
+                        <img src={replyImageUrl} alt="Reply preview" className="max-h-32 rounded-lg" />
+                        <button
+                          onClick={() => onReplyImageChange('')}
+                          className="absolute -top-2 -right-2 p-1 bg-foreground text-background rounded-full hover:bg-foreground/80"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {showImageInput && (
+                    <div className="p-3 border-b bg-accent/30 flex gap-2">
+                      <Input
+                        value={imageUrlInput}
+                        onChange={(e) => setImageUrlInput(e.target.value)}
+                        placeholder="Paste image or GIF URL..."
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (imageUrlInput.trim()) {
+                            onReplyImageChange(imageUrlInput.trim())
+                            setImageUrlInput('')
+                            setShowImageInput(false)
+                          }
+                        }}
+                      >
+                        Add
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setShowImageInput(false); setImageUrlInput('') }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <textarea
+                    value={replyContent}
+                    onChange={(e) => onReplyContentChange(e.target.value)}
+                    placeholder="What are your thoughts?"
+                    autoFocus
+                    rows={3}
+                    className="w-full resize-none bg-transparent px-3 py-2 text-sm focus:outline-none"
+                  />
+                  <div className="flex items-center justify-between px-2 py-2 border-t bg-accent/20">
+                    <div className="flex items-center gap-1">
+                      <input
+                        ref={replyFileInputRef}
+                        type="file"
+                        accept="image/*,image/gif"
+                        onChange={handleReplyImageUpload}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => replyFileInputRef.current?.click()}
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+                        title="Upload image"
+                      >
+                        <Image className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setShowImageInput(!showImageInput)}
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+                        title="Add image URL"
+                      >
+                        <LinkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="ghost" className="rounded-full" onClick={onCancelReply}>
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => onSubmitReply(comment.id)}
+                        disabled={!replyContent.trim() && !replyImageUrl}
+                      >
+                        Reply
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
-          </div>
-        </div>
+
+            {/* Replies */}
+              {replies.length > 0 && (
+                <div className="mt-2">
+                  {replies.map(reply => (
+                    <CommentItem
+                      key={reply.id}
+                      comment={reply}
+                      allComments={allComments}
+                      visitorId={visitorId}
+                      currentUserId={currentUserId}
+                      isOwner={isOwner}
+                      commentVotes={commentVotes}
+                      replyingTo={replyingTo}
+                      replyContent={replyContent}
+                      replyImageUrl={replyImageUrl}
+                      onVote={onVote}
+                      onReply={onReply}
+                      onReplyContentChange={onReplyContentChange}
+                      onReplyImageChange={onReplyImageChange}
+                      onSubmitReply={onSubmitReply}
+                      onCancelReply={onCancelReply}
+                      onDelete={onDelete}
+                      depth={depth + 1}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
       </div>
-      {replies.map(reply => (
-        <CommentItem
-          key={reply.id}
-          comment={reply}
-          allComments={allComments}
-          visitorId={visitorId}
-          isOwner={isOwner}
-          commentVotes={commentVotes}
-          replyingTo={replyingTo}
-          replyContent={replyContent}
-          onVote={onVote}
-          onReply={onReply}
-          onReplyContentChange={onReplyContentChange}
-          onSubmitReply={onSubmitReply}
-          onCancelReply={onCancelReply}
-          onDelete={onDelete}
-          depth={depth + 1}
-        />
-      ))}
     </div>
   )
 }
@@ -304,6 +465,8 @@ export function EventPage() {
   const user = useAuthStore((s) => s.user)
   const userProfiles = useAuraStore((s) => s.userProfiles)
   const players = useAuraStore((s) => s.players)
+  const credits = useAuraStore((s) => s.credits)
+  const setCredits = useAuraStore((s) => s.setCredits)
   const [event, setEvent] = useState<EventWithParticipants | null>(null)
   const [votes, setVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -328,11 +491,19 @@ export function EventPage() {
   const [editImageUrl, setEditImageUrl] = useState('')
   const [editParticipantSearch, setEditParticipantSearch] = useState('')
 
+  // Leaderboard search state
+  const [leaderboardSearch, setLeaderboardSearch] = useState('')
+
   // Comments state
   const [newComment, setNewComment] = useState('')
+  const [newCommentImage, setNewCommentImage] = useState('')
+  const [showCommentImageUrl, setShowCommentImageUrl] = useState(false)
+  const [commentImageUrlInput, setCommentImageUrlInput] = useState('')
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [replyContent, setReplyContent] = useState('')
+  const [replyImageUrl, setReplyImageUrl] = useState('')
   const [commentVotes, setCommentVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
+  const commentFileInputRef = useRef<HTMLInputElement>(null)
 
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; subEventId: string | null }>({ open: false, subEventId: null })
@@ -392,6 +563,7 @@ export function EventPage() {
       commentVotesData.forEach(v => commentVotesMap.set(v.commentId, v.direction))
       setCommentVotes(commentVotesMap)
       setEditingSubEvent(false)
+      setLeaderboardSearch('')
     } catch (err) {
       console.error('Failed to load sub-event:', err)
     }
@@ -423,6 +595,10 @@ export function EventPage() {
             p.id === participantId ? { ...p, auraScore: result.auraScore } : p
           ).sort((a, b) => b.auraScore - a.auraScore),
         })
+        // Update credits from response
+        if (result.credits) {
+          setCredits(result.credits)
+        }
       }
     } catch (err) {
       console.error('Vote failed:', err)
@@ -432,29 +608,23 @@ export function EventPage() {
   const handleSubEventVote = async (participantId: string, direction: 'UP' | 'DOWN') => {
     if (!id || !selectedSubEvent) return
 
-    const currentVote = subEventVotes.get(participantId)
+    // Check credits
+    if (direction === 'UP' && credits.upvotesRemaining <= 0) return
+    if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
 
     try {
-      if (currentVote === direction) {
-        const result = await api.removeSubEventVote(id, selectedSubEvent.id, { visitorId, participantId })
-        const newVotes = new Map(subEventVotes)
-        newVotes.delete(participantId)
-        setSubEventVotes(newVotes)
-        setSelectedSubEvent({
-          ...selectedSubEvent,
-          participants: selectedSubEvent.participants.map(p =>
-            p.id === participantId ? { ...p, auraScore: result.auraScore } : p
-          ).sort((a, b) => b.auraScore - a.auraScore),
-        })
-      } else {
-        const result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction })
-        setSubEventVotes(new Map(subEventVotes).set(participantId, direction))
-        setSelectedSubEvent({
-          ...selectedSubEvent,
-          participants: selectedSubEvent.participants.map(p =>
-            p.id === participantId ? { ...p, auraScore: result.auraScore } : p
-          ).sort((a, b) => b.auraScore - a.auraScore),
-        })
+      // Unlimited voting - each click adds a vote (but costs credits)
+      const result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction })
+      setSelectedSubEvent({
+        ...selectedSubEvent,
+        participants: selectedSubEvent.participants.map(p =>
+          p.id === participantId ? { ...p, auraScore: result.auraScore } : p
+        ).sort((a, b) => b.auraScore - a.auraScore),
+      })
+
+      // Update credits from response
+      if (result.credits) {
+        setCredits(result.credits)
       }
 
       const updatedEvent = await api.getEvent(id)
@@ -512,9 +682,9 @@ export function EventPage() {
     if (!id || !selectedSubEvent) return
 
     try {
-      // Update name and image
+      // Update name and image (send null explicitly to clear image)
       await api.updateSubEvent(id, selectedSubEvent.id, {
-        imageUrl: editImageUrl || undefined,
+        imageUrl: editImageUrl || null,
         name: editName.trim() || undefined,
       })
 
@@ -528,6 +698,44 @@ export function EventPage() {
       setEditingSubEvent(false)
     } catch (err) {
       console.error('Failed to save sub-event:', err)
+    }
+  }
+
+  const handleAddParticipantToSubEvent = async (leaderboardParticipantId: string) => {
+    if (!id || !selectedSubEvent) return
+
+    try {
+      const newParticipant = await api.addSubEventParticipant(id, selectedSubEvent.id, { leaderboardParticipantId })
+      setEditParticipantIds([...editParticipantIds, leaderboardParticipantId])
+      // Update selected sub-event with new participant
+      setSelectedSubEvent({
+        ...selectedSubEvent,
+        participants: [...selectedSubEvent.participants, newParticipant].sort((a, b) => b.auraScore - a.auraScore),
+      })
+    } catch (err) {
+      console.error('Failed to add participant:', err)
+    }
+  }
+
+  const handleRemoveParticipantFromSubEvent = async (leaderboardParticipantId: string) => {
+    if (!id || !selectedSubEvent) return
+
+    // Find the sub-event participant id from the leaderboard participant id
+    const subEventParticipant = selectedSubEvent.participants.find(
+      p => p.leaderboardParticipantId === leaderboardParticipantId
+    )
+    if (!subEventParticipant) return
+
+    try {
+      await api.removeSubEventParticipant(id, selectedSubEvent.id, subEventParticipant.id)
+      setEditParticipantIds(editParticipantIds.filter(pid => pid !== leaderboardParticipantId))
+      // Update selected sub-event by removing participant
+      setSelectedSubEvent({
+        ...selectedSubEvent,
+        participants: selectedSubEvent.participants.filter(p => p.id !== subEventParticipant.id),
+      })
+    } catch (err) {
+      console.error('Failed to remove participant:', err)
     }
   }
 
@@ -562,7 +770,8 @@ export function EventPage() {
     if (!id || !selectedSubEvent) return
 
     const content = parentId ? replyContent : newComment
-    if (!content.trim()) return
+    const imageUrl = parentId ? replyImageUrl : newCommentImage
+    if (!content.trim() && !imageUrl) return
 
     try {
       const comment = await api.addSubEventComment(id, selectedSubEvent.id, {
@@ -570,6 +779,8 @@ export function EventPage() {
         content: content.trim(),
         username: getUsername(),
         parentId,
+        imageUrl: imageUrl || undefined,
+        userId: user?.id, // Include userId if signed in
       })
       setSelectedSubEvent({
         ...selectedSubEvent,
@@ -577,20 +788,32 @@ export function EventPage() {
       })
       if (parentId) {
         setReplyContent('')
+        setReplyImageUrl('')
         setReplyingTo(null)
       } else {
         setNewComment('')
+        setNewCommentImage('')
       }
     } catch (err) {
       console.error('Failed to add comment:', err)
     }
   }
 
+  const handleCommentImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setNewCommentImage(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
   const handleDeleteComment = async (commentId: string) => {
     if (!id || !selectedSubEvent) return
 
     try {
-      await api.deleteSubEventComment(id, selectedSubEvent.id, commentId, { visitorId })
+      await api.deleteSubEventComment(id, selectedSubEvent.id, commentId, { visitorId, userId: user?.id })
       const idsToRemove = new Set<string>([commentId])
       const findReplies = (parentId: string) => {
         selectedSubEvent.comments
@@ -664,7 +887,8 @@ export function EventPage() {
   if (selectedSubEvent) {
     return (
       <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+        {/* Header section - centered, narrower width */}
+        <div className="max-w-2xl mx-auto">
           <button
             onClick={() => setSelectedSubEvent(null)}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
@@ -717,6 +941,59 @@ export function EventPage() {
                 />
               </div>
 
+              {/* Players Management */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Manage Players</label>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={editParticipantSearch}
+                    onChange={(e) => setEditParticipantSearch(e.target.value)}
+                    placeholder="Search players to add/remove..."
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+                <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
+                  {editFilteredParticipants.map(p => {
+                    const isInSubEvent = editParticipantIds.includes(p.id)
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between px-3 py-1.5"
+                      >
+                        <span className="text-sm truncate">{p.player?.name || p.tempName}</span>
+                        {isInSubEvent ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleRemoveParticipantFromSubEvent(p.id)}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Remove
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            onClick={() => handleAddParticipantToSubEvent(p.id)}
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Add
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editParticipantIds.length} player{editParticipantIds.length !== 1 ? 's' : ''} in this sub-event
+                </p>
+              </div>
+
               <Button onClick={handleSaveSubEventEdit}>
                 Save Changes
               </Button>
@@ -725,115 +1002,275 @@ export function EventPage() {
 
           {/* Image */}
           {selectedSubEvent.imageUrl && !editingSubEvent && (
-            <div className="mb-6">
+            <div className="mb-6 flex justify-center bg-black/20 rounded-lg p-2">
               <img
                 src={selectedSubEvent.imageUrl}
                 alt={selectedSubEvent.name}
-                className="w-full max-h-64 object-cover rounded-lg"
+                className="max-w-full max-h-80 object-contain rounded-lg"
               />
             </div>
           )}
+        </div>
 
-          {/* Participants */}
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold mb-3">Participants</h2>
-            <div className="space-y-1">
-              {selectedSubEvent.participants.map((participant, index) => {
-                const vote = subEventVotes.get(participant.id)
-                const displayName = participant.player?.name || participant.tempName || 'Unknown'
+        {/* Main Content: Leaderboard on left side, Comments centered */}
+        {!editingSubEvent && (
+          <div className="relative">
+            {/* Left: Leaderboard - fixed position aligned with title */}
+            <div className="hidden xl:block fixed w-[240px]" style={{ left: 'max(16px, calc((50% - 336px - 240px) / 2))', top: '120px' }}>
+                <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
+                <div className="space-y-2">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      value={leaderboardSearch}
+                      onChange={(e) => setLeaderboardSearch(e.target.value)}
+                      placeholder="Search..."
+                      className="pl-7 h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1 max-h-[80vh] overflow-y-auto">
+                    {selectedSubEvent.participants
+                      .filter(p => {
+                        if (!leaderboardSearch.trim()) return true
+                        const name = (p.player?.name || p.tempName || '').toLowerCase()
+                        return name.includes(leaderboardSearch.toLowerCase())
+                      })
+                      .map((participant, index, filteredArr) => {
+                        const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                        // Get original rank from full list
+                        const originalRank = selectedSubEvent.participants.findIndex(p => p.id === participant.id) + 1
 
-                return (
-                  <div
-                    key={participant.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg border bg-card"
-                  >
-                    <span className="text-sm font-bold text-muted-foreground w-6">
-                      #{index + 1}
-                    </span>
-                    <span className="flex-1 text-sm truncate">{displayName}</span>
-                    <span className={`text-sm font-bold min-w-[3rem] text-right ${
-                      participant.auraScore > 0 ? 'text-green-500' :
-                      participant.auraScore < 0 ? 'text-red-500' :
-                      'text-muted-foreground'
-                    }`}>
-                      {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
-                    </span>
-                    <div className="flex flex-col">
-                      <button
-                        onClick={() => handleSubEventVote(participant.id, 'UP')}
-                        className={`p-0.5 rounded hover:bg-accent ${
-                          vote === 'UP' ? 'text-green-500' : 'text-muted-foreground'
-                        }`}
+                        return (
+                          <div
+                            key={participant.id}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-card/50 hover:bg-card transition-colors"
+                          >
+                            <span className="text-xs font-bold text-muted-foreground w-5">
+                              #{originalRank}
+                            </span>
+                            <span className="flex-1 text-sm truncate">{displayName}</span>
+                            <span className={`text-xs font-bold min-w-[2.5rem] text-right ${
+                              participant.auraScore > 0 ? 'text-green-500' :
+                              participant.auraScore < 0 ? 'text-red-500' :
+                              'text-muted-foreground'
+                            }`}>
+                              {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
+                            </span>
+                            <div className="flex flex-col">
+                              <button
+                                onClick={() => handleSubEventVote(participant.id, 'UP')}
+                                disabled={credits.upvotesRemaining <= 0}
+                                className={`p-0.5 rounded transition-colors ${
+                                  credits.upvotesRemaining <= 0
+                                    ? 'text-muted-foreground/30 cursor-not-allowed'
+                                    : 'text-muted-foreground hover:bg-green-500/20 hover:text-green-500'
+                                }`}
+                                title={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleSubEventVote(participant.id, 'DOWN')}
+                                disabled={credits.downvotesRemaining <= 0}
+                                className={`p-0.5 rounded transition-colors ${
+                                  credits.downvotesRemaining <= 0
+                                    ? 'text-muted-foreground/30 cursor-not-allowed'
+                                    : 'text-muted-foreground hover:bg-red-500/20 hover:text-red-500'
+                                }`}
+                                title={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+            </div>
+
+            {/* Mobile Leaderboard - shown only on small screens */}
+            <div className="lg:hidden mb-6">
+              <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
+              <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+                {selectedSubEvent.participants.map((participant, index) => {
+                  const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                  return (
+                    <div
+                      key={participant.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-card/50"
+                    >
+                      <span className="text-xs font-bold text-muted-foreground w-5">#{index + 1}</span>
+                      <span className="flex-1 text-sm truncate">{displayName}</span>
+                      <span className={`text-xs font-bold ${
+                        participant.auraScore > 0 ? 'text-green-500' :
+                        participant.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
+                      }`}>
+                        {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
+                      </span>
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => handleSubEventVote(participant.id, 'UP')}
+                          disabled={credits.upvotesRemaining <= 0}
+                          className={`p-0.5 rounded transition-colors ${
+                            credits.upvotesRemaining <= 0 ? 'text-muted-foreground/30' : 'text-muted-foreground hover:text-green-500'
+                          }`}
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleSubEventVote(participant.id, 'DOWN')}
+                          disabled={credits.downvotesRemaining <= 0}
+                          className={`p-0.5 rounded transition-colors ${
+                            credits.downvotesRemaining <= 0 ? 'text-muted-foreground/30' : 'text-muted-foreground hover:text-red-500'
+                          }`}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Center: Comments Section (Main Focus) - Reddit Style */}
+            <div className="max-w-2xl mx-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-muted-foreground">
+                    {selectedSubEvent.comments.length} Comments
+                  </h2>
+                  <select className="text-xs bg-transparent border rounded px-2 py-1 text-muted-foreground">
+                    <option>Best</option>
+                    <option>New</option>
+                    <option>Top</option>
+                  </select>
+                </div>
+
+                {/* Modern Reddit-style Comment Input */}
+                <div className="mb-6 border rounded-xl bg-card overflow-hidden">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add a comment"
+                    rows={2}
+                    className="w-full resize-none bg-transparent px-4 py-3 text-sm focus:outline-none"
+                    onFocus={(e) => e.target.rows = 3}
+                    onBlur={(e) => { if (!e.target.value) e.target.rows = 2 }}
+                  />
+
+                  {/* Image URL Input */}
+                  {showCommentImageUrl && (
+                    <div className="px-3 py-2 border-t bg-accent/20 flex gap-2">
+                      <Input
+                        value={commentImageUrlInput}
+                        onChange={(e) => setCommentImageUrlInput(e.target.value)}
+                        placeholder="Paste image or GIF URL..."
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (commentImageUrlInput.trim()) {
+                            setNewCommentImage(commentImageUrlInput.trim())
+                            setCommentImageUrlInput('')
+                            setShowCommentImageUrl(false)
+                          }
+                        }}
                       >
-                        <ChevronUp className="w-4 h-4" />
+                        Add
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setShowCommentImageUrl(false); setCommentImageUrlInput('') }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Image Preview */}
+                  {newCommentImage && (
+                    <div className="px-4 py-2 border-t bg-accent/20">
+                      <div className="relative inline-block">
+                        <img src={newCommentImage} alt="Comment preview" className="max-h-32 rounded-lg" />
+                        <button
+                          onClick={() => setNewCommentImage('')}
+                          className="absolute -top-2 -right-2 p-1 bg-foreground text-background rounded-full hover:bg-foreground/80"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between px-2 py-1.5 border-t bg-accent/10">
+                    <div className="flex items-center gap-0.5">
+                      <input
+                        ref={commentFileInputRef}
+                        type="file"
+                        accept="image/*,image/gif"
+                        onChange={handleCommentImageUpload}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => commentFileInputRef.current?.click()}
+                        className="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+                        title="Upload image"
+                      >
+                        <Image className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleSubEventVote(participant.id, 'DOWN')}
-                        className={`p-0.5 rounded hover:bg-accent ${
-                          vote === 'DOWN' ? 'text-red-500' : 'text-muted-foreground'
-                        }`}
+                        onClick={() => setShowCommentImageUrl(!showCommentImageUrl)}
+                        className="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+                        title="Add image URL"
                       >
-                        <ChevronDown className="w-4 h-4" />
+                        <LinkIcon className="w-4 h-4" />
                       </button>
                     </div>
+                    <Button
+                      onClick={() => handleAddComment()}
+                      disabled={!newComment.trim() && !newCommentImage}
+                      size="sm"
+                      className="rounded-full px-4"
+                    >
+                      Comment
+                    </Button>
                   </div>
-                )
-              })}
+                </div>
+
+                {/* Comments List - Reddit Style */}
+                <div className="space-y-2">
+                  {topLevelComments.map(comment => (
+                    <CommentItem
+                      key={comment.id}
+                      comment={comment}
+                      allComments={selectedSubEvent.comments}
+                      visitorId={visitorId}
+                      currentUserId={user?.id}
+                      isOwner={isOwner}
+                      commentVotes={commentVotes}
+                      replyingTo={replyingTo}
+                      replyContent={replyContent}
+                      replyImageUrl={replyImageUrl}
+                      onVote={handleCommentVote}
+                      onReply={(parentId) => { setReplyingTo(parentId); setReplyContent(''); setReplyImageUrl('') }}
+                      onReplyContentChange={(content) => setReplyContent(content)}
+                      onReplyImageChange={(url) => setReplyImageUrl(url)}
+                      onSubmitReply={(parentId) => handleAddComment(parentId)}
+                      onCancelReply={() => { setReplyingTo(null); setReplyContent(''); setReplyImageUrl('') }}
+                      onDelete={handleDeleteComment}
+                    />
+                  ))}
+
+                  {topLevelComments.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      No comments yet. Be the first to share your thoughts!
+                    </div>
+                  )}
+                </div>
             </div>
           </div>
-
-          {/* Comments Section */}
-          <div>
-            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              Comments
-            </h2>
-
-            <div className="flex gap-2 mb-4">
-              <Input
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleAddComment()
-                  }
-                }}
-              />
-              <Button onClick={() => handleAddComment()} disabled={!newComment.trim()}>
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="space-y-1">
-              {topLevelComments.map(comment => (
-                <CommentItem
-                  key={comment.id}
-                  comment={comment}
-                  allComments={selectedSubEvent.comments}
-                  visitorId={visitorId}
-                  isOwner={isOwner}
-                  commentVotes={commentVotes}
-                  replyingTo={replyingTo}
-                  replyContent={replyContent}
-                  onVote={handleCommentVote}
-                  onReply={(parentId) => setReplyingTo(parentId)}
-                  onReplyContentChange={(content) => setReplyContent(content)}
-                  onSubmitReply={(parentId) => handleAddComment(parentId)}
-                  onCancelReply={() => { setReplyingTo(null); setReplyContent('') }}
-                  onDelete={handleDeleteComment}
-                />
-              ))}
-
-              {topLevelComments.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No comments yet. Be the first to comment!
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     )
   }
@@ -861,6 +1298,7 @@ export function EventPage() {
             </div>
             <p className="text-sm text-muted-foreground">
               Created {new Date(event.createdAt).toLocaleDateString()}
+              {event.ownerName && ` by ${event.ownerName}`}
             </p>
           </div>
           {isOwner && (
@@ -916,16 +1354,18 @@ export function EventPage() {
                     <div className="flex">
                       <button
                         onClick={() => handleVote(participant.id, 'UP')}
-                        className={`p-0.5 rounded hover:bg-accent ${
-                          vote === 'UP' ? 'text-green-500' : 'text-muted-foreground'
+                        className={`p-0.5 rounded transition-colors ${
+                          vote === 'UP' ? 'text-green-500' :
+                          'text-muted-foreground hover:bg-accent hover:text-green-500'
                         }`}
                       >
                         <ChevronUp className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleVote(participant.id, 'DOWN')}
-                        className={`p-0.5 rounded hover:bg-accent ${
-                          vote === 'DOWN' ? 'text-red-500' : 'text-muted-foreground'
+                        className={`p-0.5 rounded transition-colors ${
+                          vote === 'DOWN' ? 'text-red-500' :
+                          'text-muted-foreground hover:bg-accent hover:text-red-500'
                         }`}
                       >
                         <ChevronDown className="w-3.5 h-3.5" />

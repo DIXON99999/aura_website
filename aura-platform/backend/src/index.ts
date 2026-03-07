@@ -5,13 +5,21 @@ import entities from './routes/entities.js'
 import votes from './routes/votes.js'
 import auth from './routes/auth.js'
 import events from './routes/events.js'
+import uploads from './routes/uploads.js'
+import auraFarms from './routes/aura-farms.js'
 
 const app = new Hono()
 
 // Middleware
 app.use('*', logger())
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: (origin) => {
+    // Allow localhost for development
+    if (!origin || origin.includes('localhost')) return origin
+    // Allow Cloudflare tunnels
+    if (origin.endsWith('.trycloudflare.com')) return origin
+    return null
+  },
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }))
@@ -24,6 +32,8 @@ app.route('/api', entities)
 app.route('/api/votes', votes)
 app.route('/api/auth', auth)
 app.route('/api/events', events)
+app.route('/api/uploads', uploads)
+app.route('/api/aura-farms', auraFarms)
 
 const port = 3001
 console.log(`Server running on http://localhost:${port}`)

@@ -24,7 +24,7 @@ export function MyEventsPage() {
   const handleDelete = async (eventId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!confirm('Are you sure you want to delete this event?')) return
+    if (!confirm('Are you sure you want to delete this leaderboard?')) return
 
     await api.deleteEvent(eventId)
     setEvents(events.filter(ev => ev.id !== eventId))
@@ -36,9 +36,9 @@ export function MyEventsPage() {
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">My Events</h1>
+          <h1 className="text-2xl font-bold">My Custom Leaderboards</h1>
           <Link to="/create-event">
-            <Button>Create Event</Button>
+            <Button>Create Leaderboard</Button>
           </Link>
         </div>
 
@@ -46,48 +46,62 @@ export function MyEventsPage() {
           <div className="text-center text-muted-foreground py-12">Loading...</div>
         ) : events.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
-            <p>You haven't created any events yet</p>
+            <p>You haven't created any custom leaderboards yet</p>
             <Link to="/create-event">
-              <Button className="mt-4">Create Your First Event</Button>
+              <Button className="mt-4">Create Your First Leaderboard</Button>
             </Link>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {events.map(event => (
               <Link
                 key={event.id}
                 to={`/events/${event.id}`}
-                className="block p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors overflow-hidden"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-medium">{event.name}</h2>
+                {event.imageUrl && (
+                  <div className="aspect-[3/2] w-full overflow-hidden bg-muted">
+                    <img
+                      src={event.imageUrl}
+                      alt={event.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                <div className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="font-medium text-sm">{event.name}</h2>
                       {event.isPublic ? (
-                        <Globe className="w-4 h-4 text-muted-foreground" />
+                        <Globe className="w-3 h-3 text-muted-foreground" />
                       ) : (
-                        <Lock className="w-4 h-4 text-muted-foreground" />
+                        <Lock className="w-3 h-3 text-muted-foreground" />
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>{new Date(event.createdAt).toLocaleDateString()}</span>
+                    <div className="flex items-center">
+                      <Link
+                        to={`/events/${event.id}/edit`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded hover:bg-background"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Link>
+                      <button
+                        onClick={(e) => handleDelete(event.id, e)}
+                        className="p-1.5 rounded hover:bg-background text-destructive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to={`/events/${event.id}/edit`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-2 rounded hover:bg-background"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Link>
-                    <button
-                      onClick={(e) => handleDelete(event.id, e)}
-                      className="p-2 rounded hover:bg-background text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {event.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {event.description}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
+                    <Calendar className="w-3 h-3" />
+                    <span>{new Date(event.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
               </Link>

@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3001/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 const SESSION_KEY = 'aura_session'
 
 // Get stored session token
@@ -32,8 +32,29 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return res.json()
 }
 
+// File upload (doesn't use fetchApi because it needs FormData)
+async function uploadFile(file: File): Promise<{ imageUrl: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const res = await fetch(`${API_BASE}/uploads`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(error.error || `Upload failed: ${res.status}`)
+  }
+
+  return res.json()
+}
+
 // Entity fetching
 export const api = {
+  // File upload
+  uploadImage: uploadFile,
+
   // Countries
   getCountries: () => fetchApi<Entity[]>('/countries'),
   getCountry: (id: string) => fetchApi<Entity>(`/countries/${id}`),
@@ -130,7 +151,7 @@ export const api = {
   getVisitorVotes: (visitorId: string) =>
     fetchApi<Vote[]>(`/votes?visitorId=${visitorId}`),
 
-  vote: (data: { visitorId: string; entityId: string; entityType: string; direction: 'UP' | 'DOWN' }) =>
+  vote: (data: { visitorId: string; entityId: string; entityType: string; direction: 'UP' | 'DOWN'; userId?: string }) =>
     fetchApi<Vote & { credits: { upvotesRemaining: number; downvotesRemaining: number } }>('/votes', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -146,10 +167,10 @@ export const api = {
   getCredits: (visitorId: string) =>
     fetchApi<{ upvotesRemaining: number; downvotesRemaining: number }>(`/votes/credits?visitorId=${visitorId}`),
 
-  refreshCredits: (visitorId: string) =>
+  refreshCredits: (visitorId: string, userId?: string) =>
     fetchApi<{ upvotesRemaining: number; downvotesRemaining: number }>('/votes/credits/refresh', {
       method: 'POST',
-      body: JSON.stringify({ visitorId }),
+      body: JSON.stringify({ visitorId, userId }),
     }),
 
   // Auth
@@ -194,13 +215,13 @@ export const api = {
   getEvent: (id: string) =>
     fetchApi<EventWithParticipants>(`/events/${id}`),
 
-  createEvent: (data: { name: string; gameId: string; isPublic: boolean; participants: Array<{ playerId?: string; tempName?: string }> }) =>
+  createEvent: (data: { name: string; gameId: string; isPublic: boolean; description?: string; imageUrl?: string; participants: Array<{ playerId?: string; tempName?: string }> }) =>
     fetchApi<Event>('/events', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateEvent: (id: string, data: { name?: string; isPublic?: boolean }) =>
+  updateEvent: (id: string, data: { name?: string; isPublic?: boolean; description?: string; imageUrl?: string }) =>
     fetchApi<Event>(`/events/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -281,13 +302,13 @@ export const api = {
   getSubEventVotes: (leaderboardId: string, subEventId: string, visitorId: string) =>
     fetchApi<Array<{ participantId: string; direction: 'UP' | 'DOWN' }>>(`/events/${leaderboardId}/sub-events/${subEventId}/votes?visitorId=${visitorId}`),
 
-  updateSubEvent: (leaderboardId: string, subEventId: string, data: { imageUrl?: string }) =>
+  updateSubEvent: (leaderboardId: string, subEventId: string, data: { imageUrl?: string; name?: string }) =>
     fetchApi<SubEvent>(`/events/${leaderboardId}/sub-events/${subEventId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
-  addSubEventComment: (leaderboardId: string, subEventId: string, data: { visitorId: string; content: string; username?: string; parentId?: string }) =>
+  addSubEventComment: (leaderboardId: string, subEventId: string, data: { visitorId: string; content: string; username?: string; parentId?: string; imageUrl?: string; userId?: string }) =>
     fetchApi<SubEventComment>(`/events/${leaderboardId}/sub-events/${subEventId}/comments`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -302,11 +323,53 @@ export const api = {
   getCommentVotes: (leaderboardId: string, subEventId: string, visitorId: string) =>
     fetchApi<Array<{ commentId: string; direction: 'UP' | 'DOWN' }>>(`/events/${leaderboardId}/sub-events/${subEventId}/comments/votes?visitorId=${visitorId}`),
 
-  deleteSubEventComment: (leaderboardId: string, subEventId: string, commentId: string, data: { visitorId: string }) =>
+  deleteSubEventComment: (leaderboardId: string, subEventId: string, commentId: string, data: { visitorId: string; userId?: string }) =>
     fetchApi<{ success: boolean }>(`/events/${leaderboardId}/sub-events/${subEventId}/comments/${commentId}`, {
       method: 'DELETE',
       body: JSON.stringify(data),
     }),
+
+  // Aura Farms
+  getAuraFarms: (search?: string) =>
+    fetchApi<AuraFarm[]>(`/aura-farms${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+
+  getMyAuraFarms: () =>
+    fetchApi<AuraFarm[]>('/aura-farms/my'),
+
+  getAuraFarm: (id: string) =>
+    fetchApi<AuraFarm>(`/aura-farms/${id}`),
+
+  createAuraFarm: (data: { title: string; description?: string; entityId: string; entityType: string; imageUrl?: string }) =>
+    fetchApi<AuraFarm>('/aura-farms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteAuraFarm: (id: string) =>
+    fetchApi<{ success: boolean }>(`/aura-farms/${id}`, {
+      method: 'DELETE',
+    }),
+
+  updateAuraFarm: (id: string, data: { title?: string; description?: string; imageUrl?: string }) =>
+    fetchApi<AuraFarm>(`/aura-farms/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  voteAuraFarm: (farmId: string, data: { visitorId: string; direction: 'UP' | 'DOWN' }) =>
+    fetchApi<{ farmId: string; auraScore: number; direction: string }>(`/aura-farms/${farmId}/vote`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeAuraFarmVote: (farmId: string, data: { visitorId: string }) =>
+    fetchApi<{ farmId: string; auraScore: number }>(`/aura-farms/${farmId}/vote`, {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
+
+  getAuraFarmVotes: (farmId: string, visitorId: string) =>
+    fetchApi<Array<{ farmId: string; direction: 'UP' | 'DOWN' }>>(`/aura-farms/${farmId}/votes?visitorId=${visitorId}`),
 }
 
 // Types for API responses
@@ -365,7 +428,10 @@ interface Event {
   slug: string
   gameId: string
   ownerId: string
+  ownerName: string | null
   isPublic: boolean
+  description: string | null
+  imageUrl: string | null
   createdAt: Date
 }
 
@@ -401,10 +467,12 @@ interface SubEventComment {
   id: string
   subEventId: string
   visitorId: string
+  userId: string | null
   username: string
   content: string
   parentId: string | null
   voteCount: number
+  imageUrl: string | null
   createdAt: Date
 }
 
@@ -428,4 +496,25 @@ interface SubEventWithParticipants extends SubEvent {
   comments: SubEventComment[]
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment }
+// Aura Farms
+interface AuraFarm {
+  id: string
+  title: string
+  description: string | null
+  entityId: string
+  entityType: string
+  ownerId: string
+  ownerName: string | null
+  imageUrl: string | null
+  auraScore: number
+  createdAt: Date
+  entity: {
+    id: string
+    name: string
+    slug: string
+    auraScore: number
+    imageUrl: string | null
+  } | null
+}
+
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm }
