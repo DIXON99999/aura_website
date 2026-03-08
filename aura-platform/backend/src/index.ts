@@ -20,6 +20,8 @@ app.use('*', cors({
     if (!origin || origin.includes('localhost')) return origin
     // Allow Cloudflare tunnels
     if (origin.endsWith('.trycloudflare.com')) return origin
+    // Allow DigitalOcean App Platform
+    if (origin.endsWith('.ondigitalocean.app')) return origin
     return null
   },
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -39,7 +41,7 @@ app.route('/api/aura-farms', auraFarms)
 app.route('/api/suggestions', suggestions)
 app.route('/api/notifications', notifications)
 
-const port = 3001
+const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)
 
 export default {
