@@ -30,9 +30,44 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }))
 
+// Global error handler
+app.onError((err, c) => {
+  console.error('Unhandled error:', err)
+  return c.json({ error: err.message, stack: err.stack }, 500)
+})
+
 // Health check
 app.get('/', (c) => c.json({ status: 'ok', message: 'Aura API' }))
 app.get('/api', (c) => c.json({ status: 'ok', message: 'Aura API' }))
+
+// Diagnostic endpoint
+app.get('/api/debug/db', async (c) => {
+  try {
+    const { pool } = await import('./db/index.js')
+    const result = await pool.query('SELECT 1 as test')
+    const dbUrl = process.env.DATABASE_URL || 'NOT SET'
+    // Mask the password
+    const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
+    return c.json({ status: 'connected', dbUrl: masked, result: result.rows })
+  } catch (err: unknown) {
+    const dbUrl = process.env.DATABASE_URL || 'NOT SET'
+    const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
+    return c.json({ status: 'error', dbUrl: masked, error: (err as Error).message }, 500)
+  }
+})
+app.get('/debug/db', async (c) => {
+  try {
+    const { pool } = await import('./db/index.js')
+    const result = await pool.query('SELECT 1 as test')
+    const dbUrl = process.env.DATABASE_URL || 'NOT SET'
+    const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
+    return c.json({ status: 'connected', dbUrl: masked, result: result.rows })
+  } catch (err: unknown) {
+    const dbUrl = process.env.DATABASE_URL || 'NOT SET'
+    const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
+    return c.json({ status: 'error', dbUrl: masked, error: (err as Error).message }, 500)
+  }
+})
 
 // Routes - mounted at both /api/* (local dev with proxy) and /* (DigitalOcean strips /api prefix)
 app.route('/api', entities)
