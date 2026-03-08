@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
@@ -12,8 +13,13 @@ import {
   ChevronDown as ChevronDownIcon,
   Home,
   Sprout,
+  Lightbulb,
+  X,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
+import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
@@ -41,8 +47,43 @@ export function Nav() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [createDropdownOpen, setCreateDropdownOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [suggestModalOpen, setSuggestModalOpen] = useState(false)
+  const [suggestionType, setSuggestionType] = useState('player')
+  const [suggestionName, setSuggestionName] = useState('')
+  const [suggestionDescription, setSuggestionDescription] = useState('')
+  const [suggestionLinks, setSuggestionLinks] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const createDropdownRef = useRef<HTMLDivElement>(null)
+
+  const handleSubmitSuggestion = async () => {
+    if (!suggestionName.trim()) return
+    setSubmitting(true)
+    try {
+      await api.submitSuggestion({
+        type: suggestionType,
+        name: suggestionName.trim(),
+        description: suggestionDescription.trim() || undefined,
+        links: suggestionLinks.trim() || undefined,
+        visitorId: getVisitorId(),
+        userId: user?.id,
+        submittedByName: userProfile?.name || user?.email?.split('@')[0],
+      })
+      setSubmitSuccess(true)
+      setTimeout(() => {
+        setSuggestModalOpen(false)
+        setSubmitSuccess(false)
+        setSuggestionName('')
+        setSuggestionDescription('')
+        setSuggestionLinks('')
+        setSuggestionType('player')
+      }, 1500)
+    } catch (error) {
+      console.error('Failed to submit suggestion:', error)
+    }
+    setSubmitting(false)
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -86,6 +127,14 @@ export function Nav() {
         >
           Aura
         </NavLink>
+
+        <button
+          onClick={() => setSuggestModalOpen(true)}
+          className="ml-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-accent text-muted-foreground hover:text-accent-foreground z-10"
+        >
+          <Lightbulb className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Suggest</span>
+        </button>
 
         <div className="absolute inset-0 flex items-center justify-center gap-1">
             {navItems.map((item) => (
@@ -244,6 +293,85 @@ export function Nav() {
           )}
         </div>
       </div>
+
+      {/* Suggestion Modal - rendered via portal to escape nav stacking context */}
+      {suggestModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-card border rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold">Suggest an Addition</h2>
+              <button
+                onClick={() => setSuggestModalOpen(false)}
+                className="p-1 rounded hover:bg-accent"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {submitSuccess ? (
+              <div className="p-8 text-center">
+                <div className="text-green-500 text-lg font-medium mb-2">Thank you!</div>
+                <p className="text-muted-foreground">Your suggestion has been submitted.</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Type</label>
+                  <select
+                    value={suggestionType}
+                    onChange={(e) => setSuggestionType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border bg-background text-sm"
+                  >
+                    <option value="player">Player</option>
+                    <option value="team">Team / Organisation</option>
+                    <option value="game">Game</option>
+                    <option value="peripheral">Peripheral (Mouse, Keyboard, etc.)</option>
+                    <option value="feature">Feature / Idea</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Name</label>
+                  <Input
+                    value={suggestionName}
+                    onChange={(e) => setSuggestionName(e.target.value)}
+                    placeholder="e.g. TenZ, Sentinels, Valorant..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Description (optional)</label>
+                  <textarea
+                    value={suggestionDescription}
+                    onChange={(e) => setSuggestionDescription(e.target.value)}
+                    placeholder="Any additional details..."
+                    className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[80px] resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Links (optional)</label>
+                  <Input
+                    value={suggestionLinks}
+                    onChange={(e) => setSuggestionLinks(e.target.value)}
+                    placeholder="Liquipedia, Twitter, etc."
+                  />
+                </div>
+
+                <Button
+                  onClick={handleSubmitSuggestion}
+                  disabled={!suggestionName.trim() || submitting}
+                  className="w-full"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Suggestion'}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </nav>
   )
 }

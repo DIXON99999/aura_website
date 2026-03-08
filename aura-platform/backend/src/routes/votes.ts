@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/index.js'
+import { pool } from '../db/index.js'
 import type { DbVote, DbPlayer, DbRegion } from '../db/index.js'
 
 const VOTE_VALUE = 1
@@ -7,14 +7,17 @@ const AURA_PROPAGATION_FACTOR = 0.1
 const DEFAULT_UPVOTES = 20
 const DEFAULT_DOWNVOTES = 10
 
-// Create visitor_credits table if not exists
-db.run(`
-  CREATE TABLE IF NOT EXISTS visitor_credits (
-    visitor_id TEXT PRIMARY KEY,
-    upvotes_remaining INTEGER NOT NULL DEFAULT ${DEFAULT_UPVOTES},
-    downvotes_remaining INTEGER NOT NULL DEFAULT ${DEFAULT_DOWNVOTES}
-  )
-`)
+async function initVotesTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS visitor_credits (
+      visitor_id TEXT PRIMARY KEY,
+      upvotes_remaining INTEGER NOT NULL DEFAULT ${DEFAULT_UPVOTES},
+      downvotes_remaining INTEGER NOT NULL DEFAULT ${DEFAULT_DOWNVOTES}
+    )
+  `)
+}
+
+initVotesTable().catch(console.error)
 
 interface DbVisitorCredits {
   visitor_id: string
@@ -22,21 +25,20 @@ interface DbVisitorCredits {
   downvotes_remaining: number
 }
 
-function getOrCreateCredits(visitorId: string): DbVisitorCredits {
-  let credits = db.query('SELECT * FROM visitor_credits WHERE visitor_id = ?').get(visitorId) as DbVisitorCredits | null
-  if (!credits) {
-    db.run(
-      'INSERT INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) VALUES (?, ?, ?)',
-      visitorId, DEFAULT_UPVOTES, DEFAULT_DOWNVOTES
+async function getOrCreateCredits(visitorId: string): Promise<DbVisitorCredits> {
+  const result = await pool.query('SELECT * FROM visitor_credits WHERE visitor_id = $1', [visitorId])
+  if (result.rows.length === 0) {
+    await pool.query(
+      'INSERT INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) VALUES ($1, $2, $3)',
+      [visitorId, DEFAULT_UPVOTES, DEFAULT_DOWNVOTES]
     )
-    credits = { visitor_id: visitorId, upvotes_remaining: DEFAULT_UPVOTES, downvotes_remaining: DEFAULT_DOWNVOTES }
+    return { visitor_id: visitorId, upvotes_remaining: DEFAULT_UPVOTES, downvotes_remaining: DEFAULT_DOWNVOTES }
   }
-  return credits
+  return result.rows[0] as DbVisitorCredits
 }
 
 const app = new Hono()
 
-// Get the correct table name for an entity type
 function getTableName(entityType: string): string {
   const map: Record<string, string> = {
     country: 'countries',
@@ -54,72 +56,80 @@ function getTableName(entityType: string): string {
   return map[entityType] || entityType
 }
 
-// Get parent entities for aura propagation
-function getParentEntities(entityType: string, entityId: string): Array<{ type: string; id: string }> {
+async function getParentEntities(entityType: string, entityId: string): Promise<Array<{ type: string; id: string }>> {
   const parents: Array<{ type: string; id: string }> = []
 
   if (entityType === 'player') {
-    const player = db.query('SELECT * FROM players WHERE id = ?').get(entityId) as DbPlayer | null
-    if (player) {
+    const result = await pool.query('SELECT * FROM players WHERE id = $1', [entityId])
+    if (result.rows.length > 0) {
+      const player = result.rows[0] as DbPlayer
       if (player.organisation_id) parents.push({ type: 'organisation', id: player.organisation_id })
       if (player.country_id) parents.push({ type: 'country', id: player.country_id })
       if (player.region_id) parents.push({ type: 'region', id: player.region_id })
       if (player.main_game_id) parents.push({ type: 'game', id: player.main_game_id })
     }
   } else if (entityType === 'organisationGame') {
-    const row = db.query('SELECT * FROM organisation_games WHERE id = ?').get(entityId) as { organisation_id: string; game_id: string } | null
-    if (row) {
+    const result = await pool.query('SELECT * FROM organisation_games WHERE id = $1', [entityId])
+    if (result.rows.length > 0) {
+      const row = result.rows[0] as { organisation_id: string; game_id: string }
       parents.push({ type: 'organisation', id: row.organisation_id })
       parents.push({ type: 'game', id: row.game_id })
     }
   } else if (entityType === 'region') {
-    const region = db.query('SELECT * FROM regions WHERE id = ?').get(entityId) as DbRegion | null
-    if (region) parents.push({ type: 'game', id: region.game_id })
+    const result = await pool.query('SELECT * FROM regions WHERE id = $1', [entityId])
+    if (result.rows.length > 0) {
+      const region = result.rows[0] as DbRegion
+      parents.push({ type: 'game', id: region.game_id })
+    }
   } else if (['role', 'weapon', 'character'].includes(entityType)) {
     const table = getTableName(entityType)
-    const row = db.query(`SELECT game_id FROM ${table} WHERE id = ?`).get(entityId) as { game_id: string } | null
-    if (row) parents.push({ type: 'game', id: row.game_id })
+    const result = await pool.query(`SELECT game_id FROM ${table} WHERE id = $1`, [entityId])
+    if (result.rows.length > 0) {
+      const row = result.rows[0] as { game_id: string }
+      parents.push({ type: 'game', id: row.game_id })
+    }
   } else if (entityType === 'peripheral') {
-    const row = db.query('SELECT brand_id FROM peripherals WHERE id = ?').get(entityId) as { brand_id: string } | null
-    if (row) parents.push({ type: 'brand', id: row.brand_id })
+    const result = await pool.query('SELECT brand_id FROM peripherals WHERE id = $1', [entityId])
+    if (result.rows.length > 0) {
+      const row = result.rows[0] as { brand_id: string }
+      parents.push({ type: 'brand', id: row.brand_id })
+    }
   }
 
   return parents
 }
 
-// Update aura score for an entity (rounded to 2 decimal places to avoid floating point issues)
-function updateAuraScore(entityType: string, entityId: string, delta: number) {
+async function updateAuraScore(entityType: string, entityId: string, delta: number) {
   const table = getTableName(entityType)
-  db.run(`UPDATE ${table} SET aura_score = ROUND(aura_score + ?, 2) WHERE id = ?`, delta, entityId)
+  await pool.query(`UPDATE ${table} SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2`, [delta, entityId])
 }
 
-// GET /votes/credits?visitorId=xxx - Get visitor's remaining credits
-app.get('/credits', (c) => {
+app.get('/credits', async (c) => {
   const visitorId = c.req.query('visitorId')
   if (!visitorId) {
     return c.json({ error: 'Missing visitorId' }, 400)
   }
-  const credits = getOrCreateCredits(visitorId)
+  const credits = await getOrCreateCredits(visitorId)
   return c.json({
     upvotesRemaining: credits.upvotes_remaining,
     downvotesRemaining: credits.downvotes_remaining,
   })
 })
 
-// POST /votes/credits/refresh - Refresh visitor's credits (only for signed-in users)
 app.post('/credits/refresh', async (c) => {
   const body = await c.req.json()
   const { visitorId, userId } = body
   if (!visitorId) {
     return c.json({ error: 'Missing visitorId' }, 400)
   }
-  // Only allow refresh for signed-in users
   if (!userId) {
     return c.json({ error: 'Sign in to refresh your vote credits' }, 403)
   }
-  db.run(
-    'INSERT OR REPLACE INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) VALUES (?, ?, ?)',
-    visitorId, DEFAULT_UPVOTES, DEFAULT_DOWNVOTES
+  await pool.query(
+    `INSERT INTO visitor_credits (visitor_id, upvotes_remaining, downvotes_remaining) 
+     VALUES ($1, $2, $3)
+     ON CONFLICT (visitor_id) DO UPDATE SET upvotes_remaining = $2, downvotes_remaining = $3`,
+    [visitorId, DEFAULT_UPVOTES, DEFAULT_DOWNVOTES]
   )
   return c.json({
     upvotesRemaining: DEFAULT_UPVOTES,
@@ -127,41 +137,44 @@ app.post('/credits/refresh', async (c) => {
   })
 })
 
-// GET /votes?visitorId=xxx&entityId=xxx&entityType=xxx
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const visitorId = c.req.query('visitorId')
   const entityId = c.req.query('entityId')
   const entityType = c.req.query('entityType')
 
   if (visitorId && entityId && entityType) {
     const voteKey = `${visitorId}:${entityType}:${entityId}`
-    const row = db.query('SELECT * FROM votes WHERE id = ?').get(voteKey) as DbVote | null
-    return c.json(row ? {
+    const result = await pool.query('SELECT * FROM votes WHERE id = $1', [voteKey])
+    if (result.rows.length === 0) return c.json(null)
+    const row = result.rows[0] as DbVote
+    return c.json({
       id: row.id,
       visitorId: row.visitor_id,
       entityId: row.entity_id,
       entityType: row.entity_type,
       direction: row.direction,
-      timestamp: new Date(row.timestamp),
-    } : null)
+      timestamp: row.timestamp,
+    })
   }
 
   if (visitorId) {
-    const rows = db.query('SELECT * FROM votes WHERE visitor_id = ?').all(visitorId) as DbVote[]
-    return c.json(rows.map(r => ({
-      id: r.id,
-      visitorId: r.visitor_id,
-      entityId: r.entity_id,
-      entityType: r.entity_type,
-      direction: r.direction,
-      timestamp: new Date(r.timestamp),
-    })))
+    const result = await pool.query('SELECT * FROM votes WHERE visitor_id = $1', [visitorId])
+    return c.json(result.rows.map(r => {
+      const row = r as DbVote
+      return {
+        id: row.id,
+        visitorId: row.visitor_id,
+        entityId: row.entity_id,
+        entityType: row.entity_type,
+        direction: row.direction,
+        timestamp: row.timestamp,
+      }
+    }))
   }
 
   return c.json({ error: 'Missing parameters' }, 400)
 })
 
-// POST /votes - Use credits system (multiple votes allowed for signed-in users)
 app.post('/', async (c) => {
   const body = await c.req.json()
   const { visitorId, entityId, entityType, direction, userId } = body
@@ -174,8 +187,7 @@ app.post('/', async (c) => {
     return c.json({ error: 'Invalid direction' }, 400)
   }
 
-  // Check credits
-  const credits = getOrCreateCredits(visitorId)
+  const credits = await getOrCreateCredits(visitorId)
   if (direction === 'UP' && credits.upvotes_remaining <= 0) {
     return c.json({ error: 'No upvote credits remaining' }, 400)
   }
@@ -183,35 +195,30 @@ app.post('/', async (c) => {
     return c.json({ error: 'No downvote credits remaining' }, 400)
   }
 
-  // Deduct credit
   if (direction === 'UP') {
-    db.run('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+    await pool.query('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
   } else {
-    db.run('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = ?', visitorId)
+    await pool.query('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
   }
 
   const auraDelta = direction === 'UP' ? VOTE_VALUE : -VOTE_VALUE
 
-  // Record the vote (with unique ID for each vote)
   const voteId = crypto.randomUUID()
-  db.run(
-    'INSERT INTO votes (id, visitor_id, entity_id, entity_type, direction, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-    voteId, visitorId, entityId, entityType, direction, Date.now()
+  await pool.query(
+    'INSERT INTO votes (id, visitor_id, entity_id, entity_type, direction, timestamp) VALUES ($1, $2, $3, $4, $5, $6)',
+    [voteId, visitorId, entityId, entityType, direction, new Date().toISOString()]
   )
 
-  // Update entity aura score
-  updateAuraScore(entityType, entityId, auraDelta)
+  await updateAuraScore(entityType, entityId, auraDelta)
 
-  // Propagate to parents
-  const parents = getParentEntities(entityType, entityId)
+  const parents = await getParentEntities(entityType, entityId)
   const propagatedDelta = auraDelta * AURA_PROPAGATION_FACTOR
 
   for (const parent of parents) {
-    updateAuraScore(parent.type, parent.id, propagatedDelta)
+    await updateAuraScore(parent.type, parent.id, propagatedDelta)
   }
 
-  // Get updated credits
-  const updatedCredits = getOrCreateCredits(visitorId)
+  const updatedCredits = await getOrCreateCredits(visitorId)
 
   return c.json({
     id: voteId,
@@ -227,7 +234,6 @@ app.post('/', async (c) => {
   })
 })
 
-// DELETE /votes - No longer used with credits system, but kept for backwards compatibility
 app.delete('/', async (c) => {
   return c.json({ error: 'Vote removal not supported with credits system' }, 400)
 })

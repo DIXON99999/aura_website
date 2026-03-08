@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/index.js'
+import { pool } from '../db/index.js'
 import type { DbUser, DbSession } from '../db/index.js'
 
 const app = new Hono()
@@ -10,7 +10,6 @@ function generateId(): string {
   return crypto.randomUUID()
 }
 
-// POST /auth/signup
 app.post('/signup', async (c) => {
   const body = await c.req.json()
   const { email, password } = body
@@ -29,13 +28,11 @@ app.post('/signup', async (c) => {
     return c.json({ error: 'Password must be at least 6 characters' }, 400)
   }
 
-  // Check if email exists
-  const existing = db.query('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as DbUser | null
-  if (existing) {
+  const existingResult = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail])
+  if (existingResult.rows.length > 0) {
     return c.json({ error: 'Email already registered' }, 400)
   }
 
-  // Hash password using Bun's built-in argon2
   const passwordHash = await Bun.password.hash(password, {
     algorithm: 'argon2id',
     memoryCost: 65536,
@@ -43,37 +40,35 @@ app.post('/signup', async (c) => {
   })
 
   const userId = generateId()
-  const now = Date.now()
+  const now = new Date()
+  const nowIso = now.toISOString()
 
-  // Create user
-  db.run(
-    'INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
-    userId, normalizedEmail, passwordHash, now
+  await pool.query(
+    'INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)',
+    [userId, normalizedEmail, passwordHash, nowIso]
   )
 
-  // Create session
   const sessionId = generateId()
-  const expiresAt = now + SESSION_DURATION
+  const expiresAt = new Date(now.getTime() + SESSION_DURATION)
 
-  db.run(
-    'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
-    sessionId, userId, expiresAt, now
+  await pool.query(
+    'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES ($1, $2, $3, $4)',
+    [sessionId, userId, expiresAt.toISOString(), nowIso]
   )
 
   return c.json({
     user: {
       id: userId,
       email: normalizedEmail,
-      createdAt: new Date(now),
+      createdAt: now,
     },
     session: {
       id: sessionId,
-      expiresAt: new Date(expiresAt),
+      expiresAt: expiresAt,
     },
   })
 })
 
-// POST /auth/signin
 app.post('/signin', async (c) => {
   const body = await c.req.json()
   const { email, password } = body
@@ -84,26 +79,25 @@ app.post('/signin', async (c) => {
 
   const normalizedEmail = email.toLowerCase().trim()
 
-  // Find user
-  const user = db.query('SELECT * FROM users WHERE email = ?').get(normalizedEmail) as DbUser | null
-  if (!user) {
+  const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail])
+  if (userResult.rows.length === 0) {
     return c.json({ error: 'Invalid email or password' }, 401)
   }
 
-  // Verify password
+  const user = userResult.rows[0] as DbUser
+
   const validPassword = await Bun.password.verify(password, user.password_hash)
   if (!validPassword) {
     return c.json({ error: 'Invalid email or password' }, 401)
   }
 
-  // Create session
   const sessionId = generateId()
-  const now = Date.now()
-  const expiresAt = now + SESSION_DURATION
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + SESSION_DURATION)
 
-  db.run(
-    'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
-    sessionId, user.id, expiresAt, now
+  await pool.query(
+    'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES ($1, $2, $3, $4)',
+    [sessionId, user.id, expiresAt.toISOString(), now.toISOString()]
   )
 
   return c.json({
@@ -111,27 +105,25 @@ app.post('/signin', async (c) => {
       id: user.id,
       email: user.email,
       playerId: user.player_id,
-      createdAt: new Date(user.created_at),
+      createdAt: user.created_at,
     },
     session: {
       id: sessionId,
-      expiresAt: new Date(expiresAt),
+      expiresAt: expiresAt,
     },
   })
 })
 
-// POST /auth/signout
 app.post('/signout', async (c) => {
   const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
 
   if (sessionId) {
-    db.run('DELETE FROM sessions WHERE id = ?', sessionId)
+    await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId])
   }
 
   return c.json({ success: true })
 })
 
-// GET /auth/me - Get current user from session
 app.get('/me', async (c) => {
   const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
 
@@ -139,35 +131,35 @@ app.get('/me', async (c) => {
     return c.json({ error: 'No session' }, 401)
   }
 
-  // Find session
-  const session = db.query('SELECT * FROM sessions WHERE id = ?').get(sessionId) as DbSession | null
-  if (!session) {
+  const sessionResult = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
+  if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Invalid session' }, 401)
   }
 
-  // Check if expired
-  if (session.expires_at < Date.now()) {
-    db.run('DELETE FROM sessions WHERE id = ?', sessionId)
+  const session = sessionResult.rows[0] as DbSession
+
+  if (new Date(session.expires_at) < new Date()) {
+    await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId])
     return c.json({ error: 'Session expired' }, 401)
   }
 
-  // Get user
-  const user = db.query('SELECT * FROM users WHERE id = ?').get(session.user_id) as DbUser | null
-  if (!user) {
+  const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [session.user_id])
+  if (userResult.rows.length === 0) {
     return c.json({ error: 'User not found' }, 401)
   }
+
+  const user = userResult.rows[0] as DbUser
 
   return c.json({
     user: {
       id: user.id,
       email: user.email,
       playerId: user.player_id,
-      createdAt: new Date(user.created_at),
+      createdAt: user.created_at,
     },
   })
 })
 
-// DELETE /auth/account - Delete user account
 app.delete('/account', async (c) => {
   const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
 
@@ -175,34 +167,31 @@ app.delete('/account', async (c) => {
     return c.json({ error: 'No session' }, 401)
   }
 
-  const session = db.query('SELECT * FROM sessions WHERE id = ?').get(sessionId) as DbSession | null
-  if (!session) {
+  const sessionResult = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
+  if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Invalid session' }, 401)
   }
 
+  const session = sessionResult.rows[0] as DbSession
   const userId = session.user_id
 
-  // Find and delete user's player profile (visitor_id = user.id for user profiles)
-  const playerProfile = db.query('SELECT * FROM players WHERE visitor_id = ? AND is_user_profile = 1').get(userId) as { id: string } | null
-  if (playerProfile) {
-    // Delete votes made by this player profile
-    db.run('DELETE FROM votes WHERE visitor_id = ?', userId)
-    // Delete user_profiles mapping
-    db.run('DELETE FROM user_profiles WHERE visitor_id = ?', userId)
-    // Delete the player profile
-    db.run('DELETE FROM players WHERE id = ?', playerProfile.id)
+  const playerProfileResult = await pool.query(
+    'SELECT * FROM players WHERE visitor_id = $1 AND is_user_profile = true',
+    [userId]
+  )
+  if (playerProfileResult.rows.length > 0) {
+    const playerProfile = playerProfileResult.rows[0] as { id: string }
+    await pool.query('DELETE FROM votes WHERE visitor_id = $1', [userId])
+    await pool.query('DELETE FROM user_profiles WHERE visitor_id = $1', [userId])
+    await pool.query('DELETE FROM players WHERE id = $1', [playerProfile.id])
   }
 
-  // Delete all user sessions
-  db.run('DELETE FROM sessions WHERE user_id = ?', userId)
-
-  // Delete user
-  db.run('DELETE FROM users WHERE id = ?', userId)
+  await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId])
+  await pool.query('DELETE FROM users WHERE id = $1', [userId])
 
   return c.json({ success: true })
 })
 
-// PATCH /auth/link-player - Link a player profile to user account
 app.patch('/link-player', async (c) => {
   const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
   const body = await c.req.json()
@@ -212,22 +201,27 @@ app.patch('/link-player', async (c) => {
     return c.json({ error: 'No session' }, 401)
   }
 
-  const session = db.query('SELECT * FROM sessions WHERE id = ?').get(sessionId) as DbSession | null
-  if (!session || session.expires_at < Date.now()) {
+  const sessionResult = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
+  if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Invalid session' }, 401)
   }
 
-  // Update user with player_id
-  db.run('UPDATE users SET player_id = ? WHERE id = ?', playerId, session.user_id)
+  const session = sessionResult.rows[0] as DbSession
+  if (new Date(session.expires_at) < new Date()) {
+    return c.json({ error: 'Invalid session' }, 401)
+  }
 
-  const user = db.query('SELECT * FROM users WHERE id = ?').get(session.user_id) as DbUser
+  await pool.query('UPDATE users SET player_id = $1 WHERE id = $2', [playerId, session.user_id])
+
+  const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [session.user_id])
+  const user = userResult.rows[0] as DbUser
 
   return c.json({
     user: {
       id: user.id,
       email: user.email,
       playerId: user.player_id,
-      createdAt: new Date(user.created_at),
+      createdAt: user.created_at,
     },
   })
 })

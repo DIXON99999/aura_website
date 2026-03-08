@@ -7,6 +7,7 @@ import auth from './routes/auth.js'
 import events from './routes/events.js'
 import uploads from './routes/uploads.js'
 import auraFarms from './routes/aura-farms.js'
+import suggestions from './routes/suggestions.js'
 
 const app = new Hono()
 
@@ -34,6 +35,7 @@ app.route('/api/auth', auth)
 app.route('/api/events', events)
 app.route('/api/uploads', uploads)
 app.route('/api/aura-farms', auraFarms)
+app.route('/api/suggestions', suggestions)
 
 const port = 3001
 console.log(`Server running on http://localhost:${port}`)

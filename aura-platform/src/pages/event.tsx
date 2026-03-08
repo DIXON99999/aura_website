@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { api, type EventWithParticipants, type SubEvent, type SubEventWithParticipants, type SubEventComment } from '@/lib/api'
 import { useAuthStore, useAuraStore } from '@/stores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ChevronUp, ChevronDown, Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
+import { VoteButtons } from '@/components/ui/vote-buttons'
+import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -287,25 +288,14 @@ function CommentItem({
             {/* Actions bar - Modern Reddit style */}
             <div className="flex items-center gap-0.5 pl-8 text-muted-foreground">
               {/* Votes */}
-              <div className="flex items-center rounded-full bg-accent/50 hover:bg-accent">
-                <button
-                  onClick={() => onVote(comment.id, 'UP')}
-                  className={`p-1.5 rounded-full transition-colors ${vote === 'UP' ? 'text-green-500' : 'hover:text-green-500 hover:bg-green-500/10'}`}
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
-                <span className={`text-xs font-semibold min-w-[1rem] text-center ${
-                  vote === 'UP' ? 'text-green-500' : vote === 'DOWN' ? 'text-red-500' : ''
-                }`}>
-                  {comment.voteCount}
-                </span>
-                <button
-                  onClick={() => onVote(comment.id, 'DOWN')}
-                  className={`p-1.5 rounded-full transition-colors ${vote === 'DOWN' ? 'text-red-500' : 'hover:text-red-500 hover:bg-red-500/10'}`}
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </div>
+              <VoteButtons
+                score={comment.voteCount}
+                currentVote={vote}
+                onVote={(dir) => onVote(comment.id, dir)}
+                size="sm"
+                layout="horizontal"
+                variant="pill"
+              />
 
               <button
                 onClick={() => onReply(comment.id)}
@@ -461,7 +451,8 @@ function CommentItem({
 }
 
 export function EventPage() {
-  const { id } = useParams<{ id: string }>()
+  const { id, subEventId } = useParams<{ id: string; subEventId?: string }>()
+  const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const userProfiles = useAuraStore((s) => s.userProfiles)
   const players = useAuraStore((s) => s.players)
@@ -544,13 +535,22 @@ export function EventPage() {
       .finally(() => setLoading(false))
   }, [id, visitorId])
 
-  const loadSubEvent = async (subEventId: string) => {
+  // Load sub-event from URL parameter
+  useEffect(() => {
+    if (subEventId && id && !loading) {
+      loadSubEvent(subEventId)
+    } else if (!subEventId) {
+      setSelectedSubEvent(null)
+    }
+  }, [subEventId, id, loading])
+
+  const loadSubEvent = async (subEventIdToLoad: string) => {
     if (!id) return
     try {
       const [subEventData, votesData, commentVotesData] = await Promise.all([
-        api.getSubEvent(id, subEventId),
-        api.getSubEventVotes(id, subEventId, visitorId),
-        api.getCommentVotes(id, subEventId, visitorId),
+        api.getSubEvent(id, subEventIdToLoad),
+        api.getSubEventVotes(id, subEventIdToLoad, visitorId),
+        api.getCommentVotes(id, subEventIdToLoad, visitorId),
       ])
       setSelectedSubEvent(subEventData)
       setEditName(subEventData.name)
@@ -587,7 +587,7 @@ export function EventPage() {
           ).sort((a, b) => b.auraScore - a.auraScore),
         })
       } else {
-        const result = await api.voteEventParticipant(event.id, { visitorId, participantId, direction })
+        const result = await api.voteEventParticipant(event.id, { visitorId, participantId, direction, userId: user?.id })
         setVotes(new Map(votes).set(participantId, direction))
         setEvent({
           ...event,
@@ -614,7 +614,7 @@ export function EventPage() {
 
     try {
       // Unlimited voting - each click adds a vote (but costs credits)
-      const result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction })
+      const result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction, userId: user?.id })
       setSelectedSubEvent({
         ...selectedSubEvent,
         participants: selectedSubEvent.participants.map(p =>
@@ -651,7 +651,7 @@ export function EventPage() {
       setSelectedParticipantIds([])
       setShowCreateSubEvent(false)
       setParticipantSearch('')
-      loadSubEvent(newSubEvent.id)
+      navigate(`/events/${id}/sub/${newSubEvent.id}`)
     } catch (err) {
       console.error('Failed to create sub-event:', err)
       setSubEventError((err as Error).message || 'Failed to create sub-event')
@@ -667,7 +667,7 @@ export function EventPage() {
       await api.deleteSubEvent(id, confirmDialog.subEventId)
       setSubEvents(subEvents.filter(se => se.id !== confirmDialog.subEventId))
       if (selectedSubEvent?.id === confirmDialog.subEventId) {
-        setSelectedSubEvent(null)
+        navigate(`/events/${id}`)
       }
       const updatedEvent = await api.getEvent(id)
       setEvent(updatedEvent)
@@ -890,7 +890,7 @@ export function EventPage() {
         {/* Header section - centered, narrower width */}
         <div className="max-w-2xl mx-auto">
           <button
-            onClick={() => setSelectedSubEvent(null)}
+            onClick={() => navigate(`/events/${id}`)}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1040,6 +1040,8 @@ export function EventPage() {
                         const displayName = participant.player?.name || participant.tempName || 'Unknown'
                         // Get original rank from full list
                         const originalRank = selectedSubEvent.participants.findIndex(p => p.id === participant.id) + 1
+                        const currentUserPlayerId = user ? userProfiles[user.id] : null
+                        const isSelf = participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId
 
                         return (
                           <div
@@ -1057,32 +1059,19 @@ export function EventPage() {
                             }`}>
                               {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
                             </span>
-                            <div className="flex flex-col">
-                              <button
-                                onClick={() => handleSubEventVote(participant.id, 'UP')}
-                                disabled={credits.upvotesRemaining <= 0}
-                                className={`p-0.5 rounded transition-colors ${
-                                  credits.upvotesRemaining <= 0
-                                    ? 'text-muted-foreground/30 cursor-not-allowed'
-                                    : 'text-muted-foreground hover:bg-green-500/20 hover:text-green-500'
-                                }`}
-                                title={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
-                              >
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleSubEventVote(participant.id, 'DOWN')}
-                                disabled={credits.downvotesRemaining <= 0}
-                                className={`p-0.5 rounded transition-colors ${
-                                  credits.downvotesRemaining <= 0
-                                    ? 'text-muted-foreground/30 cursor-not-allowed'
-                                    : 'text-muted-foreground hover:bg-red-500/20 hover:text-red-500'
-                                }`}
-                                title={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
-                              >
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            <VoteButtons
+                              score={0}
+                              onVote={(dir) => handleSubEventVote(participant.id, dir)}
+                              upDisabled={credits.upvotesRemaining <= 0}
+                              downDisabled={credits.downvotesRemaining <= 0}
+                              upTitle={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
+                              downTitle={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
+                              size="sm"
+                              layout="vertical"
+                              hideButtons={isSelf}
+                              hideScore
+                              className="w-[18px]"
+                            />
                           </div>
                         )
                       })}
@@ -1096,6 +1085,8 @@ export function EventPage() {
               <div className="space-y-1 max-h-[50vh] overflow-y-auto">
                 {selectedSubEvent.participants.map((participant, index) => {
                   const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                  const currentUserPlayerId = user ? userProfiles[user.id] : null
+                  const isSelf = participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId
                   return (
                     <div
                       key={participant.id}
@@ -1109,26 +1100,17 @@ export function EventPage() {
                       }`}>
                         {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
                       </span>
-                      <div className="flex flex-col">
-                        <button
-                          onClick={() => handleSubEventVote(participant.id, 'UP')}
-                          disabled={credits.upvotesRemaining <= 0}
-                          className={`p-0.5 rounded transition-colors ${
-                            credits.upvotesRemaining <= 0 ? 'text-muted-foreground/30' : 'text-muted-foreground hover:text-green-500'
-                          }`}
-                        >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleSubEventVote(participant.id, 'DOWN')}
-                          disabled={credits.downvotesRemaining <= 0}
-                          className={`p-0.5 rounded transition-colors ${
-                            credits.downvotesRemaining <= 0 ? 'text-muted-foreground/30' : 'text-muted-foreground hover:text-red-500'
-                          }`}
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <VoteButtons
+                        score={0}
+                        onVote={(dir) => handleSubEventVote(participant.id, dir)}
+                        upDisabled={credits.upvotesRemaining <= 0}
+                        downDisabled={credits.downvotesRemaining <= 0}
+                        size="sm"
+                        layout="vertical"
+                        hideButtons={isSelf}
+                        hideScore
+                        className="w-[18px]"
+                      />
                     </div>
                   )
                 })}
@@ -1286,6 +1268,14 @@ export function EventPage() {
       />
 
       <div className="max-w-6xl mx-auto">
+        <button
+          onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-2">
@@ -1320,6 +1310,8 @@ export function EventPage() {
                 const vote = votes.get(participant.id)
                 const displayName = participant.player?.name || participant.tempName || 'Unknown'
                 const isRealPlayer = !!participant.player
+                const currentUserPlayerId = user ? userProfiles[user.id] : null
+                const isSelf = participant.playerId && currentUserPlayerId && participant.playerId === currentUserPlayerId
 
                 return (
                   <div
@@ -1351,26 +1343,16 @@ export function EventPage() {
                       {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
                     </span>
 
-                    <div className="flex">
-                      <button
-                        onClick={() => handleVote(participant.id, 'UP')}
-                        className={`p-0.5 rounded transition-colors ${
-                          vote === 'UP' ? 'text-green-500' :
-                          'text-muted-foreground hover:bg-accent hover:text-green-500'
-                        }`}
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleVote(participant.id, 'DOWN')}
-                        className={`p-0.5 rounded transition-colors ${
-                          vote === 'DOWN' ? 'text-red-500' :
-                          'text-muted-foreground hover:bg-accent hover:text-red-500'
-                        }`}
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <VoteButtons
+                      score={0}
+                      currentVote={vote}
+                      onVote={(dir) => handleVote(participant.id, dir)}
+                      size="sm"
+                      layout="horizontal"
+                      hideButtons={isSelf}
+                      hideScore
+                      className="w-[36px]"
+                    />
                   </div>
                 )
               })}
@@ -1509,7 +1491,7 @@ export function EventPage() {
                 <div
                   key={subEvent.id}
                   className="flex items-center justify-between px-3 py-2 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer"
-                  onClick={() => loadSubEvent(subEvent.id)}
+                  onClick={() => navigate(`/events/${id}/sub/${subEvent.id}`)}
                 >
                   <span className="font-medium text-sm truncate">{subEvent.name}</span>
                   {isOwner && (

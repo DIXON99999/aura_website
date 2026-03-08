@@ -46,11 +46,11 @@ export function CreateEventPage() {
 
     try {
       const result = await api.uploadImage(file)
-      // Convert relative URL to full URL for preview
-      const fullUrl = result.imageUrl.startsWith('/')
-        ? `${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}${result.imageUrl.replace('/api', '')}`
-        : result.imageUrl
-      setImageUrl(fullUrl)
+      // Store the relative URL with /api prefix for database
+      const relativeUrl = result.imageUrl.startsWith('/api')
+        ? result.imageUrl
+        : `/api${result.imageUrl}`
+      setImageUrl(relativeUrl)
     } catch (err) {
       setError((err as Error).message)
     } finally {

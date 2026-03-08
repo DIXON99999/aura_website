@@ -1,327 +1,373 @@
-import { Database } from 'bun:sqlite'
+import pg from 'pg'
 
-export const db = new Database('aura.db', { create: true })
+const { Pool } = pg
 
-// Initialize tables
-db.run(`
-  CREATE TABLE IF NOT EXISTS countries (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    flag_code TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+})
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS games (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_type TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS regions (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS organisations (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS organisation_games (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    organisation_id TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS brands (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS peripherals (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    peripheral_type TEXT NOT NULL,
-    brand_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS roles (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS weapons (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS characters (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS players (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    country_id TEXT,
-    organisation_id TEXT,
-    main_game_id TEXT,
-    region_id TEXT,
-    game_ids TEXT,
-    associated_entity_ids TEXT,
-    is_user_profile INTEGER DEFAULT 0,
-    visitor_id TEXT,
-    aura_score REAL NOT NULL DEFAULT 0,
-    image_url TEXT,
-    aliases TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS votes (
-    id TEXT PRIMARY KEY,
-    visitor_id TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS user_profiles (
-    visitor_id TEXT PRIMARY KEY,
-    player_id TEXT NOT NULL
-  )
-`)
-
-// Auth tables
-db.run(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    player_id TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-// Events tables
-db.run(`
-  CREATE TABLE IF NOT EXISTS events (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    game_id TEXT NOT NULL,
-    owner_id TEXT NOT NULL,
-    is_public INTEGER NOT NULL DEFAULT 0,
-    description TEXT,
-    image_url TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-// Add columns if they don't exist (for existing databases)
-try { db.run('ALTER TABLE events ADD COLUMN description TEXT') } catch {}
-try { db.run('ALTER TABLE events ADD COLUMN image_url TEXT') } catch {}
-
-// Seed CS2 weapons
-const cs2Weapons = [
-  { id: 'weapon-cs2-ak47', name: 'AK-47', slug: 'cs2-ak47' },
-  { id: 'weapon-cs2-m4a4', name: 'M4A4', slug: 'cs2-m4a4' },
-  { id: 'weapon-cs2-m4a1s', name: 'M4A1-S', slug: 'cs2-m4a1s' },
-  { id: 'weapon-cs2-awp', name: 'AWP', slug: 'cs2-awp' },
-  { id: 'weapon-cs2-desert-eagle', name: 'Desert Eagle', slug: 'cs2-desert-eagle' },
-  { id: 'weapon-cs2-usp-s', name: 'USP-S', slug: 'cs2-usp-s' },
-  { id: 'weapon-cs2-glock', name: 'Glock-18', slug: 'cs2-glock' },
-  { id: 'weapon-cs2-p2000', name: 'P2000', slug: 'cs2-p2000' },
-  { id: 'weapon-cs2-famas', name: 'FAMAS', slug: 'cs2-famas' },
-  { id: 'weapon-cs2-galil', name: 'Galil AR', slug: 'cs2-galil' },
-  { id: 'weapon-cs2-sg553', name: 'SG 553', slug: 'cs2-sg553' },
-  { id: 'weapon-cs2-aug', name: 'AUG', slug: 'cs2-aug' },
-  { id: 'weapon-cs2-ssg08', name: 'SSG 08', slug: 'cs2-ssg08' },
-  { id: 'weapon-cs2-scar20', name: 'SCAR-20', slug: 'cs2-scar20' },
-  { id: 'weapon-cs2-g3sg1', name: 'G3SG1', slug: 'cs2-g3sg1' },
-  { id: 'weapon-cs2-mac10', name: 'MAC-10', slug: 'cs2-mac10' },
-  { id: 'weapon-cs2-mp9', name: 'MP9', slug: 'cs2-mp9' },
-  { id: 'weapon-cs2-mp7', name: 'MP7', slug: 'cs2-mp7' },
-  { id: 'weapon-cs2-ump45', name: 'UMP-45', slug: 'cs2-ump45' },
-  { id: 'weapon-cs2-p90', name: 'P90', slug: 'cs2-p90' },
-  { id: 'weapon-cs2-pp-bizon', name: 'PP-Bizon', slug: 'cs2-pp-bizon' },
-  { id: 'weapon-cs2-mp5sd', name: 'MP5-SD', slug: 'cs2-mp5sd' },
-  { id: 'weapon-cs2-nova', name: 'Nova', slug: 'cs2-nova' },
-  { id: 'weapon-cs2-xm1014', name: 'XM1014', slug: 'cs2-xm1014' },
-  { id: 'weapon-cs2-mag7', name: 'MAG-7', slug: 'cs2-mag7' },
-  { id: 'weapon-cs2-sawedoff', name: 'Sawed-Off', slug: 'cs2-sawedoff' },
-  { id: 'weapon-cs2-m249', name: 'M249', slug: 'cs2-m249' },
-  { id: 'weapon-cs2-negev', name: 'Negev', slug: 'cs2-negev' },
-  { id: 'weapon-cs2-p250', name: 'P250', slug: 'cs2-p250' },
-  { id: 'weapon-cs2-tec9', name: 'Tec-9', slug: 'cs2-tec9' },
-  { id: 'weapon-cs2-fiveseven', name: 'Five-SeveN', slug: 'cs2-fiveseven' },
-  { id: 'weapon-cs2-cz75', name: 'CZ75-Auto', slug: 'cs2-cz75' },
-  { id: 'weapon-cs2-dualberettas', name: 'Dual Berettas', slug: 'cs2-dualberettas' },
-  { id: 'weapon-cs2-r8revolver', name: 'R8 Revolver', slug: 'cs2-r8revolver' },
-  { id: 'weapon-cs2-knife', name: 'Knife', slug: 'cs2-knife' },
-]
-
-const gameCs2Id = 'game-cs2'
-const now = Date.now()
-for (const w of cs2Weapons) {
-  db.run(
-    'INSERT OR IGNORE INTO weapons (id, name, slug, game_id, aura_score, created_at) VALUES (?, ?, ?, ?, 0, ?)',
-    w.id, w.name, w.slug, gameCs2Id, now
-  )
+export const db = {
+  query: (text: string, params?: unknown[]) => pool.query(text, params),
 }
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS event_participants (
-    id TEXT PRIMARY KEY,
-    event_id TEXT NOT NULL,
-    player_id TEXT,
-    temp_name TEXT,
-    aura_score REAL NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
-  )
-`)
+async function initTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS countries (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      flag_code TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS event_votes (
-    id TEXT PRIMARY KEY,
-    visitor_id TEXT NOT NULL,
-    event_id TEXT NOT NULL,
-    participant_id TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  )
-`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS games (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_type TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
 
-// Sub-events (belong to a leaderboard)
-db.run(`
-  CREATE TABLE IF NOT EXISTS sub_events (
-    id TEXT PRIMARY KEY,
-    leaderboard_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    image_url TEXT,
-    created_at INTEGER NOT NULL
-  )
-`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS regions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS sub_event_comments (
-    id TEXT PRIMARY KEY,
-    sub_event_id TEXT NOT NULL,
-    visitor_id TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at INTEGER NOT NULL
-  )
-`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS organisations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS sub_event_participants (
-    id TEXT PRIMARY KEY,
-    sub_event_id TEXT NOT NULL,
-    leaderboard_participant_id TEXT NOT NULL,
-    aura_score REAL NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
-  )
-`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS organisation_games (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      organisation_id TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS sub_event_votes (
-    id TEXT PRIMARY KEY,
-    visitor_id TEXT NOT NULL,
-    sub_event_id TEXT NOT NULL,
-    participant_id TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  )
-`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS brands (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS peripherals (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      peripheral_type TEXT NOT NULL,
+      brand_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS weapons (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS characters (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS players (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      country_id TEXT,
+      organisation_id TEXT,
+      main_game_id TEXT,
+      region_id TEXT,
+      game_ids TEXT,
+      associated_entity_ids TEXT,
+      is_user_profile INTEGER DEFAULT 0,
+      visitor_id TEXT,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      image_url TEXT,
+      aliases TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      visitor_id TEXT PRIMARY KEY,
+      player_id TEXT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      player_id TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      is_public INTEGER NOT NULL DEFAULT 0,
+      description TEXT,
+      image_url TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_participants (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      player_id TEXT,
+      temp_name TEXT,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      participant_id TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_events (
+      id TEXT PRIMARY KEY,
+      leaderboard_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      image_url TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_event_comments (
+      id TEXT PRIMARY KEY,
+      sub_event_id TEXT NOT NULL,
+      visitor_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_event_participants (
+      id TEXT PRIMARY KEY,
+      sub_event_id TEXT NOT NULL,
+      leaderboard_participant_id TEXT NOT NULL,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_event_votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      sub_event_id TEXT NOT NULL,
+      participant_id TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS aura_farms (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      entity_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      image_url TEXT,
+      aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+      created_at BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS aura_farm_votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      farm_id TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      links TEXT,
+      submitted_by_visitor_id TEXT,
+      submitted_by_user_id TEXT,
+      submitted_by_name TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  // Seed CS2 weapons
+  const cs2Weapons = [
+    { id: 'weapon-cs2-ak47', name: 'AK-47', slug: 'cs2-ak47' },
+    { id: 'weapon-cs2-m4a4', name: 'M4A4', slug: 'cs2-m4a4' },
+    { id: 'weapon-cs2-m4a1s', name: 'M4A1-S', slug: 'cs2-m4a1s' },
+    { id: 'weapon-cs2-awp', name: 'AWP', slug: 'cs2-awp' },
+    { id: 'weapon-cs2-desert-eagle', name: 'Desert Eagle', slug: 'cs2-desert-eagle' },
+    { id: 'weapon-cs2-usp-s', name: 'USP-S', slug: 'cs2-usp-s' },
+    { id: 'weapon-cs2-glock', name: 'Glock-18', slug: 'cs2-glock' },
+    { id: 'weapon-cs2-p2000', name: 'P2000', slug: 'cs2-p2000' },
+    { id: 'weapon-cs2-famas', name: 'FAMAS', slug: 'cs2-famas' },
+    { id: 'weapon-cs2-galil', name: 'Galil AR', slug: 'cs2-galil' },
+    { id: 'weapon-cs2-sg553', name: 'SG 553', slug: 'cs2-sg553' },
+    { id: 'weapon-cs2-aug', name: 'AUG', slug: 'cs2-aug' },
+    { id: 'weapon-cs2-ssg08', name: 'SSG 08', slug: 'cs2-ssg08' },
+    { id: 'weapon-cs2-scar20', name: 'SCAR-20', slug: 'cs2-scar20' },
+    { id: 'weapon-cs2-g3sg1', name: 'G3SG1', slug: 'cs2-g3sg1' },
+    { id: 'weapon-cs2-mac10', name: 'MAC-10', slug: 'cs2-mac10' },
+    { id: 'weapon-cs2-mp9', name: 'MP9', slug: 'cs2-mp9' },
+    { id: 'weapon-cs2-mp7', name: 'MP7', slug: 'cs2-mp7' },
+    { id: 'weapon-cs2-ump45', name: 'UMP-45', slug: 'cs2-ump45' },
+    { id: 'weapon-cs2-p90', name: 'P90', slug: 'cs2-p90' },
+    { id: 'weapon-cs2-pp-bizon', name: 'PP-Bizon', slug: 'cs2-pp-bizon' },
+    { id: 'weapon-cs2-mp5sd', name: 'MP5-SD', slug: 'cs2-mp5sd' },
+    { id: 'weapon-cs2-nova', name: 'Nova', slug: 'cs2-nova' },
+    { id: 'weapon-cs2-xm1014', name: 'XM1014', slug: 'cs2-xm1014' },
+    { id: 'weapon-cs2-mag7', name: 'MAG-7', slug: 'cs2-mag7' },
+    { id: 'weapon-cs2-sawedoff', name: 'Sawed-Off', slug: 'cs2-sawedoff' },
+    { id: 'weapon-cs2-m249', name: 'M249', slug: 'cs2-m249' },
+    { id: 'weapon-cs2-negev', name: 'Negev', slug: 'cs2-negev' },
+    { id: 'weapon-cs2-p250', name: 'P250', slug: 'cs2-p250' },
+    { id: 'weapon-cs2-tec9', name: 'Tec-9', slug: 'cs2-tec9' },
+    { id: 'weapon-cs2-fiveseven', name: 'Five-SeveN', slug: 'cs2-fiveseven' },
+    { id: 'weapon-cs2-cz75', name: 'CZ75-Auto', slug: 'cs2-cz75' },
+    { id: 'weapon-cs2-dualberettas', name: 'Dual Berettas', slug: 'cs2-dualberettas' },
+    { id: 'weapon-cs2-r8revolver', name: 'R8 Revolver', slug: 'cs2-r8revolver' },
+    { id: 'weapon-cs2-knife', name: 'Knife', slug: 'cs2-knife' },
+  ]
+
+  const gameCs2Id = 'game-cs2'
+  const now = new Date().toISOString()
+  for (const w of cs2Weapons) {
+    await pool.query(
+      `INSERT INTO weapons (id, name, slug, game_id, aura_score, created_at) 
+       VALUES ($1, $2, $3, $4, 0, $5) 
+       ON CONFLICT (id) DO NOTHING`,
+      [w.id, w.name, w.slug, gameCs2Id, now]
+    )
+  }
+}
+
+initTables().catch(console.error)
 
 // Helper types
 export interface DbEntity {
@@ -478,31 +524,6 @@ export interface DbSubEventVote {
   direction: string
   timestamp: number
 }
-
-// Aura Farms tables
-db.run(`
-  CREATE TABLE IF NOT EXISTS aura_farms (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    entity_id TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    owner_id TEXT NOT NULL,
-    image_url TEXT,
-    aura_score REAL NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
-  )
-`)
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS aura_farm_votes (
-    id TEXT PRIMARY KEY,
-    visitor_id TEXT NOT NULL,
-    farm_id TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  )
-`)
 
 export interface DbAuraFarm {
   id: string

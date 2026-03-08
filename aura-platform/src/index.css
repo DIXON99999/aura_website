@@ -105,6 +105,22 @@
   }
 }
 
+/* Vote animations - Cookie Clicker style floating number */
+@keyframes float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50px) scale(1.2);
+  }
+}
+
+.animate-float-up {
+  animation: float-up 0.8s ease-out forwards;
+}
+
 /* Light mode scrollbar */
 @media (prefers-color-scheme: light) {
   * {

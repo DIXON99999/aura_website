@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Pencil, ChevronDown, LogOut, Trash2, Plus, X, Star, Search } from 'lucide-react'
+import { ArrowLeft, Pencil, ChevronDown, LogOut, Trash2, Plus, X, Star, Search, Check, XCircle, ExternalLink } from 'lucide-react'
 import { useAuraStore, useAuthStore } from '@/stores'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/popover'
 import { EntityTypes } from '@/types'
 import type { Entity, Country } from '@/types'
+import { api, type Suggestion } from '@/lib/api'
 
 function getFlagUrl(countryCode: string): string {
   return `https://flagcdn.com/w160/${countryCode.toLowerCase()}.png`
@@ -80,7 +81,7 @@ function MiniCard({ entity, onRemove, isMainGame, onSetMainGame }: {
         </button>
       )}
       <Link to={getEntityUrl(entity)} className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
           {renderImage()}
         </div>
         <span className="text-xs font-medium">{entity.name}</span>
@@ -134,7 +135,9 @@ export function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addSearch, setAddSearch] = useState('')
-  const [activeTab, setActiveTab] = useState<'associations' | 'farms'>('associations')
+  const [activeTab, setActiveTab] = useState<'associations' | 'farms' | 'suggestions'>('associations')
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
 
   // Get profile reactively from store
   const profileId = user ? userProfiles[user.id] : undefined
@@ -151,6 +154,34 @@ export function ProfilePage() {
       setNameInput(profile.name)
     }
   }, [profile?.name])
+
+  // Fetch suggestions when tab is active
+  useEffect(() => {
+    if (activeTab !== 'suggestions' || !user) return
+    setSuggestionsLoading(true)
+    api.getSuggestions()
+      .then(setSuggestions)
+      .catch(console.error)
+      .finally(() => setSuggestionsLoading(false))
+  }, [activeTab, user])
+
+  const handleUpdateSuggestion = async (id: string, status: 'approved' | 'rejected') => {
+    try {
+      await api.updateSuggestion(id, { status })
+      setSuggestions(suggestions.map(s => s.id === id ? { ...s, status } : s))
+    } catch (error) {
+      console.error('Failed to update suggestion:', error)
+    }
+  }
+
+  const handleDeleteSuggestion = async (id: string) => {
+    try {
+      await api.deleteSuggestion(id)
+      setSuggestions(suggestions.filter(s => s.id !== id))
+    } catch (error) {
+      console.error('Failed to delete suggestion:', error)
+    }
+  }
 
   // Allowed entity types for associations: games, weapons, characters, roles, peripherals, esports teams (org games)
   const allowedEntities = useMemo<Entity[]>(() => {
@@ -333,13 +364,13 @@ export function ProfilePage() {
   return (
     <div className="container mx-auto px-4 py-8 min-h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex items-center justify-between mb-8">
-        <Link
-          to="/"
+        <button
+          onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
-        </Link>
+        </button>
         <Button variant="outline" size="sm" onClick={handleSignOut}>
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
@@ -348,7 +379,7 @@ export function ProfilePage() {
 
       <div className="max-w-2xl mx-auto flex-1 w-full">
         <div className="flex flex-col items-center text-center">
-          <div className="w-32 h-32 rounded-xl bg-muted flex items-center justify-center overflow-hidden mb-6">
+          <div className="w-32 h-32 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden mb-6">
             {profile.name ? (
               <span className="text-4xl font-bold text-muted-foreground">
                 {profile.name.charAt(0).toUpperCase()}
@@ -435,7 +466,7 @@ export function ProfilePage() {
                 <button className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
                   {team ? (
                     <>
-                      <div className="w-5 h-5 rounded bg-muted flex items-center justify-center overflow-hidden">
+                      <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                         {team.imageUrl ? (
                           <img src={team.imageUrl} alt={team.name} className="w-full h-full object-cover" />
                         ) : (
@@ -476,7 +507,7 @@ export function ProfilePage() {
                         profile.organisationId === t.id && 'bg-primary/10'
                       )}
                     >
-                      <div className="w-5 h-5 rounded bg-muted flex items-center justify-center overflow-hidden">
+                      <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                         {t.imageUrl ? (
                           <img src={t.imageUrl} alt={t.name} className="w-full h-full object-cover" />
                         ) : (
@@ -571,6 +602,22 @@ export function ProfilePage() {
               >
                 Farms
               </button>
+              <button
+                onClick={() => setActiveTab('suggestions')}
+                className={cn(
+                  'flex-1 py-3 text-sm font-medium transition-colors',
+                  activeTab === 'suggestions'
+                    ? 'border-b-2 border-primary text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Suggestions
+                {suggestions.filter(s => s.status === 'pending').length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
+                    {suggestions.filter(s => s.status === 'pending').length}
+                  </span>
+                )}
+              </button>
             </div>
 
             <div className="pt-6">
@@ -608,7 +655,7 @@ export function ProfilePage() {
                                   isEntityAdded(entity) && 'opacity-50 cursor-not-allowed'
                                 )}
                               >
-                                <div className="w-6 h-6 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                                   {entity.type === EntityTypes.COUNTRY ? (
                                     <img
                                       src={`https://flagcdn.com/w40/${(entity as Country).flagCode.toLowerCase()}.png`}
@@ -656,6 +703,111 @@ export function ProfilePage() {
               {activeTab === 'farms' && (
                 <div className="text-center py-8">
                   <p className="text-sm text-muted-foreground">Coming soon...</p>
+                </div>
+              )}
+
+              {activeTab === 'suggestions' && (
+                <div>
+                  {suggestionsLoading ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">Loading suggestions...</p>
+                    </div>
+                  ) : suggestions.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">No suggestions yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {suggestions.map(suggestion => (
+                        <div
+                          key={suggestion.id}
+                          className={cn(
+                            'border rounded-lg p-4',
+                            suggestion.status === 'pending' ? 'bg-card' :
+                            suggestion.status === 'approved' ? 'bg-green-500/5 border-green-500/20' :
+                            'bg-red-500/5 border-red-500/20'
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-accent capitalize">
+                                  {suggestion.type}
+                                </span>
+                                <span className={cn(
+                                  'text-xs font-medium px-2 py-0.5 rounded',
+                                  suggestion.status === 'pending' ? 'bg-yellow-500/10 text-yellow-600' :
+                                  suggestion.status === 'approved' ? 'bg-green-500/10 text-green-600' :
+                                  'bg-red-500/10 text-red-600'
+                                )}>
+                                  {suggestion.status}
+                                </span>
+                              </div>
+                              <h3 className="font-semibold">{suggestion.name}</h3>
+                              {suggestion.description && (
+                                <p className="text-sm text-muted-foreground mt-1">{suggestion.description}</p>
+                              )}
+                              {suggestion.links && (
+                                <a
+                                  href={suggestion.links.startsWith('http') ? suggestion.links : `https://${suggestion.links}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  {suggestion.links}
+                                </a>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Submitted {new Date(suggestion.createdAt).toLocaleDateString()}
+                                {suggestion.submittedByName && ` by ${suggestion.submittedByName}`}
+                              </p>
+                            </div>
+
+                            {suggestion.status === 'pending' && (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleUpdateSuggestion(suggestion.id, 'approved')}
+                                >
+                                  <Check className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleUpdateSuggestion(suggestion.id, 'rejected')}
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleDeleteSuggestion(suggestion.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+
+                            {suggestion.status !== 'pending' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteSuggestion(suggestion.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

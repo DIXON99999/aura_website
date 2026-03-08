@@ -1,127 +1,127 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+import { pgTable, text, doublePrecision, timestamp, boolean, jsonb, integer } from 'drizzle-orm/pg-core'
 
 // Countries
-export const countries = sqliteTable('countries', {
+export const countries = pgTable('countries', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   flagCode: text('flag_code').notNull(),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Games
-export const games = sqliteTable('games', {
+export const games = pgTable('games', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   gameType: text('game_type').notNull(),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Regions
-export const regions = sqliteTable('regions', {
+export const regions = pgTable('regions', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   gameId: text('game_id').notNull().references(() => games.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Organisations
-export const organisations = sqliteTable('organisations', {
+export const organisations = pgTable('organisations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Organisation Games (teams for specific games)
-export const organisationGames = sqliteTable('organisation_games', {
+export const organisationGames = pgTable('organisation_games', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   organisationId: text('organisation_id').notNull().references(() => organisations.id),
   gameId: text('game_id').notNull().references(() => games.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Brands
-export const brands = sqliteTable('brands', {
+export const brands = pgTable('brands', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Peripherals
-export const peripherals = sqliteTable('peripherals', {
+export const peripherals = pgTable('peripherals', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   peripheralType: text('peripheral_type').notNull(),
   brandId: text('brand_id').notNull().references(() => brands.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Roles (game-specific)
-export const roles = sqliteTable('roles', {
+export const roles = pgTable('roles', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   gameId: text('game_id').notNull().references(() => games.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Weapons (game-specific)
-export const weapons = sqliteTable('weapons', {
+export const weapons = pgTable('weapons', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   gameId: text('game_id').notNull().references(() => games.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Characters (game-specific)
-export const characters = sqliteTable('characters', {
+export const characters = pgTable('characters', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   gameId: text('game_id').notNull().references(() => games.id),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Players
-export const players = sqliteTable('players', {
+export const players = pgTable('players', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull(),
@@ -129,30 +129,145 @@ export const players = sqliteTable('players', {
   organisationId: text('organisation_id').references(() => organisations.id),
   mainGameId: text('main_game_id').references(() => games.id),
   regionId: text('region_id').references(() => regions.id),
-  gameIds: text('game_ids', { mode: 'json' }).$type<string[]>(),
-  associatedEntityIds: text('associated_entity_ids', { mode: 'json' }).$type<string[]>(),
-  isUserProfile: integer('is_user_profile', { mode: 'boolean' }).default(false),
+  gameIds: jsonb('game_ids').$type<string[]>(),
+  associatedEntityIds: jsonb('associated_entity_ids').$type<string[]>(),
+  isUserProfile: boolean('is_user_profile').default(false),
   visitorId: text('visitor_id'),
-  auraScore: real('aura_score').notNull().default(0),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
   imageUrl: text('image_url'),
-  aliases: text('aliases', { mode: 'json' }).$type<string[]>(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  aliases: jsonb('aliases').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
 // Votes
-export const votes = sqliteTable('votes', {
+export const votes = pgTable('votes', {
   id: text('id').primaryKey(),
   visitorId: text('visitor_id').notNull(),
   entityId: text('entity_id').notNull(),
   entityType: text('entity_type').notNull(),
   direction: text('direction').notNull(), // 'UP' or 'DOWN'
-  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
 })
 
 // User Profiles mapping (visitorId -> playerId)
-export const userProfiles = sqliteTable('user_profiles', {
+export const userProfiles = pgTable('user_profiles', {
   visitorId: text('visitor_id').primaryKey(),
   playerId: text('player_id').notNull().references(() => players.id),
+})
+
+// Users (auth)
+export const users = pgTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  playerId: text('player_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Sessions (auth)
+export const sessions = pgTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Events
+export const events = pgTable('events', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  gameId: text('game_id').notNull(),
+  ownerId: text('owner_id').notNull(),
+  isPublic: boolean('is_public').notNull().default(false),
+  description: text('description'),
+  imageUrl: text('image_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Event Participants
+export const eventParticipants = pgTable('event_participants', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull(),
+  playerId: text('player_id'),
+  tempName: text('temp_name'),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Event Votes
+export const eventVotes = pgTable('event_votes', {
+  id: text('id').primaryKey(),
+  visitorId: text('visitor_id').notNull(),
+  eventId: text('event_id').notNull(),
+  participantId: text('participant_id').notNull(),
+  direction: text('direction').notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
+})
+
+// Sub Events
+export const subEvents = pgTable('sub_events', {
+  id: text('id').primaryKey(),
+  leaderboardId: text('leaderboard_id').notNull(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  imageUrl: text('image_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Sub Event Comments
+export const subEventComments = pgTable('sub_event_comments', {
+  id: text('id').primaryKey(),
+  subEventId: text('sub_event_id').notNull(),
+  visitorId: text('visitor_id').notNull(),
+  username: text('username'),
+  content: text('content').notNull(),
+  parentId: text('parent_id'),
+  voteCount: integer('vote_count').notNull().default(0),
+  imageUrl: text('image_url'),
+  userId: text('user_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Sub Event Participants
+export const subEventParticipants = pgTable('sub_event_participants', {
+  id: text('id').primaryKey(),
+  subEventId: text('sub_event_id').notNull(),
+  leaderboardParticipantId: text('leaderboard_participant_id').notNull(),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Sub Event Votes
+export const subEventVotes = pgTable('sub_event_votes', {
+  id: text('id').primaryKey(),
+  visitorId: text('visitor_id').notNull(),
+  subEventId: text('sub_event_id').notNull(),
+  participantId: text('participant_id').notNull(),
+  direction: text('direction').notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
+})
+
+// Aura Farms
+export const auraFarms = pgTable('aura_farms', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  entityId: text('entity_id').notNull(),
+  entityType: text('entity_type').notNull(),
+  ownerId: text('owner_id').notNull(),
+  imageUrl: text('image_url'),
+  auraScore: doublePrecision('aura_score').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Aura Farm Votes
+export const auraFarmVotes = pgTable('aura_farm_votes', {
+  id: text('id').primaryKey(),
+  visitorId: text('visitor_id').notNull(),
+  farmId: text('farm_id').notNull(),
+  direction: text('direction').notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
 })
 
 // Type exports
@@ -169,3 +284,14 @@ export type Character = typeof characters.$inferSelect
 export type Player = typeof players.$inferSelect
 export type Vote = typeof votes.$inferSelect
 export type UserProfile = typeof userProfiles.$inferSelect
+export type User = typeof users.$inferSelect
+export type Session = typeof sessions.$inferSelect
+export type Event = typeof events.$inferSelect
+export type EventParticipant = typeof eventParticipants.$inferSelect
+export type EventVote = typeof eventVotes.$inferSelect
+export type SubEvent = typeof subEvents.$inferSelect
+export type SubEventComment = typeof subEventComments.$inferSelect
+export type SubEventParticipant = typeof subEventParticipants.$inferSelect
+export type SubEventVote = typeof subEventVotes.$inferSelect
+export type AuraFarm = typeof auraFarms.$inferSelect
+export type AuraFarmVote = typeof auraFarmVotes.$inferSelect

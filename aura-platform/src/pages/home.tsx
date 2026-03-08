@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { SearchBar, useSearch } from '@/components/layout'
 import {
   Leaderboard,
@@ -11,6 +12,8 @@ import {
   PeripheralActiveFilters,
   MetaFilter,
   MetaActiveFilters,
+  RegionFilter,
+  RegionActiveFilters,
   type SortDirection,
   type PlayerFilters,
   type PeripheralFilters,
@@ -61,14 +64,30 @@ const emptyMetaFilters: MetaFilters = {
 
 export function HomePage() {
   const { query, setQuery } = useSearch()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [filter, setFilter] = useState<FilterType>('all')
+
+  // Read filter from URL, default to 'all'
+  const filterParam = searchParams.get('tab') as FilterType | null
+  const filter: FilterType = filterParam && ['all', 'players', 'teams', 'games', 'regions', 'peripherals', 'meta'].includes(filterParam)
+    ? filterParam
+    : 'all'
+
+  const setFilter = (newFilter: FilterType) => {
+    if (newFilter === 'all') {
+      searchParams.delete('tab')
+    } else {
+      searchParams.set('tab', newFilter)
+    }
+    setSearchParams(searchParams, { replace: true })
+  }
 
   // Filter states for each category
   const [playerFilters, setPlayerFilters] = useState<PlayerFilters>(emptyPlayerFilters)
   const [teamGameIds, setTeamGameIds] = useState<string[]>([])
   const [peripheralFilters, setPeripheralFilters] = useState<PeripheralFilters>(emptyPeripheralFilters)
   const [metaFilters, setMetaFilters] = useState<MetaFilters>(emptyMetaFilters)
+  const [regionCountryIds, setRegionCountryIds] = useState<string[]>([])
 
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
@@ -124,8 +143,12 @@ export function HomePage() {
       }
       case 'games':
         return Object.values(games)
-      case 'regions':
+      case 'regions': {
+        if (regionCountryIds.length > 0) {
+          return Object.values(countries).filter((c) => regionCountryIds.includes(c.id))
+        }
         return [...Object.values(regions), ...Object.values(countries)]
+      }
       case 'peripherals': {
         let result = [...Object.values(peripherals), ...Object.values(brands)]
         if (peripheralFilters.types.length > 0) {
@@ -200,6 +223,7 @@ export function HomePage() {
     teamGameIds,
     peripheralFilters,
     metaFilters,
+    regionCountryIds,
   ])
 
   // Check if any filters are active
@@ -212,6 +236,8 @@ export function HomePage() {
           playerFilters.playerIds.length > 0
       case 'teams':
         return teamGameIds.length > 0
+      case 'regions':
+        return regionCountryIds.length > 0
       case 'peripherals':
         return peripheralFilters.types.length > 0 || peripheralFilters.brandIds.length > 0
       case 'meta':
@@ -219,7 +245,7 @@ export function HomePage() {
       default:
         return false
     }
-  }, [filter, playerFilters, teamGameIds, peripheralFilters, metaFilters])
+  }, [filter, playerFilters, teamGameIds, regionCountryIds, peripheralFilters, metaFilters])
 
   // Filter removal handlers
   const removePlayerFilter = (type: keyof PlayerFilters, id: string) => {
@@ -241,6 +267,11 @@ export function HomePage() {
     setMetaFilters({ ...metaFilters, [type]: metaFilters[type].filter((i: string) => i !== id) })
   }
   const clearMetaFilters = () => setMetaFilters(emptyMetaFilters)
+
+  const removeRegionFilter = (countryId: string) => {
+    setRegionCountryIds(regionCountryIds.filter((id) => id !== countryId))
+  }
+  const clearRegionFilters = () => setRegionCountryIds([])
 
   // Get entity type for leaderboard
   const entityType = useMemo(() => {
@@ -307,6 +338,9 @@ export function HomePage() {
               {filter === 'meta' && (
                 <MetaFilter filters={metaFilters} onChange={setMetaFilters} />
               )}
+              {filter === 'regions' && (
+                <RegionFilter selectedCountryIds={regionCountryIds} onChange={setRegionCountryIds} />
+              )}
               <SortButton
                 direction={sortDirection}
                 onChange={setSortDirection}
@@ -343,6 +377,13 @@ export function HomePage() {
               filters={metaFilters}
               onRemove={removeMetaFilter}
               onClearAll={clearMetaFilters}
+            />
+          )}
+          {filter === 'regions' && (
+            <RegionActiveFilters
+              selectedCountryIds={regionCountryIds}
+              onRemove={removeRegionFilter}
+              onClearAll={clearRegionFilters}
             />
           )}
 

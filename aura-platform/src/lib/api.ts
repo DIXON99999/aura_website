@@ -243,7 +243,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  voteEventParticipant: (eventId: string, data: { visitorId: string; participantId: string; direction: 'UP' | 'DOWN' }) =>
+  voteEventParticipant: (eventId: string, data: { visitorId: string; participantId: string; direction: 'UP' | 'DOWN'; userId?: string }) =>
     fetchApi<{ participantId: string; auraScore: number; direction: string }>(`/events/${eventId}/vote`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -287,7 +287,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  voteSubEventParticipant: (leaderboardId: string, subEventId: string, data: { visitorId: string; participantId: string; direction: 'UP' | 'DOWN' }) =>
+  voteSubEventParticipant: (leaderboardId: string, subEventId: string, data: { visitorId: string; participantId: string; direction: 'UP' | 'DOWN'; userId?: string }) =>
     fetchApi<{ participantId: string; auraScore: number; direction: string }>(`/events/${leaderboardId}/sub-events/${subEventId}/vote`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -330,8 +330,14 @@ export const api = {
     }),
 
   // Aura Farms
-  getAuraFarms: (search?: string) =>
-    fetchApi<AuraFarm[]>(`/aura-farms${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  getAuraFarms: (search?: string, sort?: 'new' | 'popular' | 'oldest', entityId?: string) => {
+    const query = new URLSearchParams()
+    if (search) query.set('search', search)
+    if (sort) query.set('sort', sort)
+    if (entityId) query.set('entityId', entityId)
+    const queryStr = query.toString()
+    return fetchApi<AuraFarm[]>(`/aura-farms${queryStr ? `?${queryStr}` : ''}`)
+  },
 
   getMyAuraFarms: () =>
     fetchApi<AuraFarm[]>('/aura-farms/my'),
@@ -370,6 +376,52 @@ export const api = {
 
   getAuraFarmVotes: (farmId: string, visitorId: string) =>
     fetchApi<Array<{ farmId: string; direction: 'UP' | 'DOWN' }>>(`/aura-farms/${farmId}/votes?visitorId=${visitorId}`),
+
+  // Aura farm comments
+  getAuraFarmComments: (farmId: string) =>
+    fetchApi<AuraFarmComment[]>(`/aura-farms/${farmId}/comments`),
+
+  addAuraFarmComment: (farmId: string, data: { visitorId: string; content: string; username?: string; parentId?: string; imageUrl?: string; userId?: string }) =>
+    fetchApi<AuraFarmComment>(`/aura-farms/${farmId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteAuraFarmComment: (farmId: string, commentId: string, data: { visitorId: string; userId?: string }) =>
+    fetchApi<{ success: boolean }>(`/aura-farms/${farmId}/comments/${commentId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
+
+  voteAuraFarmComment: (farmId: string, commentId: string, data: { visitorId: string; direction: 'UP' | 'DOWN' }) =>
+    fetchApi<{ commentId: string; voteCount: number }>(`/aura-farms/${farmId}/comments/${commentId}/vote`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getAuraFarmCommentVotes: (farmId: string, visitorId: string) =>
+    fetchApi<Array<{ commentId: string; direction: 'UP' | 'DOWN' }>>(`/aura-farms/${farmId}/comments/votes?visitorId=${visitorId}`),
+
+  // Suggestions
+  submitSuggestion: (data: { type: string; name: string; description?: string; links?: string; visitorId?: string; userId?: string; submittedByName?: string }) =>
+    fetchApi<{ success: boolean; id: string }>('/suggestions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getSuggestions: (status?: 'pending' | 'approved' | 'rejected') =>
+    fetchApi<Suggestion[]>(`/suggestions${status ? `?status=${status}` : ''}`),
+
+  updateSuggestion: (id: string, data: { status: 'pending' | 'approved' | 'rejected'; adminNotes?: string }) =>
+    fetchApi<{ success: boolean }>(`/suggestions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSuggestion: (id: string) =>
+    fetchApi<{ success: boolean }>(`/suggestions/${id}`, {
+      method: 'DELETE',
+    }),
 }
 
 // Types for API responses
@@ -517,4 +569,31 @@ interface AuraFarm {
   } | null
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm }
+interface AuraFarmComment {
+  id: string
+  farmId: string
+  visitorId: string
+  userId: string | null
+  username: string
+  content: string
+  parentId: string | null
+  voteCount: number
+  imageUrl: string | null
+  createdAt: Date
+}
+
+interface Suggestion {
+  id: string
+  type: string
+  name: string
+  description: string | null
+  links: string | null
+  submittedByVisitorId: string | null
+  submittedByUserId: string | null
+  submittedByName: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  adminNotes: string | null
+  createdAt: Date
+}
+
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion }

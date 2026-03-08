@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { useMemo, useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { useAuraStore, useAuthStore } from '@/stores'
 import { useVisitorId } from '@/hooks'
 import { cn } from '@/lib/utils'
+import { VoteButtons } from '@/components/ui/vote-buttons'
 import { VoteDirection, EntityTypes } from '@/types'
+import { api, type AuraFarm } from '@/lib/api'
 import type { Entity, EntityType, Country, Player, Game, Organisation, OrganisationGame, Peripheral, Role, Weapon, Character, Brand } from '@/types'
 
 function getFlagUrl(countryCode: string): string {
@@ -48,7 +50,7 @@ function MiniCard({ entity }: { entity: Entity }) {
         <img
           src={entity.imageUrl}
           alt={entity.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain p-0.5"
         />
       )
     }
@@ -64,7 +66,7 @@ function MiniCard({ entity }: { entity: Entity }) {
       to={getEntityUrl(entity)}
       className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-card/50 border border-border hover:border-primary/50 transition-colors"
     >
-      <div className="w-6 h-6 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+      <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
         {renderImage()}
       </div>
       <span className="text-xs font-medium truncate max-w-[100px]">{entity.name}</span>
@@ -245,11 +247,16 @@ function getAssociations(entity: Entity, stores: Stores): AssociationGroup[] {
 
 export function EntityPage() {
   const { entityType, slug } = useParams<{ entityType: string; slug: string }>()
+  const navigate = useNavigate()
   const visitorId = useVisitorId()
   const authUser = useAuthStore((s) => s.user)
   const vote = useAuraStore((s) => s.vote)
   const getVisitorVote = useAuraStore((s) => s.getVisitorVote)
   const credits = useAuraStore((s) => s.credits)
+
+  const [activeTab, setActiveTab] = useState<'associations' | 'farms'>('associations')
+  const [farms, setFarms] = useState<AuraFarm[]>([])
+  const [farmsLoading, setFarmsLoading] = useState(false)
 
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
@@ -265,23 +272,46 @@ export function EntityPage() {
 
   const stores: Stores = { countries, games, organisations, organisationGames, players, peripherals, roles, weapons, characters, brands }
 
-  if (!entityType || !slug) {
-    return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold mb-4">Not Found</h1>
-        <Link to="/" className="text-primary hover:underline">Go back home</Link>
-      </div>
-    )
+  // Helper to get entity by ID for associations tab
+  const getEntityById = (id: string): Entity | undefined => {
+    return games[id] || organisationGames[id] || peripherals[id] ||
+           roles[id] || weapons[id] || characters[id]
   }
 
-  const { entity, type } = getEntityFromStores(entityType, slug, stores)
+  // Get entity first (needed for hooks below)
+  const { entity, type } = entityType && slug
+    ? getEntityFromStores(entityType, slug, stores)
+    : { entity: undefined, type: EntityTypes.PLAYER }
+
+  // Get associated entities from associatedEntityIds (for player profiles)
+  const associatedEntities = useMemo(() => {
+    if (!entity || entity.type !== EntityTypes.PLAYER) return []
+    const player = entity as Player
+    if (!player.associatedEntityIds) return []
+    const entities: Entity[] = []
+    for (const id of player.associatedEntityIds) {
+      const e = getEntityById(id)
+      if (e) entities.push(e)
+    }
+    return entities
+  }, [entity, games, organisationGames, peripherals, roles, weapons, characters])
+
+  // Fetch farms when farms tab is active
+  useEffect(() => {
+    if (!entity || entity.type !== EntityTypes.PLAYER || activeTab !== 'farms') return
+    setFarmsLoading(true)
+    api.getAuraFarms(undefined, 'new', entity.id)
+      .then(setFarms)
+      .catch(console.error)
+      .finally(() => setFarmsLoading(false))
+  }, [entity?.id, activeTab])
 
   const associations = useMemo(() => {
     if (!entity) return []
     return getAssociations(entity, stores)
   }, [entity, stores])
 
-  if (!entity) {
+  if (!entityType || !slug || !entity) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold mb-4">Entity Not Found</h1>
@@ -331,7 +361,7 @@ export function EntityPage() {
         <img
           src={entity.imageUrl}
           alt={entity.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain p-2"
         />
       )
     }
@@ -380,25 +410,36 @@ export function EntityPage() {
     }
   }
 
+  const handleBack = () => {
+    // Check if there's history to go back to
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      // Fallback to home page
+      navigate('/')
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link
-        to="/"
+      <button
+        onClick={handleBack}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
-      </Link>
+      </button>
 
       <div className="max-w-2xl mx-auto">
         <div className="flex flex-col items-center text-center">
-          <div className="w-32 h-32 rounded-xl bg-muted flex items-center justify-center overflow-hidden mb-6">
+          <div className="w-32 h-32 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden mb-6">
             {renderImage()}
           </div>
 
           <h1 className="text-3xl font-bold mb-2">{entity.name}</h1>
           {renderSubtitle()}
 
+          {/* Auto-derived associations */}
           {associations.length > 0 && (
             <div className="w-full mt-8">
               <div className="flex flex-wrap gap-2 justify-center">
@@ -413,46 +454,118 @@ export function EntityPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 mt-8">
-            {!isOwnProfile && (
-              <button
-                onClick={() => handleVote(VoteDirection.UP)}
-                disabled={!visitorId || credits.upvotesRemaining <= 0}
-                className={cn(
-                  'p-3 rounded-lg transition-colors text-green-500',
-                  credits.upvotesRemaining <= 0
-                    ? 'opacity-30 cursor-not-allowed'
-                    : 'opacity-60 hover:opacity-100 hover:bg-green-500/10'
-                )}
-                title={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
-              >
-                <ChevronUp className="w-8 h-8" />
-              </button>
-            )}
-            <div className={cn(
-              'text-3xl font-bold tabular-nums min-w-[6ch] text-center',
-              entity.auraScore > 0 ? 'text-green-500' : entity.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
-            )}>
-              {entity.auraScore}
-            </div>
-            {!isOwnProfile && (
-              <button
-                onClick={() => handleVote(VoteDirection.DOWN)}
-                disabled={!visitorId || credits.downvotesRemaining <= 0}
-                className={cn(
-                  'p-3 rounded-lg transition-colors text-red-500',
-                  credits.downvotesRemaining <= 0
-                    ? 'opacity-30 cursor-not-allowed'
-                    : 'opacity-60 hover:opacity-100 hover:bg-red-500/10'
-                )}
-                title={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
-              >
-                <ChevronDown className="w-8 h-8" />
-              </button>
-            )}
-          </div>
+          <VoteButtons
+            score={entity.auraScore}
+            currentVote={currentVote}
+            onVote={(dir) => handleVote(dir === 'UP' ? VoteDirection.UP : VoteDirection.DOWN)}
+            upDisabled={!visitorId || credits.upvotesRemaining <= 0}
+            downDisabled={!visitorId || credits.downvotesRemaining <= 0}
+            upTitle={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
+            downTitle={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
+            size="lg"
+            layout="horizontal"
+            className="mt-8"
+            hideButtons={isOwnProfile}
+          />
 
           <p className="text-sm text-muted-foreground mt-2">Aura Score</p>
+
+          {/* Tabs for player profiles */}
+          {entity.type === EntityTypes.PLAYER && (
+            <div className="w-full mt-8 border-t border-border">
+              <div className="flex border-b border-border">
+                <button
+                  onClick={() => setActiveTab('associations')}
+                  className={cn(
+                    'flex-1 py-3 text-sm font-medium transition-colors',
+                    activeTab === 'associations'
+                      ? 'border-b-2 border-primary text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Associations
+                </button>
+                <button
+                  onClick={() => setActiveTab('farms')}
+                  className={cn(
+                    'flex-1 py-3 text-sm font-medium transition-colors',
+                    activeTab === 'farms'
+                      ? 'border-b-2 border-primary text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Farms
+                </button>
+              </div>
+
+              <div className="pt-6">
+                {activeTab === 'associations' && (
+                  <div>
+                    {associatedEntities.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {associatedEntities.map(e => (
+                          <MiniCard key={e.id} entity={e} />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No associations yet
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'farms' && (
+                  <div>
+                    {farmsLoading ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">Loading...</p>
+                    ) : farms.length > 0 ? (
+                      <div className="space-y-3">
+                        {farms.map(farm => (
+                          <Link
+                            key={farm.id}
+                            to={`/aura-farms/${farm.id}`}
+                            className="block p-4 rounded-lg border border-border hover:border-primary/50 transition-colors"
+                          >
+                            <div className="flex items-start gap-3">
+                              {farm.imageUrl && (
+                                <img
+                                  src={farm.imageUrl}
+                                  alt={farm.title}
+                                  className="w-16 h-16 rounded object-cover flex-shrink-0"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium truncate">{farm.title}</h3>
+                                {farm.description && (
+                                  <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                                    {farm.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                  <span className={cn(
+                                    'font-medium',
+                                    farm.auraScore > 0 ? 'text-green-500' : farm.auraScore < 0 ? 'text-red-500' : ''
+                                  )}>
+                                    {farm.auraScore} aura
+                                  </span>
+                                  {farm.ownerName && <span>by {farm.ownerName}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No farms yet
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

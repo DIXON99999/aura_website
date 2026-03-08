@@ -5,7 +5,11 @@
       "Bash(bun install:*)",
       "Bash(bun add:*)",
       "Bash(mkdir:*)",
-      "Bash(bun:*)"
+      "Bash(bun:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:prosettings.net)",
+      "Bash(curl:*)"
     ]
   }
 }

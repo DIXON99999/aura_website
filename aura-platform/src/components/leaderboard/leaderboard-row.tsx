@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuraStore, useAuthStore } from '@/stores'
 import { useVisitorId } from '@/hooks'
+import { VoteButtons } from '@/components/ui/vote-buttons'
 import type { Entity, EntityType, Country, Game, OrganisationGame, Player, Peripheral, Role, Weapon, Character } from '@/types'
 import { VoteDirection, EntityTypes, PeripheralType } from '@/types'
 
@@ -104,7 +104,7 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
           {rank}
         </div>
 
-        <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="w-9 h-9 rounded-md bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
           {entity.type === EntityTypes.COUNTRY ? (
             <img
               src={getFlagUrl((entity as Country).flagCode)}
@@ -115,7 +115,7 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
             <img
               src={entity.imageUrl}
               alt={entity.name}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain p-0.5"
             />
           ) : (
             <span className="text-sm font-bold text-muted-foreground">
@@ -204,44 +204,18 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
         </div>
       </Link>
 
-      <div className="flex items-center gap-1">
-        {!isOwnProfile && (
-          <button
-            onClick={() => handleVote(VoteDirection.UP)}
-            disabled={!visitorId || credits.upvotesRemaining <= 0}
-            className={cn(
-              'p-1.5 rounded transition-colors text-green-500',
-              credits.upvotesRemaining <= 0
-                ? 'opacity-30 cursor-not-allowed'
-                : 'opacity-60 hover:opacity-100 hover:bg-green-500/10'
-            )}
-            title={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
-          >
-            <ChevronUp className="w-5 h-5" />
-          </button>
-        )}
-        <div className={cn(
-          'text-sm font-bold tabular-nums min-w-[4ch] text-center',
-          entity.auraScore > 0 ? 'text-green-500' : entity.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
-        )}>
-          {entity.auraScore}
-        </div>
-        {!isOwnProfile && (
-          <button
-            onClick={() => handleVote(VoteDirection.DOWN)}
-            disabled={!visitorId || credits.downvotesRemaining <= 0}
-            className={cn(
-              'p-1.5 rounded transition-colors text-red-500',
-              credits.downvotesRemaining <= 0
-                ? 'opacity-30 cursor-not-allowed'
-                : 'opacity-60 hover:opacity-100 hover:bg-red-500/10'
-            )}
-            title={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
-          >
-            <ChevronDown className="w-5 h-5" />
-          </button>
-        )}
-      </div>
+      <VoteButtons
+        score={entity.auraScore}
+        currentVote={currentVote}
+        onVote={(dir) => handleVote(dir === 'UP' ? VoteDirection.UP : VoteDirection.DOWN)}
+        upDisabled={!visitorId || credits.upvotesRemaining <= 0}
+        downDisabled={!visitorId || credits.downvotesRemaining <= 0}
+        upTitle={credits.upvotesRemaining <= 0 ? 'No upvote credits' : `${credits.upvotesRemaining} upvotes remaining`}
+        downTitle={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
+        size="md"
+        layout="horizontal"
+        hideButtons={isOwnProfile}
+      />
     </div>
   )
 }
