@@ -17,6 +17,7 @@ if (!(Get-Command cloudflared -ErrorAction SilentlyContinue)) {
 function Stop-AllServices {
     Write-Host "Shutting down all services..." -ForegroundColor Yellow
     Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name "bun" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Write-Host "All services stopped." -ForegroundColor Green
 }
@@ -29,7 +30,7 @@ Start-Sleep -Seconds 1
 # Start backend server (hidden window)
 Write-Host "Starting backend server..." -ForegroundColor Yellow
 $backendDir = Join-Path $PSScriptRoot "backend"
-Start-Process -FilePath "cmd" -ArgumentList "/c cd /d `"$backendDir`" && npm run dev" -WindowStyle Hidden
+Start-Process -FilePath "cmd" -ArgumentList "/c cd /d `"$backendDir`" && set NODE_TLS_REJECT_UNAUTHORIZED=0 && npm run dev" -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 # Start backend tunnel and capture URL

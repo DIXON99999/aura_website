@@ -56,7 +56,7 @@ app.post('/', async (c) => {
     await Bun.write(filepath, arrayBuffer)
 
     // Return the URL path and type info
-    const mediaUrl = `/uploads/${filename}`
+    const mediaUrl = `/api/uploads/${filename}`
 
     return c.json({
       imageUrl: mediaUrl, // Keep for backwards compatibility
