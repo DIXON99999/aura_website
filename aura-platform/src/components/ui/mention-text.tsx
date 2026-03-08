@@ -5,6 +5,10 @@ interface MentionTextProps {
   className?: string
 }
 
+function nameToSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
 export function MentionText({ content, className = '' }: MentionTextProps) {
   if (!content) return null
 
@@ -16,10 +20,11 @@ export function MentionText({ content, className = '' }: MentionTextProps) {
       {parts.map((part, index) => {
         if (part.startsWith('@')) {
           const username = part.slice(1)
+          const slug = nameToSlug(username)
           return (
             <Link
               key={index}
-              to={`/players?search=${encodeURIComponent(username)}`}
+              to={`/player/${slug}`}
               className="text-primary hover:underline font-medium"
               onClick={(e) => e.stopPropagation()}
             >

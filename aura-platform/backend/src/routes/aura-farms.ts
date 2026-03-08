@@ -33,6 +33,9 @@ async function initAuraFarmTables() {
     )
   `)
 
+  // Backfill vote_count column for existing tables
+  await pool.query(`ALTER TABLE aura_farm_comments ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0`)
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS aura_farm_comment_votes (
       id TEXT PRIMARY KEY,

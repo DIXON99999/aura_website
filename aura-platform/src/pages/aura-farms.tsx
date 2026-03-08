@@ -5,8 +5,15 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { VoteButtons } from '@/components/ui/vote-buttons'
-import { Search, ChevronDown } from 'lucide-react'
-import { useAuraStore } from '@/stores'
+import { Search, ChevronDown, Play } from 'lucide-react'
+import { useAuraStore, hasPerkEquipped } from '@/stores'
+
+// Helper to check if URL is a video
+function isVideoUrl(url: string): boolean {
+  const videoExtensions = ['.mp4', '.webm']
+  const lowerUrl = url.toLowerCase()
+  return videoExtensions.some(ext => lowerUrl.includes(ext))
+}
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -48,14 +55,24 @@ export function AuraFarmsPage() {
     if (direction === 'UP' && credits.upvotesRemaining <= 0) return
     if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
 
+    // Check for double-click perk (only for upvotes)
+    const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
+    const voteMultiplier = hasDoubleClick ? 2 : 1
+
     const visitorId = getVisitorId()
 
     try {
-      // Always add a new vote (multiple votes allowed per farm)
-      const result = await api.voteAuraFarm(farmId, { visitorId, direction })
-      setFarms(farms.map(f => f.id === farmId ? { ...f, auraScore: result.auraScore } : f))
+      // Call API multiple times for double-click perk
+      let result
+      for (let i = 0; i < voteMultiplier; i++) {
+        result = await api.voteAuraFarm(farmId, { visitorId, direction })
+      }
 
-      // Deduct credit
+      if (result) {
+        setFarms(farms.map(f => f.id === farmId ? { ...f, auraScore: result.auraScore } : f))
+      }
+
+      // Deduct credit (only 1 credit regardless of multiplier)
       if (direction === 'UP') {
         setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
       } else {
@@ -122,11 +139,28 @@ export function AuraFarmsPage() {
               >
                 {farm.imageUrl && (
                   <div className="relative w-full">
-                    <img
-                      src={farm.imageUrl}
-                      alt={farm.title}
-                      className="w-full h-auto object-cover"
-                    />
+                    {isVideoUrl(farm.imageUrl) ? (
+                      <>
+                        <video
+                          src={farm.imageUrl}
+                          className="w-full h-auto object-cover"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                          <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                            <Play className="w-6 h-6 text-white ml-1" fill="white" />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <img
+                        src={farm.imageUrl}
+                        alt={farm.title}
+                        className="w-full h-auto object-cover"
+                      />
+                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-2 p-2">

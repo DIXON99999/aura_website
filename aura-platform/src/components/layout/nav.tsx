@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NotificationBell } from '@/components/ui/notification-bell'
+import { InventoryBar } from '@/components/ui/inventory-bar'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
@@ -193,6 +194,9 @@ export function Nav() {
                 )}
               </div>
 
+              {/* Inventory Bar */}
+              <InventoryBar />
+
               {/* Credits display */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">
@@ -267,6 +271,9 @@ export function Nav() {
             </>
           ) : (
             <div className="relative flex items-center gap-2">
+              {/* Inventory Bar */}
+              <InventoryBar />
+
               {/* Credits display for non-signed in users */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">

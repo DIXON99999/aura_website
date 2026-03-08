@@ -1240,46 +1240,51 @@ app.post('/:id/sub-events/:subEventId/comments', async (c) => {
 })
 
 app.post('/:id/sub-events/:subEventId/comments/:commentId/vote', async (c) => {
-  const commentId = c.req.param('commentId')
-  const body = await c.req.json()
-  const { visitorId, direction } = body
+  try {
+    const commentId = c.req.param('commentId')
+    const body = await c.req.json()
+    const { visitorId, direction } = body
 
-  if (!visitorId || !direction) {
-    return c.json({ error: 'Visitor ID and direction are required' }, 400)
-  }
-
-  const existingVoteResult = await pool.query(
-    'SELECT * FROM sub_event_comment_votes WHERE comment_id = $1 AND visitor_id = $2',
-    [commentId, visitorId]
-  )
-  const existingVote = existingVoteResult.rows.length > 0 ? existingVoteResult.rows[0] as any : null
-
-  const delta = direction === 'UP' ? 1 : -1
-
-  if (existingVote) {
-    if (existingVote.direction === direction) {
-      await pool.query('DELETE FROM sub_event_comment_votes WHERE id = $1', [existingVote.id])
-      await pool.query('UPDATE sub_event_comments SET vote_count = vote_count - $1 WHERE id = $2', [delta, commentId])
-    } else {
-      await pool.query('UPDATE sub_event_comment_votes SET direction = $1 WHERE id = $2', [direction, existingVote.id])
-      await pool.query('UPDATE sub_event_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta * 2, commentId])
+    if (!visitorId || !direction) {
+      return c.json({ error: 'Visitor ID and direction are required' }, 400)
     }
-  } else {
-    const voteId = generateId()
-    await pool.query(
-      'INSERT INTO sub_event_comment_votes (id, comment_id, visitor_id, direction, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [voteId, commentId, visitorId, direction, new Date().toISOString()]
+
+    const existingVoteResult = await pool.query(
+      'SELECT * FROM sub_event_comment_votes WHERE comment_id = $1 AND visitor_id = $2',
+      [commentId, visitorId]
     )
-    await pool.query('UPDATE sub_event_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta, commentId])
+    const existingVote = existingVoteResult.rows.length > 0 ? existingVoteResult.rows[0] as any : null
+
+    const delta = direction === 'UP' ? 1 : -1
+
+    if (existingVote) {
+      if (existingVote.direction === direction) {
+        await pool.query('DELETE FROM sub_event_comment_votes WHERE id = $1', [existingVote.id])
+        await pool.query('UPDATE sub_event_comments SET vote_count = vote_count - $1 WHERE id = $2', [delta, commentId])
+      } else {
+        await pool.query('UPDATE sub_event_comment_votes SET direction = $1 WHERE id = $2', [direction, existingVote.id])
+        await pool.query('UPDATE sub_event_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta * 2, commentId])
+      }
+    } else {
+      const voteId = generateId()
+      await pool.query(
+        'INSERT INTO sub_event_comment_votes (id, comment_id, visitor_id, direction, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [voteId, commentId, visitorId, direction, Date.now()]
+      )
+      await pool.query('UPDATE sub_event_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta, commentId])
+    }
+
+    const updatedResult = await pool.query('SELECT vote_count FROM sub_event_comments WHERE id = $1', [commentId])
+    const updated = updatedResult.rows.length > 0 ? updatedResult.rows[0] as any : null
+
+    return c.json({
+      commentId,
+      voteCount: updated?.vote_count || 0,
+    })
+  } catch (error) {
+    console.error('Comment vote error:', error)
+    return c.json({ error: 'Failed to vote on comment' }, 500)
   }
-
-  const updatedResult = await pool.query('SELECT vote_count FROM sub_event_comments WHERE id = $1', [commentId])
-  const updated = updatedResult.rows.length > 0 ? updatedResult.rows[0] as any : null
-
-  return c.json({
-    commentId,
-    voteCount: updated?.vote_count || 0,
-  })
 })
 
 app.get('/:id/sub-events/:subEventId/comments/votes', async (c) => {

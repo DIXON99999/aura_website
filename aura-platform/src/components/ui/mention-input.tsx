@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 interface MentionInputProps {
   value: string
   onChange: (value: string) => void
+  onSubmit?: () => void
   placeholder?: string
   rows?: number
   className?: string
@@ -16,8 +17,9 @@ interface MentionInputProps {
 export function MentionInput({
   value,
   onChange,
+  onSubmit,
   placeholder,
-  rows = 2,
+  rows = 1,
   className,
   onFocus,
   onBlur,
@@ -35,9 +37,19 @@ export function MentionInput({
 
   // Search for players when mention query changes
   useEffect(() => {
-    if (mentionQuery.length < 1) {
+    // Show dropdown when @ is detected (mentionStart >= 0)
+    if (mentionStart === -1) {
       setSuggestions([])
       setShowDropdown(false)
+      return
+    }
+
+    // Show dropdown immediately when @ is typed
+    setShowDropdown(true)
+
+    if (mentionQuery.length < 1) {
+      setSuggestions([])
+      setLoading(false)
       return
     }
 
@@ -51,11 +63,9 @@ export function MentionInput({
       try {
         const players = await api.getPlayers({ search: mentionQuery })
         setSuggestions(players.slice(0, 8))
-        setShowDropdown(players.length > 0)
         setSelectedIndex(0)
       } catch {
         setSuggestions([])
-        setShowDropdown(false)
       }
       setLoading(false)
     }, 150)
@@ -65,7 +75,7 @@ export function MentionInput({
         clearTimeout(searchTimeoutRef.current)
       }
     }
-  }, [mentionQuery])
+  }, [mentionQuery, mentionStart])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value
@@ -112,6 +122,13 @@ export function MentionInput({
   }, [mentionStart, value, onChange])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle Enter to submit when dropdown is not showing
+    if (e.key === 'Enter' && !e.shiftKey && !showDropdown) {
+      e.preventDefault()
+      onSubmit?.()
+      return
+    }
+
     if (!showDropdown || suggestions.length === 0) return
 
     if (e.key === 'ArrowDown') {
@@ -126,7 +143,7 @@ export function MentionInput({
     } else if (e.key === 'Escape') {
       setShowDropdown(false)
     }
-  }, [showDropdown, suggestions, selectedIndex, insertMention])
+  }, [showDropdown, suggestions, selectedIndex, insertMention, onSubmit])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -171,6 +188,10 @@ export function MentionInput({
           {loading ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">
               Searching...
+            </div>
+          ) : mentionQuery.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              Type a name to mention someone...
             </div>
           ) : suggestions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">

@@ -5,7 +5,8 @@ import { api, type Entity } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { X, Search, UserPlus, Check, Upload, Link as LinkIcon } from 'lucide-react'
+import { MediaUpload } from '@/components/ui/media-upload'
+import { X, Search, UserPlus, Check } from 'lucide-react'
 
 interface Participant {
   type: 'player' | 'temp'
@@ -31,35 +32,9 @@ export function CreateEventPage() {
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
   const [showGameSearch, setShowGameSearch] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const gameSearchRef = useRef<HTMLDivElement>(null)
   const playerSearchRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    setError('')
-
-    try {
-      const result = await api.uploadImage(file)
-      // Store the relative URL with /api prefix for database
-      const relativeUrl = result.imageUrl.startsWith('/api')
-        ? result.imageUrl
-        : `/api${result.imageUrl}`
-      setImageUrl(relativeUrl)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
-  }
 
   useEffect(() => {
     if (!user) {
@@ -197,53 +172,11 @@ export function CreateEventPage() {
 
           <div>
             <label className="block text-sm font-medium mb-2">Cover Image</label>
-            <div className="flex gap-2">
-              <Input
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="Enter image URL (optional)"
-                disabled={loading || uploading}
-                className="flex-1"
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading || uploading}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {uploading ? 'Uploading...' : 'Upload'}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload an image or paste a URL. Max 5MB (JPEG, PNG, GIF, WebP)
-            </p>
-            {imageUrl && (
-              <div className="mt-2 relative aspect-video w-full max-w-xs rounded-lg overflow-hidden bg-muted">
-                <img
-                  src={imageUrl}
-                  alt="Preview"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setImageUrl('')}
-                  className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <MediaUpload
+              value={imageUrl}
+              onChange={setImageUrl}
+              disabled={loading}
+            />
           </div>
 
           <div>

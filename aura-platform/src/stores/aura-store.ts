@@ -72,6 +72,28 @@ interface AuraStoreState extends EntitiesState {
 }
 
 // ============================================================================
+// PERK HELPERS
+// ============================================================================
+
+const PERK_STORAGE_KEY = 'aura_equipped_perks'
+
+function getEquippedPerks(): string[] {
+  try {
+    const stored = localStorage.getItem(PERK_STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+export function hasPerkEquipped(perkId: string): boolean {
+  const perks = getEquippedPerks()
+  const has = perks.includes(perkId)
+  console.log('hasPerkEquipped check:', perkId, 'equipped perks:', perks, 'result:', has)
+  return has
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -342,15 +364,19 @@ export const useAuraStore = create<AuraStoreState>()(
         throw new Error('No downvote credits remaining')
       }
 
+      // Check for double-click perk (only for upvotes)
+      const hasDoubleClick = direction === VoteDirection.UP && hasPerkEquipped('double-click')
+      const voteMultiplier = hasDoubleClick ? 2 : 1
+
       // Optimistic update
       set((draft) => {
         const entity = getEntityMap(draft, entityType)[entityId]
         if (!entity) return
 
-        const auraDelta = direction === VoteDirection.UP ? 1 : -1
+        const auraDelta = (direction === VoteDirection.UP ? 1 : -1) * voteMultiplier
         entity.auraScore += auraDelta
 
-        // Deduct credit
+        // Deduct credit (only 1 credit regardless of multiplier)
         if (direction === VoteDirection.UP) {
           draft.credits.upvotesRemaining -= 1
         } else {
@@ -360,12 +386,18 @@ export const useAuraStore = create<AuraStoreState>()(
 
       // Sync with backend
       try {
-        const result = await api.vote({ visitorId, entityId, entityType, direction, userId })
-        // Update credits from response
-        set((draft) => {
-          draft.credits.upvotesRemaining = result.credits.upvotesRemaining
-          draft.credits.downvotesRemaining = result.credits.downvotesRemaining
-        })
+        // Call API multiple times for double-click perk
+        let result
+        for (let i = 0; i < voteMultiplier; i++) {
+          result = await api.vote({ visitorId, entityId, entityType, direction, userId })
+        }
+        // Update credits from response (the last call's credits are correct)
+        if (result) {
+          set((draft) => {
+            draft.credits.upvotesRemaining = result.credits.upvotesRemaining
+            draft.credits.downvotesRemaining = result.credits.downvotesRemaining
+          })
+        }
         // Refresh the entity and its parents to get accurate scores
         const newState = get()
         newState.refreshEntity(entityType, entityId)
@@ -378,7 +410,7 @@ export const useAuraStore = create<AuraStoreState>()(
         set((draft) => {
           const entity = getEntityMap(draft, entityType)[entityId]
           if (entity) {
-            const auraDelta = direction === VoteDirection.UP ? -1 : 1
+            const auraDelta = (direction === VoteDirection.UP ? -1 : 1) * voteMultiplier
             entity.auraScore += auraDelta
           }
           if (direction === VoteDirection.UP) {

@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { api, type EventWithParticipants, type SubEvent, type SubEventWithParticipants, type SubEventComment } from '@/lib/api'
-import { useAuthStore, useAuraStore } from '@/stores'
+import { useAuthStore, useAuraStore, hasPerkEquipped } from '@/stores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { VoteButtons } from '@/components/ui/vote-buttons'
+import { CommentVotes } from '@/components/ui/comment-votes'
 import { MentionText } from '@/components/ui/mention-text'
 import { MentionInput } from '@/components/ui/mention-input'
-import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
+import { MediaUpload } from '@/components/ui/media-upload'
+import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -16,6 +18,11 @@ function getVisitorId(): string {
     localStorage.setItem('aura_visitor_id', id)
   }
   return id
+}
+
+// Helper to convert name to slug
+function nameToSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 // Confirmation Dialog Component
@@ -45,118 +52,6 @@ function ConfirmDialog({
           <Button variant="destructive" size="sm" onClick={onConfirm}>Delete</Button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// Image Upload Component
-function ImageUpload({
-  value,
-  onChange,
-  onRemove,
-}: {
-  value: string
-  onChange: (url: string) => void
-  onRemove?: () => void
-}) {
-  const [mode, setMode] = useState<'url' | 'upload'>('url')
-  const [urlInput, setUrlInput] = useState(value)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      onChange(dataUrl)
-      setUrlInput(dataUrl)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handleUrlSubmit = () => {
-    if (urlInput.trim()) {
-      onChange(urlInput.trim())
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === 'url' ? 'default' : 'outline'}
-          onClick={() => setMode('url')}
-          className="flex items-center gap-1"
-        >
-          <LinkIcon className="w-3 h-3" />
-          URL
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === 'upload' ? 'default' : 'outline'}
-          onClick={() => setMode('upload')}
-          className="flex items-center gap-1"
-        >
-          <Upload className="w-3 h-3" />
-          Upload
-        </Button>
-      </div>
-
-      {mode === 'url' ? (
-        <div className="flex gap-2">
-          <Input
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="Enter image URL..."
-            className="flex-1"
-          />
-          <Button type="button" size="sm" onClick={handleUrlSubmit}>
-            Set
-          </Button>
-        </div>
-      ) : (
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Choose Image
-          </Button>
-        </div>
-      )}
-
-      {value && (
-        <div className="relative">
-          <img src={value} alt="Preview" className="w-full max-h-32 object-cover rounded-lg" />
-          {onRemove && (
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={onRemove}
-              className="absolute top-2 right-2"
-            >
-              <X className="w-3 h-3 mr-1" />
-              Remove
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -250,9 +145,13 @@ function CommentItem({
             {comment.username.charAt(0).toUpperCase()}
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="font-medium text-foreground hover:underline cursor-pointer">
+            <Link
+              to={`/player/${nameToSlug(comment.username)}`}
+              className="font-medium text-foreground hover:underline hover:text-primary"
+              onClick={(e) => e.stopPropagation()}
+            >
               {comment.username}
-            </span>
+            </Link>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">
               {formatRelativeTime(comment.createdAt)}
@@ -292,13 +191,10 @@ function CommentItem({
             {/* Actions bar - Modern Reddit style */}
             <div className="flex items-center gap-0.5 pl-8 text-muted-foreground">
               {/* Votes */}
-              <VoteButtons
+              <CommentVotes
                 score={comment.voteCount}
                 currentVote={vote}
                 onVote={(dir) => onVote(comment.id, dir)}
-                size="sm"
-                layout="horizontal"
-                variant="pill"
               />
 
               <button
@@ -330,7 +226,7 @@ function CommentItem({
             {/* Reply input - Modern style */}
             {isReplying && (
               <div className="mt-3 pl-8">
-                <div className="border rounded-xl bg-card overflow-hidden">
+                <div className="border rounded-xl bg-card">
                   {replyImageUrl && (
                     <div className="p-3 border-b bg-accent/30">
                       <div className="relative inline-block">
@@ -373,9 +269,10 @@ function CommentItem({
                   <MentionInput
                     value={replyContent}
                     onChange={onReplyContentChange}
+                    onSubmit={() => onSubmitReply(comment.id)}
                     placeholder="What are your thoughts? (type @ to mention)"
                     autoFocus
-                    rows={3}
+                    rows={1}
                   />
                   <div className="flex items-center justify-between px-2 py-2 border-t bg-accent/20">
                     <div className="flex items-center gap-1">
@@ -477,6 +374,8 @@ export function EventPage() {
   const [creatingSubEvent, setCreatingSubEvent] = useState(false)
   const [participantSearch, setParticipantSearch] = useState('')
   const [subEventError, setSubEventError] = useState('')
+  const [subEventSearch, setSubEventSearch] = useState('')
+  const [subEventSort, setSubEventSort] = useState<'newest' | 'oldest'>('newest')
 
   // Edit sub-event state
   const [editingSubEvent, setEditingSubEvent] = useState(false)
@@ -497,10 +396,14 @@ export function EventPage() {
   const [replyContent, setReplyContent] = useState('')
   const [replyImageUrl, setReplyImageUrl] = useState('')
   const [commentVotes, setCommentVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
+  const [commentSort, setCommentSort] = useState<'best' | 'new' | 'old'>('best')
   const commentFileInputRef = useRef<HTMLInputElement>(null)
 
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; subEventId: string | null }>({ open: false, subEventId: null })
+
+  // Lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
 
   const visitorId = getVisitorId()
   const isOwner = user?.id === event?.ownerId
@@ -615,19 +518,29 @@ export function EventPage() {
     if (direction === 'UP' && credits.upvotesRemaining <= 0) return
     if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
 
-    try {
-      // Unlimited voting - each click adds a vote (but costs credits)
-      const result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction, userId: user?.id })
-      setSelectedSubEvent({
-        ...selectedSubEvent,
-        participants: selectedSubEvent.participants.map(p =>
-          p.id === participantId ? { ...p, auraScore: result.auraScore } : p
-        ).sort((a, b) => b.auraScore - a.auraScore),
-      })
+    // Check for double-click perk (only for upvotes)
+    const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
+    const voteMultiplier = hasDoubleClick ? 2 : 1
 
-      // Update credits from response
-      if (result.credits) {
-        setCredits(result.credits)
+    try {
+      // Call API multiple times for double-click perk
+      let result
+      for (let i = 0; i < voteMultiplier; i++) {
+        result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction, userId: user?.id })
+      }
+
+      if (result) {
+        setSelectedSubEvent({
+          ...selectedSubEvent,
+          participants: selectedSubEvent.participants.map(p =>
+            p.id === participantId ? { ...p, auraScore: result.auraScore } : p
+          ).sort((a, b) => b.auraScore - a.auraScore),
+        })
+
+        // Update credits from response
+        if (result.credits) {
+          setCredits(result.credits)
+        }
       }
 
       const updatedEvent = await api.getEvent(id)
@@ -745,25 +658,32 @@ export function EventPage() {
   const handleCommentVote = async (commentId: string, direction: 'UP' | 'DOWN') => {
     if (!id || !selectedSubEvent) return
 
+    const currentVote = commentVotes.get(commentId)
+
     try {
+      console.log('Voting on comment:', commentId, direction)
       const result = await api.voteComment(id, selectedSubEvent.id, commentId, { visitorId, direction })
+      console.log('Vote result:', result)
 
-      const currentVote = commentVotes.get(commentId)
+      // Update the comment's vote count using functional update to avoid stale state
+      setSelectedSubEvent(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          comments: prev.comments.map(c =>
+            c.id === commentId ? { ...c, voteCount: result.voteCount } : c
+          ),
+        }
+      })
+
+      // Update vote tracking
       const newVotes = new Map(commentVotes)
-
       if (currentVote === direction) {
         newVotes.delete(commentId)
       } else {
         newVotes.set(commentId, direction)
       }
       setCommentVotes(newVotes)
-
-      setSelectedSubEvent({
-        ...selectedSubEvent,
-        comments: selectedSubEvent.comments.map(c =>
-          c.id === commentId ? { ...c, voteCount: result.voteCount } : c
-        ),
-      })
     } catch (err) {
       console.error('Failed to vote on comment:', err)
     }
@@ -863,7 +783,11 @@ export function EventPage() {
     return name.toLowerCase().includes(editParticipantSearch.toLowerCase())
   }) || []
 
-  const topLevelComments = selectedSubEvent?.comments.filter(c => !c.parentId) || []
+  const topLevelComments = (selectedSubEvent?.comments.filter(c => !c.parentId) || []).sort((a, b) => {
+    if (commentSort === 'best') return b.voteCount - a.voteCount
+    if (commentSort === 'new') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() // old
+  })
 
   if (loading) {
     return (
@@ -937,10 +861,10 @@ export function EventPage() {
               {/* Image */}
               <div>
                 <label className="block text-sm font-medium mb-2">Image</label>
-                <ImageUpload
+                <MediaUpload
                   value={editImageUrl}
                   onChange={setEditImageUrl}
-                  onRemove={() => setEditImageUrl('')}
+                  compact
                 />
               </div>
 
@@ -1009,7 +933,9 @@ export function EventPage() {
               <img
                 src={selectedSubEvent.imageUrl}
                 alt={selectedSubEvent.name}
-                className="max-w-full max-h-80 object-contain rounded-lg"
+                className="max-w-full max-h-80 object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setLightboxImage(selectedSubEvent.imageUrl)}
+                title="Click to view full size"
               />
             </div>
           )}
@@ -1122,24 +1048,18 @@ export function EventPage() {
 
             {/* Center: Comments Section (Main Focus) - Reddit Style */}
             <div className="max-w-2xl mx-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-muted-foreground">
-                    {selectedSubEvent.comments.length} Comments
-                  </h2>
-                  <select className="text-xs bg-transparent border rounded px-2 py-1 text-muted-foreground">
-                    <option>Best</option>
-                    <option>New</option>
-                    <option>Top</option>
-                  </select>
-                </div>
+                <h2 className="text-sm font-semibold text-muted-foreground mb-4">
+                  {selectedSubEvent.comments.length} Comments
+                </h2>
 
                 {/* Modern Reddit-style Comment Input */}
-                <div className="mb-6 border rounded-xl bg-card overflow-hidden">
+                <div className="mb-4 border rounded-xl bg-card">
                   <MentionInput
                     value={newComment}
                     onChange={setNewComment}
+                    onSubmit={() => handleAddComment()}
                     placeholder="Add a comment (type @ to mention users)"
-                    rows={2}
+                    rows={1}
                     className="px-4 py-3"
                   />
 
@@ -1221,6 +1141,26 @@ export function EventPage() {
                   </div>
                 </div>
 
+                {/* Sort dropdown */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs text-muted-foreground">Sort by:</span>
+                  <div className="flex rounded-lg border bg-card overflow-hidden">
+                    {(['best', 'new', 'old'] as const).map((sort) => (
+                      <button
+                        key={sort}
+                        onClick={() => setCommentSort(sort)}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          commentSort === sort
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        }`}
+                      >
+                        {sort.charAt(0).toUpperCase() + sort.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Comments List - Reddit Style */}
                 <div className="space-y-2">
                   {topLevelComments.map(comment => (
@@ -1267,6 +1207,27 @@ export function EventPage() {
         onConfirm={handleDeleteSubEvent}
         onCancel={() => setConfirmDialog({ open: false, subEventId: null })}
       />
+
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Full size"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto">
         <button
@@ -1447,10 +1408,10 @@ export function EventPage() {
                 {/* Image */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Image (optional)</label>
-                  <ImageUpload
+                  <MediaUpload
                     value={newSubEventImage}
                     onChange={setNewSubEventImage}
-                    onRemove={() => setNewSubEventImage('')}
+                    compact
                   />
                 </div>
 
@@ -1486,9 +1447,39 @@ export function EventPage() {
               </div>
             )}
 
+            {/* Sub-Events Search and Sort */}
+            {subEvents.length > 0 && (
+              <div className="flex gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={subEventSearch}
+                    onChange={(e) => setSubEventSearch(e.target.value)}
+                    placeholder="Search sub-events..."
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSubEventSort(subEventSort === 'newest' ? 'oldest' : 'newest')}
+                  className="h-8 text-xs"
+                >
+                  {subEventSort === 'newest' ? 'Newest' : 'Oldest'}
+                </Button>
+              </div>
+            )}
+
             {/* Sub-Events List */}
             <div className="space-y-1">
-              {subEvents.map(subEvent => (
+              {subEvents
+                .filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase()))
+                .sort((a, b) => {
+                  const dateA = new Date(a.createdAt).getTime()
+                  const dateB = new Date(b.createdAt).getTime()
+                  return subEventSort === 'newest' ? dateB - dateA : dateA - dateB
+                })
+                .map(subEvent => (
                 <div
                   key={subEvent.id}
                   className="flex items-center justify-between px-3 py-2 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer"
@@ -1516,6 +1507,12 @@ export function EventPage() {
                 <div className="text-center text-muted-foreground py-8 text-sm">
                   No sub-events yet
                   {isOwner && <span className="block mt-1">Click "Add" to create one</span>}
+                </div>
+              )}
+
+              {subEvents.length > 0 && subEvents.filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase())).length === 0 && (
+                <div className="text-center text-muted-foreground py-4 text-sm">
+                  No sub-events match your search
                 </div>
               )}
             </div>

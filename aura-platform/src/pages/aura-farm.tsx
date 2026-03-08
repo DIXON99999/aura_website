@@ -5,10 +5,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { VoteButtons } from '@/components/ui/vote-buttons'
+import { CommentVotes } from '@/components/ui/comment-votes'
 import { MentionText } from '@/components/ui/mention-text'
 import { MentionInput } from '@/components/ui/mention-input'
-import { Trash2, ArrowLeft, ExternalLink, Edit2, Save, X, Upload, MessageSquare, Image, Link as LinkIcon } from 'lucide-react'
-import { useAuthStore, useAuraStore } from '@/stores'
+import { MediaUpload } from '@/components/ui/media-upload'
+import { Trash2, ArrowLeft, ExternalLink, Edit2, Save, X, MessageSquare, Image, Link as LinkIcon } from 'lucide-react'
+import { useAuthStore, useAuraStore, hasPerkEquipped } from '@/stores'
+
+// Helper to convert name to slug
+function nameToSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+// Helper to check if URL is a video
+function isVideoUrl(url: string): boolean {
+  const videoExtensions = ['.mp4', '.webm']
+  const lowerUrl = url.toLowerCase()
+  return videoExtensions.some(ext => lowerUrl.includes(ext))
+}
 
 // Helper to format relative time
 function formatRelativeTime(date: Date): string {
@@ -97,9 +111,13 @@ function CommentItem({
             {comment.username.charAt(0).toUpperCase()}
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="font-medium text-foreground hover:underline cursor-pointer">
+            <Link
+              to={`/player/${nameToSlug(comment.username)}`}
+              className="font-medium text-foreground hover:underline hover:text-primary"
+              onClick={(e) => e.stopPropagation()}
+            >
               {comment.username}
-            </span>
+            </Link>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">
               {formatRelativeTime(comment.createdAt)}
@@ -139,13 +157,10 @@ function CommentItem({
             {/* Actions bar - Modern Reddit style */}
             <div className="flex items-center gap-0.5 pl-8 text-muted-foreground">
               {/* Votes */}
-              <VoteButtons
+              <CommentVotes
                 score={comment.voteCount}
                 currentVote={vote}
                 onVote={(dir) => onVote(comment.id, dir)}
-                size="sm"
-                layout="horizontal"
-                variant="pill"
               />
 
               <button
@@ -177,7 +192,7 @@ function CommentItem({
             {/* Reply input - Modern style */}
             {isReplying && (
               <div className="mt-3 pl-8">
-                <div className="border rounded-xl bg-card overflow-hidden">
+                <div className="border rounded-xl bg-card">
                   {replyImageUrl && (
                     <div className="p-3 border-b bg-accent/30">
                       <div className="relative inline-block">
@@ -220,9 +235,10 @@ function CommentItem({
                   <MentionInput
                     value={replyContent}
                     onChange={onReplyContentChange}
+                    onSubmit={() => onSubmitReply(comment.id)}
                     placeholder="What are your thoughts? (type @ to mention)"
                     autoFocus
-                    rows={3}
+                    rows={1}
                   />
                   <div className="flex items-center justify-between px-2 py-2 border-t bg-accent/20">
                     <div className="flex items-center gap-1">
@@ -323,12 +339,11 @@ export function AuraFarmPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Comments state
   const [comments, setComments] = useState<AuraFarmComment[]>([])
   const [commentVotes, setCommentVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
+  const [commentSort, setCommentSort] = useState<'best' | 'new' | 'old'>('best')
   const [newComment, setNewComment] = useState('')
   const [newCommentImage, setNewCommentImage] = useState('')
   const [showCommentImageUrl, setShowCommentImageUrl] = useState(false)
@@ -397,14 +412,26 @@ export function AuraFarmPage() {
     if (direction === 'UP' && credits.upvotesRemaining <= 0) return
     if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
 
+    // Check for double-click perk (only for upvotes)
+    const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
+    const voteMultiplier = hasDoubleClick ? 2 : 1
+    console.log('Aura farm vote - hasDoubleClick:', hasDoubleClick, 'multiplier:', voteMultiplier)
+
     const visitorId = getVisitorId()
 
     try {
-      // Always add a new vote (multiple votes allowed per farm)
-      const result = await api.voteAuraFarm(farm.id, { visitorId, direction })
-      setFarm({ ...farm, auraScore: result.auraScore })
+      // Call API multiple times for double-click perk
+      let result
+      for (let i = 0; i < voteMultiplier; i++) {
+        console.log('Calling vote API, iteration:', i + 1)
+        result = await api.voteAuraFarm(farm.id, { visitorId, direction })
+      }
 
-      // Deduct credit
+      if (result) {
+        setFarm({ ...farm, auraScore: result.auraScore })
+      }
+
+      // Deduct credit (only 1 credit regardless of multiplier)
       if (direction === 'UP') {
         setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
       } else {
@@ -439,28 +466,6 @@ export function AuraFarmPage() {
     setEditTitle('')
     setEditDescription('')
     setEditImageUrl('')
-  }
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    try {
-      const result = await api.uploadImage(file)
-      // Store the relative URL with /api prefix for database
-      const relativeUrl = result.imageUrl.startsWith('/api')
-        ? result.imageUrl
-        : `/api${result.imageUrl}`
-      setEditImageUrl(relativeUrl)
-    } catch {
-      // Ignore
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
   }
 
   const handleSave = async () => {
@@ -543,8 +548,12 @@ export function AuraFarmPage() {
     const currentVote = commentVotes.get(commentId)
 
     try {
+      console.log('Voting on comment:', commentId, direction)
       const result = await api.voteAuraFarmComment(farm.id, commentId, { visitorId, direction })
-      setComments(comments.map((c) => c.id === commentId ? { ...c, voteCount: result.voteCount } : c))
+      console.log('Vote result:', result)
+
+      // Use functional update to avoid stale state
+      setComments(prev => prev.map((c) => c.id === commentId ? { ...c, voteCount: result.voteCount } : c))
 
       const newVotes = new Map(commentVotes)
       if (currentVote === direction) {
@@ -553,8 +562,8 @@ export function AuraFarmPage() {
         newVotes.set(commentId, direction)
       }
       setCommentVotes(newVotes)
-    } catch {
-      // Ignore
+    } catch (err) {
+      console.error('Vote failed:', err)
     }
   }
 
@@ -568,7 +577,11 @@ export function AuraFarmPage() {
     reader.readAsDataURL(file)
   }
 
-  const topLevelComments = comments.filter(c => !c.parentId)
+  const topLevelComments = comments.filter(c => !c.parentId).sort((a, b) => {
+    if (commentSort === 'best') return b.voteCount - a.voteCount
+    if (commentSort === 'new') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() // old
+  })
 
   if (loading) {
     return (
@@ -602,59 +615,30 @@ export function AuraFarmPage() {
         <div className="rounded-lg border bg-card overflow-hidden">
           {editing ? (
             <div className="p-4 bg-muted/30 border-b">
-              <label className="block text-sm font-medium mb-2">Image</label>
-              <div className="flex gap-2">
-                <Input
-                  value={editImageUrl}
-                  onChange={(e) => setEditImageUrl(e.target.value)}
-                  placeholder="Enter image URL (optional)"
-                  disabled={saving || uploading}
-                  className="flex-1"
-                />
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={saving || uploading}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {uploading ? 'Uploading...' : 'Upload'}
-                </Button>
-              </div>
-              {editImageUrl && (
-                <div className="mt-3 relative aspect-video w-full max-w-sm rounded-lg overflow-hidden bg-muted">
-                  <img
-                    src={editImageUrl}
-                    alt="Preview"
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setEditImageUrl('')}
-                    className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+              <label className="block text-sm font-medium mb-2">Image or Clip</label>
+              <MediaUpload
+                value={editImageUrl}
+                onChange={setEditImageUrl}
+                disabled={saving}
+              />
             </div>
           ) : farm.imageUrl && (
             <div className="aspect-video w-full overflow-hidden bg-muted flex items-center justify-center">
-              <img
-                src={farm.imageUrl}
-                alt={farm.title}
-                className="max-w-full max-h-full object-contain"
-              />
+              {isVideoUrl(farm.imageUrl) ? (
+                <video
+                  src={farm.imageUrl}
+                  controls
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <img
+                  src={farm.imageUrl}
+                  alt={farm.title}
+                  className="max-w-full max-h-full object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => window.open(farm.imageUrl!, '_blank')}
+                  title="Click to view full size"
+                />
+              )}
             </div>
           )}
 
@@ -794,12 +778,13 @@ export function AuraFarmPage() {
           </div>
 
           {/* Modern Reddit-style Comment Input */}
-          <div className="mb-6 border rounded-xl bg-card overflow-hidden">
+          <div className="mb-6 border rounded-xl bg-card">
             <MentionInput
               value={newComment}
               onChange={setNewComment}
+              onSubmit={() => handleAddComment()}
               placeholder="Add a comment (type @ to mention users)"
-              rows={2}
+              rows={1}
               className="px-4 py-3"
             />
 
@@ -878,6 +863,26 @@ export function AuraFarmPage() {
               >
                 Comment
               </Button>
+            </div>
+          </div>
+
+          {/* Sort dropdown */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs text-muted-foreground">Sort by:</span>
+            <div className="flex rounded-lg border bg-accent/30 overflow-hidden">
+              {(['best', 'new', 'old'] as const).map((sort) => (
+                <button
+                  key={sort}
+                  onClick={() => setCommentSort(sort)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    commentSort === sort
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
+                  {sort.charAt(0).toUpperCase() + sort.slice(1)}
+                </button>
+              ))}
             </div>
           </div>
 

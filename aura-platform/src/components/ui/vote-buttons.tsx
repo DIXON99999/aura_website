@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { hasPerkEquipped } from '@/stores'
 
 interface FloatingNumber {
   id: number
@@ -63,17 +64,21 @@ export function VoteButtons({
     setPressing(direction === 'UP' ? 'up' : 'down')
     setTimeout(() => setPressing(null), 150)
 
+    // Check for double-click perk (only for upvotes)
+    const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
+    const multiplier = hasDoubleClick ? 2 : 1
+
     // Calculate floating number value
     let delta = 0
     if (currentVote === direction) {
       // Removing vote
-      delta = direction === 'UP' ? -1 : 1
+      delta = direction === 'UP' ? -1 * multiplier : 1
     } else if (currentVote) {
       // Changing vote
-      delta = direction === 'UP' ? 2 : -2
+      delta = direction === 'UP' ? 2 * multiplier : -2
     } else {
       // New vote
-      delta = direction === 'UP' ? 1 : -1
+      delta = direction === 'UP' ? 1 * multiplier : -1
     }
 
     // Create floating number at click position relative to container
@@ -137,14 +142,13 @@ export function VoteButtons({
           onClick={(e) => handleVote('UP', e)}
           disabled={upDisabled}
           className={cn(
-            'transition-all duration-150 text-green-500',
+            'transition-all duration-150',
             isPill ? 'p-1.5 rounded-full' : cn('rounded', sizeClasses[size].button),
             upDisabled
-              ? 'opacity-30 cursor-not-allowed'
-              : isPill
-                ? 'hover:bg-green-500/10'
-                : 'opacity-60 hover:opacity-100 hover:bg-green-500/10',
-            currentVote === 'UP' && (isPill ? '' : 'opacity-100 bg-green-500/10'),
+              ? 'opacity-30 cursor-not-allowed text-green-500'
+              : currentVote === 'UP'
+                ? 'text-green-500 bg-green-500/20'
+                : 'text-muted-foreground hover:text-green-500 hover:bg-green-500/10',
             pressing === 'up' && 'scale-75'
           )}
           title={upTitle}
@@ -176,14 +180,13 @@ export function VoteButtons({
           onClick={(e) => handleVote('DOWN', e)}
           disabled={downDisabled}
           className={cn(
-            'transition-all duration-150 text-red-500',
+            'transition-all duration-150',
             isPill ? 'p-1.5 rounded-full' : cn('rounded', sizeClasses[size].button),
             downDisabled
-              ? 'opacity-30 cursor-not-allowed'
-              : isPill
-                ? 'hover:bg-red-500/10'
-                : 'opacity-60 hover:opacity-100 hover:bg-red-500/10',
-            currentVote === 'DOWN' && (isPill ? '' : 'opacity-100 bg-red-500/10'),
+              ? 'opacity-30 cursor-not-allowed text-red-500'
+              : currentVote === 'DOWN'
+                ? 'text-red-500 bg-red-500/20'
+                : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10',
             pressing === 'down' && 'scale-75'
           )}
           title={downTitle}

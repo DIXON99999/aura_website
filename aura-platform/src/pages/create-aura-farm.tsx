@@ -5,7 +5,8 @@ import { api, type Entity } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, Upload, X, Check } from 'lucide-react'
+import { MediaUpload } from '@/components/ui/media-upload'
+import { Search, Check } from 'lucide-react'
 
 const ENTITY_TYPES = [
   { value: 'player', label: 'Player' },
@@ -32,10 +33,8 @@ export function CreateAuraFarmPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showEntitySearch, setShowEntitySearch] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const searchRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const entityTypeRef = useRef<HTMLDivElement>(null)
   const [showEntityTypeDropdown, setShowEntityTypeDropdown] = useState(false)
   const [entityTypeSearch, setEntityTypeSearch] = useState('')
@@ -113,30 +112,6 @@ export function CreateAuraFarmPage() {
     ? entities.filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : entities
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    setError('')
-
-    try {
-      const result = await api.uploadImage(file)
-      // Store the relative URL with /api prefix for database
-      const relativeUrl = result.imageUrl.startsWith('/api')
-        ? result.imageUrl
-        : `/api${result.imageUrl}`
-      setImageUrl(relativeUrl)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -199,51 +174,12 @@ export function CreateAuraFarmPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Image</label>
-            <div className="flex gap-2">
-              <Input
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="Enter image URL (optional)"
-                disabled={loading || uploading}
-                className="flex-1"
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading || uploading}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {uploading ? 'Uploading...' : 'Upload'}
-              </Button>
-            </div>
-            {imageUrl && (
-              <div className="mt-2 relative aspect-video w-full max-w-xs rounded-lg overflow-hidden bg-muted">
-                <img
-                  src={imageUrl}
-                  alt="Preview"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setImageUrl('')}
-                  className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <label className="block text-sm font-medium mb-2">Image or Clip</label>
+            <MediaUpload
+              value={imageUrl}
+              onChange={setImageUrl}
+              disabled={loading}
+            />
           </div>
 
           <div>
