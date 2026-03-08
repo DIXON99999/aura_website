@@ -206,7 +206,7 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
 
       <VoteButtons
         score={entity.auraScore}
-        currentVote={currentVote}
+        currentVote={currentVote?.direction}
         onVote={(dir) => handleVote(dir === 'UP' ? VoteDirection.UP : VoteDirection.DOWN)}
         upDisabled={!visitorId || credits.upvotesRemaining <= 0}
         downDisabled={!visitorId || credits.downvotesRemaining <= 0}
@@ -214,7 +214,7 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
         downTitle={credits.downvotesRemaining <= 0 ? 'No downvote credits' : `${credits.downvotesRemaining} downvotes remaining`}
         size="md"
         layout="horizontal"
-        hideButtons={isOwnProfile}
+        hideButtons={!!isOwnProfile}
       />
     </div>
   )

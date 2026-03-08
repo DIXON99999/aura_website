@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { SearchBar, useSearch } from '@/components/layout'
 import {

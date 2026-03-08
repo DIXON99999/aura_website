@@ -588,6 +588,16 @@ export const useAuraStore = create<AuraStoreState>()(
       }
     },
 
+    clearUserProfile: (visitorId: string) => {
+      set((draft) => {
+        const playerId = draft.userProfiles[visitorId]
+        if (playerId) {
+          delete draft.players[playerId]
+        }
+        delete draft.userProfiles[visitorId]
+      })
+    },
+
     // ========================================================================
     // GETTERS
     // ========================================================================

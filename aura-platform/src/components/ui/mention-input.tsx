@@ -33,7 +33,7 @@ export function MentionInput({
   const [loading, setLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const searchTimeoutRef = useRef<NodeJS.Timeout>()
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Search for players when mention query changes
   useEffect(() => {

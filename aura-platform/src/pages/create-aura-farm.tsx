@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { MediaUpload } from '@/components/ui/media-upload'
-import { Search, Check } from 'lucide-react'
+import { Search, Check, X } from 'lucide-react'
 
 const ENTITY_TYPES = [
   { value: 'player', label: 'Player' },

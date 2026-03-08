@@ -9,7 +9,7 @@ import { CommentVotes } from '@/components/ui/comment-votes'
 import { MentionText } from '@/components/ui/mention-text'
 import { MentionInput } from '@/components/ui/mention-input'
 import { MediaUpload } from '@/components/ui/media-upload'
-import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
+import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Trash2, X, MessageSquare, Link as LinkIcon, Image } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -366,7 +366,7 @@ export function EventPage() {
   // Sub-events state
   const [subEvents, setSubEvents] = useState<SubEvent[]>([])
   const [selectedSubEvent, setSelectedSubEvent] = useState<SubEventWithParticipants | null>(null)
-  const [subEventVotes, setSubEventVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
+  const [, setSubEventVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
   const [showCreateSubEvent, setShowCreateSubEvent] = useState(false)
   const [newSubEventName, setNewSubEventName] = useState('')
   const [newSubEventImage, setNewSubEventImage] = useState('')
@@ -502,8 +502,8 @@ export function EventPage() {
           ).sort((a, b) => b.auraScore - a.auraScore),
         })
         // Update credits from response
-        if (result.credits) {
-          setCredits(result.credits)
+        if ((result as any).credits) {
+          setCredits((result as any).credits)
         }
       }
     } catch (err) {
@@ -538,8 +538,8 @@ export function EventPage() {
         })
 
         // Update credits from response
-        if (result.credits) {
-          setCredits(result.credits)
+        if ((result as any).credits) {
+          setCredits((result as any).credits)
         }
       }
 
@@ -600,7 +600,7 @@ export function EventPage() {
     try {
       // Update name and image (send null explicitly to clear image)
       await api.updateSubEvent(id, selectedSubEvent.id, {
-        imageUrl: editImageUrl || null,
+        imageUrl: editImageUrl || undefined,
         name: editName.trim() || undefined,
       })
 
@@ -965,12 +965,12 @@ export function EventPage() {
                         const name = (p.player?.name || p.tempName || '').toLowerCase()
                         return name.includes(leaderboardSearch.toLowerCase())
                       })
-                      .map((participant, index, filteredArr) => {
+                      .map((participant, _index, _filteredArr) => {
                         const displayName = participant.player?.name || participant.tempName || 'Unknown'
                         // Get original rank from full list
                         const originalRank = selectedSubEvent.participants.findIndex(p => p.id === participant.id) + 1
                         const currentUserPlayerId = user ? userProfiles[user.id] : null
-                        const isSelf = participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId
+                        const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
 
                         return (
                           <div
@@ -1015,7 +1015,7 @@ export function EventPage() {
                 {selectedSubEvent.participants.map((participant, index) => {
                   const displayName = participant.player?.name || participant.tempName || 'Unknown'
                   const currentUserPlayerId = user ? userProfiles[user.id] : null
-                  const isSelf = participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId
+                  const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
                   return (
                     <div
                       key={participant.id}
@@ -1273,7 +1273,7 @@ export function EventPage() {
                 const displayName = participant.player?.name || participant.tempName || 'Unknown'
                 const isRealPlayer = !!participant.player
                 const currentUserPlayerId = user ? userProfiles[user.id] : null
-                const isSelf = participant.playerId && currentUserPlayerId && participant.playerId === currentUserPlayerId
+                const isSelf = !!(participant.playerId && currentUserPlayerId && participant.playerId === currentUserPlayerId)
 
                 return (
                   <div

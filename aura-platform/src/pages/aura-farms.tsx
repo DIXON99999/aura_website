@@ -27,15 +27,14 @@ function getVisitorId(): string {
 export function AuraFarmsPage() {
   const [farms, setFarms] = useState<AuraFarm[]>([])
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState<'new' | 'popular' | 'unpopular' | 'oldest'>('new')
+  const [sort, setSort] = useState<'new' | 'popular' | 'oldest'>('new')
   const [sortOpen, setSortOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const credits = useAuraStore((s) => s.credits)
   const setCredits = useAuraStore((s) => s.setCredits)
-  const sortLabels: Record<'new' | 'popular' | 'unpopular' | 'oldest', string> = {
+  const sortLabels: Record<'new' | 'popular' | 'oldest', string> = {
     new: 'New',
     popular: 'Most Popular',
-    unpopular: 'Least Popular',
     oldest: 'Oldest',
   }
 
@@ -107,7 +106,7 @@ export function AuraFarmsPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-48 p-1" align="start">
-              {(['new', 'popular', 'unpopular', 'oldest'] as const).map((option) => (
+              {(['new', 'popular', 'oldest'] as const).map((option) => (
                 <button
                   key={option}
                   onClick={() => {

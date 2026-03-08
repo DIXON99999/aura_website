@@ -456,7 +456,7 @@ export function EntityPage() {
 
           <VoteButtons
             score={entity.auraScore}
-            currentVote={currentVote}
+            currentVote={currentVote?.direction}
             onVote={(dir) => handleVote(dir === 'UP' ? VoteDirection.UP : VoteDirection.DOWN)}
             upDisabled={!visitorId || credits.upvotesRemaining <= 0}
             downDisabled={!visitorId || credits.downvotesRemaining <= 0}
@@ -465,7 +465,7 @@ export function EntityPage() {
             size="lg"
             layout="horizontal"
             className="mt-8"
-            hideButtons={isOwnProfile}
+            hideButtons={!!isOwnProfile}
           />
 
           <p className="text-sm text-muted-foreground mt-2">Aura Score</p>

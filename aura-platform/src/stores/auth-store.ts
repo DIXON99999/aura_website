@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api, setSessionToken, type User, type Entity } from '@/lib/api'
+import { api, setSessionToken, type User } from '@/lib/api'
 
 interface LinkedPlayer {
   id: string
