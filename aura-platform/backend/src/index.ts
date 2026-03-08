@@ -22,6 +22,8 @@ app.use('*', cors({
     if (origin.endsWith('.trycloudflare.com')) return origin
     // Allow DigitalOcean App Platform
     if (origin.endsWith('.ondigitalocean.app')) return origin
+    // Allow custom production domain
+    if (origin === 'https://aura-farm.me' || origin.endsWith('.aura-farm.me')) return origin
     return null
   },
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
