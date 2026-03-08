@@ -32,7 +32,6 @@ interface AuraStoreState extends EntitiesState {
   // Loading states
   loading: boolean
   initialized: boolean
-  initializationError: string | null
 
   // Credits
   credits: Credits
@@ -229,7 +228,6 @@ export const useAuraStore = create<AuraStoreState>()(
     userProfiles: {},
     loading: false,
     initialized: false,
-    initializationError: null,
     credits: { upvotesRemaining: 20, downvotesRemaining: 10 },
 
     // ========================================================================
@@ -240,10 +238,7 @@ export const useAuraStore = create<AuraStoreState>()(
       const state = get()
       if (state.loading || state.initialized) return
 
-      set((draft) => {
-        draft.loading = true
-        draft.initializationError = null
-      })
+      set((draft) => { draft.loading = true })
 
       try {
         const [
@@ -308,14 +303,10 @@ export const useAuraStore = create<AuraStoreState>()(
           }
           draft.loading = false
           draft.initialized = true
-          draft.initializationError = null
         })
       } catch (error) {
         console.error('Failed to fetch data:', error)
-        set((draft) => {
-          draft.loading = false
-          draft.initializationError = error instanceof Error ? error.message : 'Failed to load initial data'
-        })
+        set((draft) => { draft.loading = false })
       }
     },
 

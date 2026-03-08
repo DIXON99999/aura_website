@@ -117,23 +117,6 @@ function normalizeValue(value: unknown, dataType: string): unknown {
   return value
 }
 
-function getSourceValue(row: SqliteRow, columnName: string): unknown {
-  if (columnName in row) return row[columnName]
-
-  // Legacy SQLite vote tables used created_at where Postgres expects timestamp.
-  if (columnName === 'timestamp' && 'created_at' in row) {
-    return row.created_at
-  }
-
-  return null
-}
-
-function hasSourceColumn(row: SqliteRow, columnName: string): boolean {
-  if (columnName in row) return true
-  if (columnName === 'timestamp' && 'created_at' in row) return true
-  return false
-}
-
 function quoteIdent(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`
 }
@@ -171,10 +154,7 @@ async function migrate() {
   }
 
   const sqlite = new Database(SQLITE_PATH, { readonly: true })
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes('digitalocean') ? { rejectUnauthorized: false } : undefined,
-  })
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
   try {
     const sqliteTables = sqlite
@@ -202,8 +182,8 @@ async function migrate() {
         continue
       }
 
-      const sampleRow = sqliteRows[0]!
-      const insertColumns = pgColumns.filter((c) => hasSourceColumn(sampleRow, c.column_name))
+      const sqliteColumns = new Set(Object.keys(sqliteRows[0]!))
+      const insertColumns = pgColumns.filter((c) => sqliteColumns.has(c.column_name))
       if (insertColumns.length === 0) {
         console.log(`- Skipping ${table}: no matching columns`)
         continue
@@ -233,7 +213,7 @@ async function migrate() {
         let migratedRows = 0
         let skippedRows = 0
         for (const row of sqliteRows) {
-          const values = insertColumns.map((c) => normalizeValue(getSourceValue(row, c.column_name), c.data_type))
+          const values = insertColumns.map((c) => normalizeValue(row[c.column_name], c.data_type))
           try {
             await pool.query(sql, values)
             migratedRows += 1

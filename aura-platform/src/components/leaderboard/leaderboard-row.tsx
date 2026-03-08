@@ -56,13 +56,11 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
   const visitorId = useVisitorId()
   const authUser = useAuthStore((s) => s.user)
   const vote = useAuraStore((s) => s.vote)
-  const getVisitorVote = useAuraStore((s) => s.getVisitorVote)
   const games = useAuraStore((s) => s.games)
   const organisations = useAuraStore((s) => s.organisations)
   const countries = useAuraStore((s) => s.countries)
 
   const credits = useAuraStore((s) => s.credits)
-  const currentVote = visitorId ? getVisitorVote(visitorId, entity.id, entityType) : undefined
 
   // Check if this is the user's own profile
   const isOwnProfile = entity.type === EntityTypes.PLAYER &&
@@ -206,7 +204,6 @@ export function LeaderboardRow({ entity, rank, entityType, showType }: Leaderboa
 
       <VoteButtons
         score={entity.auraScore}
-        currentVote={currentVote?.direction}
         onVote={(dir) => handleVote(dir === 'UP' ? VoteDirection.UP : VoteDirection.DOWN)}
         upDisabled={!visitorId || credits.upvotesRemaining <= 0}
         downDisabled={!visitorId || credits.downvotesRemaining <= 0}

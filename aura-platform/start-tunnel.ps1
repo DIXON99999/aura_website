@@ -17,7 +17,6 @@ if (!(Get-Command cloudflared -ErrorAction SilentlyContinue)) {
 function Stop-AllServices {
     Write-Host "Shutting down all services..." -ForegroundColor Yellow
     Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Get-Process -Name "bun" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Write-Host "All services stopped." -ForegroundColor Green
 }

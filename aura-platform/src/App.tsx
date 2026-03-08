@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Nav } from '@/components/layout'
-import { Button } from '@/components/ui/button'
 import { useSeedData } from '@/hooks'
 import { useInitialized, useAuthStore, useAuraStore } from '@/stores'
 import {
@@ -30,8 +29,6 @@ import {
 function App() {
   useSeedData()
   const initialized = useInitialized()
-  const initializationError = useAuraStore((s) => s.initializationError)
-  const fetchAllData = useAuraStore((s) => s.fetchAllData)
   const checkSession = useAuthStore((s) => s.checkSession)
   const user = useAuthStore((s) => s.user)
   const loadUserProfile = useAuraStore((s) => s.loadUserProfile)
@@ -50,18 +47,6 @@ function App() {
   }, [user, userProfiles, loadUserProfile])
 
   if (!initialized) {
-    if (initializationError) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center px-6">
-          <div className="max-w-md text-center space-y-4">
-            <div className="text-lg font-semibold">Could not load the app</div>
-            <div className="text-sm text-muted-foreground">{initializationError}</div>
-            <Button onClick={() => void fetchAllData()}>Retry</Button>
-          </div>
-        </div>
-      )
-    }
-
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>

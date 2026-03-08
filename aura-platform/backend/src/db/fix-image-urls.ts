@@ -5,7 +5,6 @@ const { Pool } = pg
 async function fixImageUrls() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('digitalocean') ? { rejectUnauthorized: false } : undefined,
   })
 
   try {

@@ -42,7 +42,7 @@ async function initAuraFarmTables() {
       comment_id TEXT NOT NULL,
       visitor_id TEXT NOT NULL,
       direction TEXT NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL
+      "timestamp" BIGINT NOT NULL
     )
   `)
 }
@@ -432,8 +432,8 @@ app.post('/:id/vote', async (c) => {
   // Allow multiple votes per farm - always insert a new vote
   const voteId = crypto.randomUUID()
   await pool.query(
-    'INSERT INTO aura_farm_votes (id, visitor_id, farm_id, direction, timestamp) VALUES ($1, $2, $3, $4, $5)',
-    [voteId, visitorId, farmId, direction, new Date().toISOString()]
+    'INSERT INTO aura_farm_votes (id, visitor_id, farm_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5)',
+    [voteId, visitorId, farmId, direction, Date.now()]
   )
 
   await pool.query('UPDATE aura_farms SET aura_score = $1 WHERE id = $2', [newScore, farmId])
@@ -654,8 +654,8 @@ app.post('/:id/comments/:commentId/vote', async (c) => {
   } else {
     const voteId = crypto.randomUUID()
     await pool.query(
-      'INSERT INTO aura_farm_comment_votes (id, comment_id, visitor_id, direction, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [voteId, commentId, visitorId, direction, new Date().toISOString()]
+      'INSERT INTO aura_farm_comment_votes (id, comment_id, visitor_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5)',
+      [voteId, commentId, visitorId, direction, Date.now()]
     )
     await pool.query('UPDATE aura_farm_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta, commentId])
   }

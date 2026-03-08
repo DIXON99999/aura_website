@@ -179,7 +179,7 @@ app.get('/players', async (c) => {
   if (countryId) { sql += ` AND country_id = $${paramIndex++}`; params.push(countryId) }
   if (search) { sql += ` AND LOWER(name) LIKE $${paramIndex++}`; params.push(`%${search.toLowerCase()}%`) }
 
-  sql += ' ORDER BY aura_score DESC LIMIT 20'
+  sql += ' ORDER BY aura_score DESC'
   const result = await pool.query(sql, params)
   return c.json(result.rows.map(r => toApiEntity(r as unknown as Record<string, unknown>, 'player')))
 })

@@ -1,4 +1,5 @@
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowBigUp, ArrowBigDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CommentVotesProps {
@@ -14,41 +15,67 @@ export function CommentVotes({
   onVote,
   className,
 }: CommentVotesProps) {
-  const scoreColor = score > 0 ? 'text-green-500' : score < 0 ? 'text-red-500' : 'text-muted-foreground'
+  const [voting, setVoting] = useState(false)
 
-  const handleVote = (direction: 'UP' | 'DOWN') => {
-    console.log('CommentVotes: voting', direction, 'current score:', score)
-    onVote(direction)
+  const scoreColor = currentVote === 'UP'
+    ? 'text-green-500'
+    : currentVote === 'DOWN'
+      ? 'text-red-500'
+      : score > 0
+        ? 'text-green-500'
+        : score < 0
+          ? 'text-red-500'
+          : 'text-muted-foreground'
+
+  const handleVote = async (direction: 'UP' | 'DOWN') => {
+    if (voting) return
+    setVoting(true)
+    try {
+      onVote(direction)
+    } finally {
+      // Brief cooldown to prevent rapid double-clicks
+      setTimeout(() => setVoting(false), 300)
+    }
   }
 
   return (
-    <div className={cn('flex items-center rounded-full bg-accent/50 hover:bg-accent', className)}>
+    <div className={cn('flex items-center gap-0.5 rounded-full bg-accent/50 hover:bg-accent transition-colors', className)}>
       <button
         onClick={() => handleVote('UP')}
+        disabled={voting}
         className={cn(
-          'p-1.5 rounded-full transition-colors',
+          'p-1 rounded-full transition-all',
           currentVote === 'UP'
-            ? 'text-green-500 bg-green-500/20'
+            ? 'text-green-500 scale-110'
             : 'text-muted-foreground hover:text-green-500 hover:bg-green-500/10'
         )}
+        title={currentVote === 'UP' ? 'Remove upvote' : 'Upvote'}
       >
-        <ChevronUp className="w-4 h-4" />
+        <ArrowBigUp
+          className="w-5 h-5"
+          fill={currentVote === 'UP' ? 'currentColor' : 'none'}
+        />
       </button>
 
-      <span className={cn('text-xs font-bold tabular-nums min-w-[1rem] text-center', scoreColor)}>
+      <span className={cn('text-xs font-bold tabular-nums min-w-[1.25rem] text-center select-none', scoreColor)}>
         {score}
       </span>
 
       <button
         onClick={() => handleVote('DOWN')}
+        disabled={voting}
         className={cn(
-          'p-1.5 rounded-full transition-colors',
+          'p-1 rounded-full transition-all',
           currentVote === 'DOWN'
-            ? 'text-red-500 bg-red-500/20'
+            ? 'text-red-500 scale-110'
             : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10'
         )}
+        title={currentVote === 'DOWN' ? 'Remove downvote' : 'Downvote'}
       >
-        <ChevronDown className="w-4 h-4" />
+        <ArrowBigDown
+          className="w-5 h-5"
+          fill={currentVote === 'DOWN' ? 'currentColor' : 'none'}
+        />
       </button>
     </div>
   )

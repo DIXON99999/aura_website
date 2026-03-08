@@ -559,8 +559,8 @@ app.post('/:id/vote', async (c) => {
 
     const voteId = generateId()
     await pool.query(
-      'INSERT INTO event_votes (id, visitor_id, event_id, participant_id, direction, timestamp) VALUES ($1, $2, $3, $4, $5, $6)',
-      [voteId, visitorId, eventId, participantId, direction, new Date().toISOString()]
+      'INSERT INTO event_votes (id, visitor_id, event_id, participant_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5, $6)',
+      [voteId, visitorId, eventId, participantId, direction, Date.now()]
     )
     await pool.query('UPDATE event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participantId])
     if (participant.player_id) {
@@ -1091,8 +1091,8 @@ app.post('/:id/sub-events/:subEventId/vote', async (c) => {
 
   const voteId = generateId()
   await pool.query(
-    'INSERT INTO sub_event_votes (id, visitor_id, sub_event_id, participant_id, direction, timestamp) VALUES ($1, $2, $3, $4, $5, $6)',
-    [voteId, visitorId, subEventId, participantId, direction, new Date().toISOString()]
+    'INSERT INTO sub_event_votes (id, visitor_id, sub_event_id, participant_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5, $6)',
+    [voteId, visitorId, subEventId, participantId, direction, Date.now()]
   )
   await pool.query('UPDATE sub_event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participantId])
   await pool.query('UPDATE event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, subParticipant.leaderboard_participant_id])
@@ -1268,7 +1268,7 @@ app.post('/:id/sub-events/:subEventId/comments/:commentId/vote', async (c) => {
     } else {
       const voteId = generateId()
       await pool.query(
-        'INSERT INTO sub_event_comment_votes (id, comment_id, visitor_id, direction, created_at) VALUES ($1, $2, $3, $4, $5)',
+        'INSERT INTO sub_event_comment_votes (id, comment_id, visitor_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5)',
         [voteId, commentId, visitorId, direction, Date.now()]
       )
       await pool.query('UPDATE sub_event_comments SET vote_count = vote_count + $1 WHERE id = $2', [delta, commentId])

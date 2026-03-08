@@ -205,8 +205,8 @@ app.post('/', async (c) => {
 
   const voteId = crypto.randomUUID()
   await pool.query(
-    'INSERT INTO votes (id, visitor_id, entity_id, entity_type, direction, timestamp) VALUES ($1, $2, $3, $4, $5, $6)',
-    [voteId, visitorId, entityId, entityType, direction, new Date().toISOString()]
+    'INSERT INTO votes (id, visitor_id, entity_id, entity_type, direction, "timestamp") VALUES ($1, $2, $3, $4, $5, $6)',
+    [voteId, visitorId, entityId, entityType, direction, Date.now()]
   )
 
   await updateAuraScore(entityType, entityId, auraDelta)
