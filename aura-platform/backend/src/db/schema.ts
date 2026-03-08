@@ -270,6 +270,53 @@ export const auraFarmVotes = pgTable('aura_farm_votes', {
   timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
 })
 
+// Notifications
+export const notifications = pgTable('notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(), // The user being notified
+  type: text('type').notNull(), // 'mention', 'reply', etc.
+  sourceType: text('source_type').notNull(), // 'aura_farm_comment', 'sub_event_comment'
+  sourceId: text('source_id').notNull(), // The comment ID
+  sourceUrl: text('source_url').notNull(), // URL to navigate to
+  fromUserId: text('from_user_id'), // Who triggered the notification
+  fromUsername: text('from_username').notNull(),
+  content: text('content').notNull(), // Preview of the content
+  read: boolean('read').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Aura Farm Comments
+export const auraFarmComments = pgTable('aura_farm_comments', {
+  id: text('id').primaryKey(),
+  farmId: text('farm_id').notNull(),
+  visitorId: text('visitor_id').notNull(),
+  userId: text('user_id'),
+  username: text('username').notNull(),
+  content: text('content'),
+  parentId: text('parent_id'),
+  voteCount: integer('vote_count').notNull().default(0),
+  imageUrl: text('image_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Aura Farm Comment Votes
+export const auraFarmCommentVotes = pgTable('aura_farm_comment_votes', {
+  id: text('id').primaryKey(),
+  visitorId: text('visitor_id').notNull(),
+  commentId: text('comment_id').notNull(),
+  direction: text('direction').notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
+})
+
+// Sub Event Comment Votes
+export const subEventCommentVotes = pgTable('sub_event_comment_votes', {
+  id: text('id').primaryKey(),
+  visitorId: text('visitor_id').notNull(),
+  commentId: text('comment_id').notNull(),
+  direction: text('direction').notNull(),
+  timestamp: timestamp('timestamp', { withTimezone: true }).notNull(),
+})
+
 // Type exports
 export type Country = typeof countries.$inferSelect
 export type Game = typeof games.$inferSelect
@@ -295,3 +342,7 @@ export type SubEventParticipant = typeof subEventParticipants.$inferSelect
 export type SubEventVote = typeof subEventVotes.$inferSelect
 export type AuraFarm = typeof auraFarms.$inferSelect
 export type AuraFarmVote = typeof auraFarmVotes.$inferSelect
+export type Notification = typeof notifications.$inferSelect
+export type AuraFarmComment = typeof auraFarmComments.$inferSelect
+export type AuraFarmCommentVote = typeof auraFarmCommentVotes.$inferSelect
+export type SubEventCommentVote = typeof subEventCommentVotes.$inferSelect

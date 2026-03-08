@@ -168,6 +168,7 @@ app.get('/players', async (c) => {
   const gameId = c.req.query('gameId')
   const organisationId = c.req.query('organisationId')
   const countryId = c.req.query('countryId')
+  const search = c.req.query('search')
 
   let sql = 'SELECT * FROM players WHERE 1=1'
   const params: string[] = []
@@ -176,8 +177,9 @@ app.get('/players', async (c) => {
   if (gameId) { sql += ` AND main_game_id = $${paramIndex++}`; params.push(gameId) }
   if (organisationId) { sql += ` AND organisation_id = $${paramIndex++}`; params.push(organisationId) }
   if (countryId) { sql += ` AND country_id = $${paramIndex++}`; params.push(countryId) }
+  if (search) { sql += ` AND LOWER(name) LIKE $${paramIndex++}`; params.push(`%${search.toLowerCase()}%`) }
 
-  sql += ' ORDER BY aura_score DESC'
+  sql += ' ORDER BY aura_score DESC LIMIT 20'
   const result = await pool.query(sql, params)
   return c.json(result.rows.map(r => toApiEntity(r as unknown as Record<string, unknown>, 'player')))
 })

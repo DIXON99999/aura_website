@@ -132,7 +132,7 @@ export function VoteButtons({
         </span>
       ))}
 
-      {!hideButtons && (
+      {!hideButtons ? (
         <button
           onClick={(e) => handleVote('UP', e)}
           disabled={upDisabled}
@@ -151,6 +151,10 @@ export function VoteButtons({
         >
           <ChevronUp className={sizeClasses[size].icon} />
         </button>
+      ) : (
+        <div className={cn(isPill ? 'p-1.5' : sizeClasses[size].button)}>
+          <div className={cn(sizeClasses[size].icon, 'invisible')} />
+        </div>
       )}
 
       {!hideScore && (
@@ -167,7 +171,7 @@ export function VoteButtons({
         </div>
       )}
 
-      {!hideButtons && (
+      {!hideButtons ? (
         <button
           onClick={(e) => handleVote('DOWN', e)}
           disabled={downDisabled}
@@ -186,6 +190,10 @@ export function VoteButtons({
         >
           <ChevronDown className={sizeClasses[size].icon} />
         </button>
+      ) : (
+        <div className={cn(isPill ? 'p-1.5' : sizeClasses[size].button)}>
+          <div className={cn(sizeClasses[size].icon, 'invisible')} />
+        </div>
       )}
     </div>
   )

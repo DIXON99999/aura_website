@@ -20,15 +20,15 @@ function getVisitorId(): string {
 export function AuraFarmsPage() {
   const [farms, setFarms] = useState<AuraFarm[]>([])
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState<'new' | 'popular' | 'oldest'>('new')
+  const [sort, setSort] = useState<'new' | 'popular' | 'unpopular' | 'oldest'>('new')
   const [sortOpen, setSortOpen] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [votes, setVotes] = useState<Record<string, 'UP' | 'DOWN'>>({})
   const credits = useAuraStore((s) => s.credits)
   const setCredits = useAuraStore((s) => s.setCredits)
-  const sortLabels: Record<'new' | 'popular' | 'oldest', string> = {
+  const sortLabels: Record<'new' | 'popular' | 'unpopular' | 'oldest', string> = {
     new: 'New',
     popular: 'Most Popular',
+    unpopular: 'Least Popular',
     oldest: 'Oldest',
   }
 
@@ -43,80 +43,23 @@ export function AuraFarmsPage() {
     return () => clearTimeout(timeout)
   }, [search, sort])
 
-  useEffect(() => {
-    // Load votes for all farms
-    const loadVotes = async () => {
-      const visitorId = getVisitorId()
-      const voteMap: Record<string, 'UP' | 'DOWN'> = {}
-      for (const farm of farms) {
-        try {
-          const farmVotes = await api.getAuraFarmVotes(farm.id, visitorId)
-          if (farmVotes.length > 0) {
-            voteMap[farm.id] = farmVotes[0].direction
-          }
-        } catch {
-          // Ignore
-        }
-      }
-      setVotes(voteMap)
-    }
-    if (farms.length > 0) {
-      loadVotes()
-    }
-  }, [farms])
-
   const handleVote = async (farmId: string, direction: 'UP' | 'DOWN') => {
-    const visitorId = getVisitorId()
-    const currentVote = votes[farmId]
-
     // Check credits
-    if (!currentVote) {
-      if (direction === 'UP' && credits.upvotesRemaining <= 0) return
-      if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
-    }
+    if (direction === 'UP' && credits.upvotesRemaining <= 0) return
+    if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
+
+    const visitorId = getVisitorId()
 
     try {
-      if (currentVote === direction) {
-        // Remove vote
-        const result = await api.removeAuraFarmVote(farmId, { visitorId })
-        setFarms(farms.map(f => f.id === farmId ? { ...f, auraScore: result.auraScore } : f))
-        setVotes(prev => {
-          const next = { ...prev }
-          delete next[farmId]
-          return next
-        })
-        // Restore credit
-        if (direction === 'UP') {
-          setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining + 1 })
-        } else {
-          setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining + 1 })
-        }
+      // Always add a new vote (multiple votes allowed per farm)
+      const result = await api.voteAuraFarm(farmId, { visitorId, direction })
+      setFarms(farms.map(f => f.id === farmId ? { ...f, auraScore: result.auraScore } : f))
+
+      // Deduct credit
+      if (direction === 'UP') {
+        setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
       } else {
-        // New vote or change
-        const result = await api.voteAuraFarm(farmId, { visitorId, direction })
-        setFarms(farms.map(f => f.id === farmId ? { ...f, auraScore: result.auraScore } : f))
-        setVotes(prev => ({ ...prev, [farmId]: direction }))
-        // Deduct credit
-        if (!currentVote) {
-          if (direction === 'UP') {
-            setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
-          } else {
-            setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining - 1 })
-          }
-        } else {
-          // Changing vote: restore old, deduct new
-          if (currentVote === 'UP') {
-            setCredits({
-              upvotesRemaining: credits.upvotesRemaining + 1,
-              downvotesRemaining: credits.downvotesRemaining - 1,
-            })
-          } else {
-            setCredits({
-              upvotesRemaining: credits.upvotesRemaining - 1,
-              downvotesRemaining: credits.downvotesRemaining + 1,
-            })
-          }
-        }
+        setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining - 1 })
       }
     } catch {
       // Ignore
@@ -147,7 +90,7 @@ export function AuraFarmsPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-48 p-1" align="start">
-              {(['new', 'popular', 'oldest'] as const).map((option) => (
+              {(['new', 'popular', 'unpopular', 'oldest'] as const).map((option) => (
                 <button
                   key={option}
                   onClick={() => {
@@ -171,44 +114,40 @@ export function AuraFarmsPage() {
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3">
-            {farms.map(farm => {
-              const currentVote = votes[farm.id]
-              return (
-                <Link
-                  key={farm.id}
-                  to={`/aura-farms/${farm.id}`}
-                  className="block mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
-                >
-                  {farm.imageUrl && (
-                    <div className="relative w-full">
-                      <img
-                        src={farm.imageUrl}
-                        alt={farm.title}
-                        className="w-full h-auto object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 p-2">
-                    <VoteButtons
-                      score={farm.auraScore}
-                      currentVote={currentVote}
-                      onVote={(dir) => handleVote(farm.id, dir)}
-                      upDisabled={!currentVote && credits.upvotesRemaining <= 0}
-                      downDisabled={!currentVote && credits.downvotesRemaining <= 0}
-                      size="sm"
-                      layout="vertical"
+            {farms.map(farm => (
+              <Link
+                key={farm.id}
+                to={`/aura-farms/${farm.id}`}
+                className="block mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
+              >
+                {farm.imageUrl && (
+                  <div className="relative w-full">
+                    <img
+                      src={farm.imageUrl}
+                      alt={farm.title}
+                      className="w-full h-auto object-cover"
                     />
-                    <div className="flex-1 min-w-0">
-                      <h2 className="font-medium text-sm line-clamp-2">{farm.title}</h2>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {farm.ownerName && <>by {farm.ownerName} · </>}
-                        {new Date(farm.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
                   </div>
-                </Link>
-              )
-            })}
+                )}
+                <div className="flex items-center gap-2 p-2">
+                  <VoteButtons
+                    score={farm.auraScore}
+                    onVote={(dir) => handleVote(farm.id, dir)}
+                    upDisabled={credits.upvotesRemaining <= 0}
+                    downDisabled={credits.downvotesRemaining <= 0}
+                    size="sm"
+                    layout="vertical"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h2 className="font-medium text-sm line-clamp-2">{farm.title}</h2>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {farm.ownerName && <>by {farm.ownerName} · </>}
+                      {new Date(farm.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>

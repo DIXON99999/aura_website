@@ -20,6 +20,7 @@ import { useAuthStore, useAuraStore } from '@/stores'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NotificationBell } from '@/components/ui/notification-bell'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
@@ -212,6 +213,9 @@ export function Nav() {
                   <RefreshCw className={cn("w-3 h-3", refreshing && "animate-spin")} />
                 </button>
               </div>
+
+              {/* Notification Bell */}
+              <NotificationBell userId={user.id} />
 
               <div className="relative" ref={dropdownRef}>
                 <button

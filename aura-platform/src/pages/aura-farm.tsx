@@ -3,7 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { api, type AuraFarm, type AuraFarmComment } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { VoteButtons } from '@/components/ui/vote-buttons'
+import { MentionText } from '@/components/ui/mention-text'
+import { MentionInput } from '@/components/ui/mention-input'
 import { Trash2, ArrowLeft, ExternalLink, Edit2, Save, X, Upload, MessageSquare, Image, Link as LinkIcon } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
 
@@ -116,7 +119,9 @@ function CommentItem({
           <>
             {/* Content */}
             {comment.content && (
-              <p className="text-sm leading-relaxed mb-2 pl-8">{comment.content}</p>
+              <p className="text-sm leading-relaxed mb-2 pl-8">
+                <MentionText content={comment.content} />
+              </p>
             )}
 
             {/* Image/GIF */}
@@ -212,13 +217,12 @@ function CommentItem({
                       </Button>
                     </div>
                   )}
-                  <textarea
+                  <MentionInput
                     value={replyContent}
-                    onChange={(e) => onReplyContentChange(e.target.value)}
-                    placeholder="What are your thoughts?"
+                    onChange={onReplyContentChange}
+                    placeholder="What are your thoughts? (type @ to mention)"
                     autoFocus
                     rows={3}
-                    className="w-full resize-none bg-transparent px-3 py-2 text-sm focus:outline-none"
                   />
                   <div className="flex items-center justify-between px-2 py-2 border-t bg-accent/20">
                     <div className="flex items-center gap-1">
@@ -314,7 +318,6 @@ export function AuraFarmPage() {
   const setCredits = useAuraStore((s) => s.setCredits)
   const [farm, setFarm] = useState<AuraFarm | null>(null)
   const [loading, setLoading] = useState(true)
-  const [vote, setVote] = useState<'UP' | 'DOWN' | null>(null)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -353,12 +356,6 @@ export function AuraFarmPage() {
       try {
         const farmData = await api.getAuraFarm(id)
         setFarm(farmData)
-
-        const visitorId = getVisitorId()
-        const votes = await api.getAuraFarmVotes(id, visitorId)
-        if (votes.length > 0) {
-          setVote(votes[0].direction)
-        }
       } catch {
         navigate('/aura-farms')
       } finally {
@@ -396,52 +393,22 @@ export function AuraFarmPage() {
   const handleVote = async (direction: 'UP' | 'DOWN') => {
     if (!farm) return
 
+    // Check credits
+    if (direction === 'UP' && credits.upvotesRemaining <= 0) return
+    if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
+
     const visitorId = getVisitorId()
 
-    // Check credits
-    if (!vote) {
-      if (direction === 'UP' && credits.upvotesRemaining <= 0) return
-      if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
-    }
-
     try {
-      if (vote === direction) {
-        // Remove vote
-        const result = await api.removeAuraFarmVote(farm.id, { visitorId })
-        setFarm({ ...farm, auraScore: result.auraScore })
-        setVote(null)
-        // Restore credit
-        if (direction === 'UP') {
-          setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining + 1 })
-        } else {
-          setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining + 1 })
-        }
+      // Always add a new vote (multiple votes allowed per farm)
+      const result = await api.voteAuraFarm(farm.id, { visitorId, direction })
+      setFarm({ ...farm, auraScore: result.auraScore })
+
+      // Deduct credit
+      if (direction === 'UP') {
+        setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
       } else {
-        // New vote or change
-        const result = await api.voteAuraFarm(farm.id, { visitorId, direction })
-        setFarm({ ...farm, auraScore: result.auraScore })
-        // Deduct credit
-        if (!vote) {
-          if (direction === 'UP') {
-            setCredits({ ...credits, upvotesRemaining: credits.upvotesRemaining - 1 })
-          } else {
-            setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining - 1 })
-          }
-        } else {
-          // Changing vote
-          if (vote === 'UP') {
-            setCredits({
-              upvotesRemaining: credits.upvotesRemaining + 1,
-              downvotesRemaining: credits.downvotesRemaining - 1,
-            })
-          } else {
-            setCredits({
-              upvotesRemaining: credits.upvotesRemaining - 1,
-              downvotesRemaining: credits.downvotesRemaining + 1,
-            })
-          }
-        }
-        setVote(direction)
+        setCredits({ ...credits, downvotesRemaining: credits.downvotesRemaining - 1 })
       }
     } catch {
       // Ignore
@@ -696,10 +663,9 @@ export function AuraFarmPage() {
             <div className="flex items-center gap-4">
               <VoteButtons
                 score={farm.auraScore}
-                currentVote={vote}
                 onVote={handleVote}
-                upDisabled={!vote && credits.upvotesRemaining <= 0}
-                downDisabled={!vote && credits.downvotesRemaining <= 0}
+                upDisabled={credits.upvotesRemaining <= 0}
+                downDisabled={credits.downvotesRemaining <= 0}
                 size="md"
                 layout="vertical"
               />
@@ -829,14 +795,12 @@ export function AuraFarmPage() {
 
           {/* Modern Reddit-style Comment Input */}
           <div className="mb-6 border rounded-xl bg-card overflow-hidden">
-            <textarea
+            <MentionInput
               value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment"
+              onChange={setNewComment}
+              placeholder="Add a comment (type @ to mention users)"
               rows={2}
-              className="w-full resize-none bg-transparent px-4 py-3 text-sm focus:outline-none"
-              onFocus={(e) => e.target.rows = 3}
-              onBlur={(e) => { if (!e.target.value) e.target.rows = 2 }}
+              className="px-4 py-3"
             />
 
             {/* Image URL Input */}

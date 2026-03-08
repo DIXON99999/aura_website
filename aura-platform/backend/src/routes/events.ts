@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
 import type { DbEvent, DbEventParticipant, DbEventVote, DbSession, DbPlayer, DbSubEvent, DbSubEventParticipant, DbSubEventVote, DbSubEventComment } from '../db/index.js'
+import { createNotification, extractMentions, findUsersByUsernames } from './notifications.js'
 
 async function initEventsTables() {
   await pool.query(`
@@ -1183,6 +1184,7 @@ app.get('/:id/sub-events/:subEventId/votes', async (c) => {
 })
 
 app.post('/:id/sub-events/:subEventId/comments', async (c) => {
+  const eventId = c.req.param('id')
   const subEventId = c.req.param('subEventId')
   const body = await c.req.json()
   const { visitorId, content, username, parentId, imageUrl, userId } = body
@@ -1193,11 +1195,35 @@ app.post('/:id/sub-events/:subEventId/comments', async (c) => {
 
   const commentId = generateId()
   const now = new Date()
+  const trimmedContent = content?.trim() || ''
 
   await pool.query(
     'INSERT INTO sub_event_comments (id, sub_event_id, visitor_id, username, content, parent_id, vote_count, image_url, user_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-    [commentId, subEventId, visitorId, username || 'Anonymous', content?.trim() || '', parentId || null, 0, imageUrl || null, userId || null, now.toISOString()]
+    [commentId, subEventId, visitorId, username || 'Anonymous', trimmedContent, parentId || null, 0, imageUrl || null, userId || null, now.toISOString()]
   )
+
+  // Process @mentions and create notifications
+  if (trimmedContent) {
+    const mentions = extractMentions(trimmedContent)
+    if (mentions.length > 0) {
+      const usernameToUserId = await findUsersByUsernames(mentions)
+      for (const [mentionedUsername, mentionedUserId] of usernameToUserId) {
+        // Don't notify yourself
+        if (mentionedUserId !== userId) {
+          await createNotification({
+            userId: mentionedUserId,
+            type: 'mention',
+            sourceType: 'sub_event_comment',
+            sourceId: commentId,
+            sourceUrl: `/events/${eventId}?subEvent=${subEventId}`,
+            fromUserId: userId,
+            fromUsername: username || 'Anonymous',
+            content: trimmedContent.length > 100 ? trimmedContent.substring(0, 100) + '...' : trimmedContent,
+          })
+        }
+      }
+    }
+  }
 
   return c.json({
     id: commentId,
@@ -1205,7 +1231,7 @@ app.post('/:id/sub-events/:subEventId/comments', async (c) => {
     visitorId,
     userId: userId || null,
     username: username || 'Anonymous',
-    content: content?.trim() || '',
+    content: trimmedContent,
     parentId: parentId || null,
     voteCount: 0,
     imageUrl: imageUrl || null,

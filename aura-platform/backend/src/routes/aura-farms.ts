@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { pool, type DbAuraFarm, type DbAuraFarmVote, type DbPlayer } from '../db/index.js'
+import { createNotification, extractMentions, findUsersByUsernames } from './notifications.js'
 
 const app = new Hono()
 
@@ -97,9 +98,11 @@ app.get('/', async (c) => {
   const orderBy =
     sort === 'popular'
       ? 'aura_score DESC, created_at DESC'
-      : sort === 'oldest'
-        ? 'created_at ASC'
-        : 'created_at DESC'
+      : sort === 'unpopular'
+        ? 'aura_score ASC, created_at DESC'
+        : sort === 'oldest'
+          ? 'created_at ASC'
+          : 'created_at DESC'
   let result
 
   if (entityId) {
@@ -420,37 +423,21 @@ app.post('/:id/vote', async (c) => {
   }
   const farm = farmResult.rows[0] as DbAuraFarm
 
-  const existingVoteResult = await pool.query(
-    'SELECT * FROM aura_farm_votes WHERE visitor_id = $1 AND farm_id = $2',
-    [visitorId, farmId]
-  )
-  const existingVote = existingVoteResult.rows.length > 0 ? existingVoteResult.rows[0] as DbAuraFarmVote : null
-
   const voteValue = direction === 'UP' ? 1 : -1
-  let newScore = farm.aura_score
+  const newScore = farm.aura_score + voteValue
 
-  if (existingVote) {
-    if (existingVote.direction === direction) {
-      return c.json({ error: 'Already voted' }, 400)
-    }
-    const scoreDiff = voteValue * 2
-    newScore += scoreDiff
-    await pool.query('UPDATE aura_farm_votes SET direction = $1, timestamp = $2 WHERE id = $3', [direction, new Date().toISOString(), existingVote.id])
-  } else {
-    newScore += voteValue
-    const voteId = crypto.randomUUID()
-    await pool.query(
-      'INSERT INTO aura_farm_votes (id, visitor_id, farm_id, direction, timestamp) VALUES ($1, $2, $3, $4, $5)',
-      [voteId, visitorId, farmId, direction, new Date().toISOString()]
-    )
-  }
+  // Allow multiple votes per farm - always insert a new vote
+  const voteId = crypto.randomUUID()
+  await pool.query(
+    'INSERT INTO aura_farm_votes (id, visitor_id, farm_id, direction, timestamp) VALUES ($1, $2, $3, $4, $5)',
+    [voteId, visitorId, farmId, direction, new Date().toISOString()]
+  )
 
   await pool.query('UPDATE aura_farms SET aura_score = $1 WHERE id = $2', [newScore, farmId])
 
   const table = getEntityTable(farm.entity_type)
   if (table) {
-    const entityScoreDiff = existingVote ? (voteValue * 2) : voteValue
-    await pool.query(`UPDATE ${table} SET aura_score = aura_score + $1 WHERE id = $2`, [entityScoreDiff, farm.entity_id])
+    await pool.query(`UPDATE ${table} SET aura_score = aura_score + $1 WHERE id = $2`, [voteValue, farm.entity_id])
   }
 
   return c.json({
@@ -564,11 +551,35 @@ app.post('/:id/comments', async (c) => {
 
   const commentId = crypto.randomUUID()
   const now = new Date()
+  const trimmedContent = content?.trim() || ''
 
   await pool.query(
     'INSERT INTO aura_farm_comments (id, farm_id, visitor_id, user_id, username, content, parent_id, vote_count, image_url, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-    [commentId, farmId, visitorId, userId || null, username || 'Anonymous', content?.trim() || '', parentId || null, 0, imageUrl || null, now.toISOString()]
+    [commentId, farmId, visitorId, userId || null, username || 'Anonymous', trimmedContent, parentId || null, 0, imageUrl || null, now.toISOString()]
   )
+
+  // Process @mentions and create notifications
+  if (trimmedContent) {
+    const mentions = extractMentions(trimmedContent)
+    if (mentions.length > 0) {
+      const usernameToUserId = await findUsersByUsernames(mentions)
+      for (const [mentionedUsername, mentionedUserId] of usernameToUserId) {
+        // Don't notify yourself
+        if (mentionedUserId !== userId) {
+          await createNotification({
+            userId: mentionedUserId,
+            type: 'mention',
+            sourceType: 'aura_farm_comment',
+            sourceId: commentId,
+            sourceUrl: `/aura-farms/${farmId}`,
+            fromUserId: userId,
+            fromUsername: username || 'Anonymous',
+            content: trimmedContent.length > 100 ? trimmedContent.substring(0, 100) + '...' : trimmedContent,
+          })
+        }
+      }
+    }
+  }
 
   return c.json({
     id: commentId,
@@ -576,7 +587,7 @@ app.post('/:id/comments', async (c) => {
     visitorId,
     userId: userId || null,
     username: username || 'Anonymous',
-    content: content?.trim() || '',
+    content: trimmedContent,
     parentId: parentId || null,
     voteCount: 0,
     imageUrl: imageUrl || null,

@@ -102,11 +102,12 @@ export const api = {
     fetchApi<Entity[]>(gameId ? `/characters?gameId=${gameId}` : '/characters'),
 
   // Players
-  getPlayers: (params?: { gameId?: string; organisationId?: string; countryId?: string }) => {
+  getPlayers: (params?: { gameId?: string; organisationId?: string; countryId?: string; search?: string }) => {
     const query = new URLSearchParams()
     if (params?.gameId) query.set('gameId', params.gameId)
     if (params?.organisationId) query.set('organisationId', params.organisationId)
     if (params?.countryId) query.set('countryId', params.countryId)
+    if (params?.search) query.set('search', params.search)
     const queryStr = query.toString()
     return fetchApi<Entity[]>(`/players${queryStr ? `?${queryStr}` : ''}`)
   },
@@ -422,6 +423,28 @@ export const api = {
     fetchApi<{ success: boolean }>(`/suggestions/${id}`, {
       method: 'DELETE',
     }),
+
+  // Notifications
+  getNotifications: (userId: string, params?: { limit?: number; unreadOnly?: boolean }) => {
+    const query = new URLSearchParams()
+    if (params?.limit) query.set('limit', params.limit.toString())
+    if (params?.unreadOnly) query.set('unreadOnly', 'true')
+    const queryStr = query.toString()
+    return fetchApi<Notification[]>(`/notifications/${userId}${queryStr ? `?${queryStr}` : ''}`)
+  },
+
+  getUnreadNotificationCount: (userId: string) =>
+    fetchApi<{ count: number }>(`/notifications/${userId}/unread-count`),
+
+  markNotificationRead: (notificationId: string) =>
+    fetchApi<{ success: boolean }>(`/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+    }),
+
+  markAllNotificationsRead: (userId: string) =>
+    fetchApi<{ success: boolean }>(`/notifications/${userId}/read-all`, {
+      method: 'PATCH',
+    }),
 }
 
 // Types for API responses
@@ -596,4 +619,18 @@ interface Suggestion {
   createdAt: Date
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion }
+interface Notification {
+  id: string
+  userId: string
+  type: string
+  sourceType: string
+  sourceId: string
+  sourceUrl: string
+  fromUserId: string | null
+  fromUsername: string
+  content: string
+  read: boolean
+  createdAt: Date
+}
+
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification }

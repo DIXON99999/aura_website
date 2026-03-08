@@ -5,6 +5,8 @@ import { useAuthStore, useAuraStore } from '@/stores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { VoteButtons } from '@/components/ui/vote-buttons'
+import { MentionText } from '@/components/ui/mention-text'
+import { MentionInput } from '@/components/ui/mention-input'
 import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Upload, Send, Trash2, X, MessageSquare, Reply, Link as LinkIcon, Image, Smile } from 'lucide-react'
 
 function getVisitorId(): string {
@@ -270,7 +272,9 @@ function CommentItem({
           <>
             {/* Content */}
             {comment.content && (
-              <p className="text-sm leading-relaxed mb-2 pl-8">{comment.content}</p>
+              <p className="text-sm leading-relaxed mb-2 pl-8">
+                <MentionText content={comment.content} />
+              </p>
             )}
 
             {/* Image/GIF */}
@@ -366,13 +370,12 @@ function CommentItem({
                       </Button>
                     </div>
                   )}
-                  <textarea
+                  <MentionInput
                     value={replyContent}
-                    onChange={(e) => onReplyContentChange(e.target.value)}
-                    placeholder="What are your thoughts?"
+                    onChange={onReplyContentChange}
+                    placeholder="What are your thoughts? (type @ to mention)"
                     autoFocus
                     rows={3}
-                    className="w-full resize-none bg-transparent px-3 py-2 text-sm focus:outline-none"
                   />
                   <div className="flex items-center justify-between px-2 py-2 border-t bg-accent/20">
                     <div className="flex items-center gap-1">
@@ -1132,14 +1135,12 @@ export function EventPage() {
 
                 {/* Modern Reddit-style Comment Input */}
                 <div className="mb-6 border rounded-xl bg-card overflow-hidden">
-                  <textarea
+                  <MentionInput
                     value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment"
+                    onChange={setNewComment}
+                    placeholder="Add a comment (type @ to mention users)"
                     rows={2}
-                    className="w-full resize-none bg-transparent px-4 py-3 text-sm focus:outline-none"
-                    onFocus={(e) => e.target.rows = 3}
-                    onBlur={(e) => { if (!e.target.value) e.target.rows = 2 }}
+                    className="px-4 py-3"
                   />
 
                   {/* Image URL Input */}

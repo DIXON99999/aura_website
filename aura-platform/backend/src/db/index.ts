@@ -316,6 +316,71 @@ async function initTables() {
     )
   `)
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      from_user_id TEXT,
+      from_username TEXT NOT NULL,
+      content TEXT NOT NULL,
+      read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS aura_farm_comments (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      visitor_id TEXT NOT NULL,
+      user_id TEXT,
+      username TEXT NOT NULL,
+      content TEXT,
+      parent_id TEXT,
+      vote_count INTEGER NOT NULL DEFAULT 0,
+      image_url TEXT,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS aura_farm_comment_votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      comment_id TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_event_comment_votes (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      comment_id TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp BIGINT NOT NULL
+    )
+  `)
+
+  // Add missing columns to sub_event_comments if they don't exist
+  await pool.query(`
+    DO $$
+    BEGIN
+      ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS username TEXT;
+      ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS user_id TEXT;
+      ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS parent_id TEXT;
+      ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS image_url TEXT;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END $$
+  `)
+
   // Seed CS2 weapons
   const cs2Weapons = [
     { id: 'weapon-cs2-ak47', name: 'AK-47', slug: 'cs2-ak47' },
