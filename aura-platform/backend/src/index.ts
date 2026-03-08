@@ -32,16 +32,25 @@ app.use('*', cors({
 
 // Health check
 app.get('/', (c) => c.json({ status: 'ok', message: 'Aura API' }))
+app.get('/api', (c) => c.json({ status: 'ok', message: 'Aura API' }))
 
-// Routes
+// Routes - mounted at both /api/* (local dev with proxy) and /* (DigitalOcean strips /api prefix)
 app.route('/api', entities)
+app.route('/', entities)
 app.route('/api/votes', votes)
+app.route('/votes', votes)
 app.route('/api/auth', auth)
+app.route('/auth', auth)
 app.route('/api/events', events)
+app.route('/events', events)
 app.route('/api/uploads', uploads)
+app.route('/uploads', uploads)
 app.route('/api/aura-farms', auraFarms)
+app.route('/aura-farms', auraFarms)
 app.route('/api/suggestions', suggestions)
+app.route('/suggestions', suggestions)
 app.route('/api/notifications', notifications)
+app.route('/notifications', notifications)
 
 const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)
