@@ -2,9 +2,13 @@ import pg from 'pg'
 
 const { Pool } = pg
 
+// Strip sslmode from connection string to avoid conflict with our explicit ssl config
+const rawUrl = process.env.DATABASE_URL || ''
+const connectionString = rawUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '')
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('digitalocean') ? { rejectUnauthorized: false } : undefined,
+  connectionString,
+  ssl: rawUrl.includes('digitalocean') ? { rejectUnauthorized: false } : undefined,
 })
 
 export const db = {
