@@ -29,6 +29,8 @@ import {
 function App() {
   useSeedData()
   const initialized = useInitialized()
+  const error = useAuraStore((s) => s.error)
+  const fetchAllData = useAuraStore((s) => s.fetchAllData)
   const checkSession = useAuthStore((s) => s.checkSession)
   const user = useAuthStore((s) => s.user)
   const loadUserProfile = useAuraStore((s) => s.loadUserProfile)
@@ -49,7 +51,16 @@ function App() {
   if (!initialized) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        {error ? (
+          <div className="text-center space-y-4">
+            <div className="text-red-500">Failed to load: {error}</div>
+            <button onClick={() => fetchAllData()} className="px-4 py-2 bg-primary text-primary-foreground rounded-md">
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="text-muted-foreground">Loading...</div>
+        )}
       </div>
     )
   }

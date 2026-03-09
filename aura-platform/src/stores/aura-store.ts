@@ -32,6 +32,7 @@ interface AuraStoreState extends EntitiesState {
   // Loading states
   loading: boolean
   initialized: boolean
+  error: string | null
 
   // Credits
   credits: Credits
@@ -228,6 +229,7 @@ export const useAuraStore = create<AuraStoreState>()(
     userProfiles: {},
     loading: false,
     initialized: false,
+    error: null,
     credits: { upvotesRemaining: 20, downvotesRemaining: 10 },
 
     // ========================================================================
@@ -306,7 +308,7 @@ export const useAuraStore = create<AuraStoreState>()(
         })
       } catch (error) {
         console.error('Failed to fetch data:', error)
-        set((draft) => { draft.loading = false })
+        set((draft) => { draft.loading = false; draft.error = String(error) })
       }
     },
 
