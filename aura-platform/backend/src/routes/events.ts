@@ -523,49 +523,34 @@ app.post('/:id/vote', async (c) => {
     }
   }
 
-  const existingVoteResult = await pool.query(
-    'SELECT * FROM event_votes WHERE visitor_id = $1 AND event_id = $2 AND participant_id = $3',
-    [visitorId, eventId, participantId]
-  )
-  const existingVote = existingVoteResult.rows.length > 0 ? existingVoteResult.rows[0] as DbEventVote : null
-
   const credits = await getOrCreateCredits(visitorId)
-  if (!existingVote) {
-    if (direction === 'UP' && credits.upvotes_remaining <= 0) {
-      return c.json({ error: 'No upvote credits remaining' }, 400)
-    }
-    if (direction === 'DOWN' && credits.downvotes_remaining <= 0) {
-      return c.json({ error: 'No downvote credits remaining' }, 400)
-    }
+  if (direction === 'UP' && credits.upvotes_remaining <= 0) {
+    return c.json({ error: 'No upvote credits remaining' }, 400)
+  }
+  if (direction === 'DOWN' && credits.downvotes_remaining <= 0) {
+    return c.json({ error: 'No downvote credits remaining' }, 400)
   }
 
   const delta = direction === 'UP' ? 1 : -1
 
-  if (existingVote) {
-    if (existingVote.direction === direction) {
-      return c.json({ error: 'Already voted' }, 400)
-    }
-    await pool.query('UPDATE event_votes SET direction = $1, timestamp = $2 WHERE id = $3', [direction, new Date().toISOString(), existingVote.id])
-    await pool.query('UPDATE event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta * 2, participantId])
-    if (participant.player_id) {
-      await pool.query('UPDATE players SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta * 2, participant.player_id])
-    }
+  // Deduct credits
+  if (direction === 'UP') {
+    await pool.query('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
   } else {
-    if (direction === 'UP') {
-      await pool.query('UPDATE visitor_credits SET upvotes_remaining = upvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
-    } else {
-      await pool.query('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
-    }
+    await pool.query('UPDATE visitor_credits SET downvotes_remaining = downvotes_remaining - 1 WHERE visitor_id = $1', [visitorId])
+  }
 
-    const voteId = generateId()
-    await pool.query(
-      'INSERT INTO event_votes (id, visitor_id, event_id, participant_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5, $6)',
-      [voteId, visitorId, eventId, participantId, direction, Date.now()]
-    )
-    await pool.query('UPDATE event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participantId])
-    if (participant.player_id) {
-      await pool.query('UPDATE players SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participant.player_id])
-    }
+  // Insert vote record
+  const voteId = generateId()
+  await pool.query(
+    'INSERT INTO event_votes (id, visitor_id, event_id, participant_id, direction, "timestamp") VALUES ($1, $2, $3, $4, $5, $6)',
+    [voteId, visitorId, eventId, participantId, direction, Date.now()]
+  )
+
+  // Update scores
+  await pool.query('UPDATE event_participants SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participantId])
+  if (participant.player_id) {
+    await pool.query('UPDATE players SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participant.player_id])
   }
 
   const updatedResult = await pool.query('SELECT * FROM event_participants WHERE id = $1', [participantId])

@@ -366,7 +366,6 @@ export function EventPage() {
   const credits = useAuraStore((s) => s.credits)
   const setCredits = useAuraStore((s) => s.setCredits)
   const [event, setEvent] = useState<EventWithParticipants | null>(null)
-  const [votes, setVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -434,14 +433,10 @@ export function EventPage() {
 
     Promise.all([
       api.getEvent(id),
-      api.getEventVotes(id, visitorId),
       api.getSubEvents(id),
     ])
-      .then(([eventData, votesData, subEventsData]) => {
+      .then(([eventData, subEventsData]) => {
         setEvent(eventData)
-        const votesMap = new Map<string, 'UP' | 'DOWN'>()
-        votesData.forEach(v => votesMap.set(v.participantId, v.direction))
-        setVotes(votesMap)
         setSubEvents(subEventsData)
       })
       .catch((err) => setError(err.message))
@@ -485,23 +480,20 @@ export function EventPage() {
   const handleVote = async (participantId: string, direction: 'UP' | 'DOWN') => {
     if (!event) return
 
-    const currentVote = votes.get(participantId)
+    // Check credits
+    if (direction === 'UP' && credits.upvotesRemaining <= 0) return
+    if (direction === 'DOWN' && credits.downvotesRemaining <= 0) return
+
+    // Check for double-click perk (only for upvotes)
+    const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
+    const voteMultiplier = hasDoubleClick ? 2 : 1
 
     try {
-      if (currentVote === direction) {
-        const result = await api.removeEventVote(event.id, { visitorId, participantId })
-        const newVotes = new Map(votes)
-        newVotes.delete(participantId)
-        setVotes(newVotes)
-        setEvent({
-          ...event,
-          participants: event.participants.map(p =>
-            p.id === participantId ? { ...p, auraScore: result.auraScore } : p
-          ).sort((a, b) => b.auraScore - a.auraScore),
-        })
-      } else {
-        const result = await api.voteEventParticipant(event.id, { visitorId, participantId, direction, userId: user?.id })
-        setVotes(new Map(votes).set(participantId, direction))
+      let result
+      for (let i = 0; i < voteMultiplier; i++) {
+        result = await api.voteEventParticipant(event.id, { visitorId, participantId, direction, userId: user?.id })
+      }
+      if (result) {
         setEvent({
           ...event,
           participants: event.participants.map(p =>
@@ -1276,7 +1268,6 @@ export function EventPage() {
             <h2 className="text-lg font-semibold mb-3">Overall Standings</h2>
             <div className="space-y-0.5">
               {event.participants.map((participant, index) => {
-                const vote = votes.get(participant.id)
                 const displayName = participant.player?.name || participant.tempName || 'Unknown'
                 const isRealPlayer = !!participant.player
                 const currentUserPlayerId = user ? userProfiles[user.id] : null
@@ -1314,8 +1305,9 @@ export function EventPage() {
 
                     <VoteButtons
                       score={0}
-                      currentVote={vote}
                       onVote={(dir) => handleVote(participant.id, dir)}
+                      upDisabled={credits.upvotesRemaining <= 0}
+                      downDisabled={credits.downvotesRemaining <= 0}
                       size="sm"
                       layout="horizontal"
                       hideButtons={isSelf}
