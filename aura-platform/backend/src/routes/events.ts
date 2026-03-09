@@ -132,6 +132,14 @@ async function getUserIdFromSession(sessionId: string | undefined): Promise<stri
   return session.user_id
 }
 
+async function getEventByIdOrSlug(idOrSlug: string): Promise<DbEvent | null> {
+  let result = await pool.query('SELECT * FROM events WHERE id = $1', [idOrSlug])
+  if (result.rows.length === 0) {
+    result = await pool.query('SELECT * FROM events WHERE slug = $1', [idOrSlug])
+  }
+  return result.rows.length > 0 ? result.rows[0] as DbEvent : null
+}
+
 async function getOwnerName(ownerId: string): Promise<string | null> {
   let ownerName: string | null = null
   const ownerResult = await pool.query('SELECT email, player_id FROM users WHERE id = $1', [ownerId])
@@ -652,10 +660,14 @@ app.get('/:id/votes', async (c) => {
 })
 
 app.get('/:id/sub-events', async (c) => {
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event) {
+    return c.json([])
+  }
   const result = await pool.query(
     'SELECT * FROM sub_events WHERE leaderboard_id = $1 ORDER BY created_at DESC',
-    [leaderboardId]
+    [event.id]
   )
 
   return c.json(result.rows.map(se => {
@@ -672,12 +684,17 @@ app.get('/:id/sub-events', async (c) => {
 })
 
 app.get('/:id/sub-events/:subEventId', async (c) => {
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
+
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event) {
+    return c.json({ error: 'Event not found' }, 404)
+  }
 
   const subEventResult = await pool.query(
     'SELECT * FROM sub_events WHERE id = $1 AND leaderboard_id = $2',
-    [subEventId, leaderboardId]
+    [subEventId, event.id]
   )
   if (subEventResult.rows.length === 0) {
     return c.json({ error: 'Sub-event not found' }, 404)
@@ -768,10 +785,10 @@ app.post('/:id/sub-events', async (c) => {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
-    const leaderboardId = c.req.param('id')
-    const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [leaderboardId])
+    const idOrSlug = c.req.param('id')
+    const event = await getEventByIdOrSlug(idOrSlug)
 
-    if (eventResult.rows.length === 0 || (eventResult.rows[0] as DbEvent).owner_id !== userId) {
+    if (!event || event.owner_id !== userId) {
       return c.json({ error: 'Not authorized' }, 403)
     }
 
@@ -789,14 +806,14 @@ app.post('/:id/sub-events', async (c) => {
 
     await pool.query(
       'INSERT INTO sub_events (id, leaderboard_id, name, slug, image_url, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [subEventId, leaderboardId, name, slug, imageUrl || null, nowIso]
+      [subEventId, event.id, name, slug, imageUrl || null, nowIso]
     )
 
     if (participantIds && Array.isArray(participantIds)) {
       for (const participantId of participantIds) {
         const existingResult = await pool.query(
           'SELECT * FROM event_participants WHERE id = $1 AND event_id = $2',
-          [participantId, leaderboardId]
+          [participantId, event.id]
         )
         if (existingResult.rows.length > 0) {
           const subParticipantId = generateId()
@@ -810,7 +827,7 @@ app.post('/:id/sub-events', async (c) => {
 
     return c.json({
       id: subEventId,
-      leaderboardId,
+      leaderboardId: event.id,
       name,
       slug,
       imageUrl: imageUrl || null,
@@ -830,11 +847,11 @@ app.patch('/:id/sub-events/:subEventId', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
 
-  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [leaderboardId])
-  if (eventResult.rows.length === 0 || (eventResult.rows[0] as DbEvent).owner_id !== userId) {
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event || event.owner_id !== userId) {
     return c.json({ error: 'Not authorized' }, 403)
   }
 
@@ -870,11 +887,11 @@ app.delete('/:id/sub-events/:subEventId', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
 
-  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [leaderboardId])
-  if (eventResult.rows.length === 0 || (eventResult.rows[0] as DbEvent).owner_id !== userId) {
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event || event.owner_id !== userId) {
     return c.json({ error: 'Not authorized' }, 403)
   }
 
@@ -920,11 +937,11 @@ app.post('/:id/sub-events/:subEventId/participants', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
 
-  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [leaderboardId])
-  if (eventResult.rows.length === 0 || (eventResult.rows[0] as DbEvent).owner_id !== userId) {
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event || event.owner_id !== userId) {
     return c.json({ error: 'Not authorized' }, 403)
   }
 
@@ -933,7 +950,7 @@ app.post('/:id/sub-events/:subEventId/participants', async (c) => {
 
   const leaderboardParticipantResult = await pool.query(
     'SELECT * FROM event_participants WHERE id = $1 AND event_id = $2',
-    [leaderboardParticipantId, leaderboardId]
+    [leaderboardParticipantId, event.id]
   )
   if (leaderboardParticipantResult.rows.length === 0) {
     return c.json({ error: 'Participant not found in leaderboard' }, 404)
@@ -972,12 +989,12 @@ app.delete('/:id/sub-events/:subEventId/participants/:participantId', async (c) 
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
   const participantId = c.req.param('participantId')
 
-  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [leaderboardId])
-  if (eventResult.rows.length === 0 || (eventResult.rows[0] as DbEvent).owner_id !== userId) {
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event || event.owner_id !== userId) {
     return c.json({ error: 'Not authorized' }, 403)
   }
 
@@ -1017,7 +1034,7 @@ app.delete('/:id/sub-events/:subEventId/participants/:participantId', async (c) 
 })
 
 app.post('/:id/sub-events/:subEventId/vote', async (c) => {
-  const leaderboardId = c.req.param('id')
+  const idOrSlug = c.req.param('id')
   const subEventId = c.req.param('subEventId')
   const body = await c.req.json()
   const { visitorId, participantId, direction, userId } = body
@@ -1026,9 +1043,14 @@ app.post('/:id/sub-events/:subEventId/vote', async (c) => {
     return c.json({ error: 'Missing required fields' }, 400)
   }
 
+  const event = await getEventByIdOrSlug(idOrSlug)
+  if (!event) {
+    return c.json({ error: 'Event not found' }, 404)
+  }
+
   const subEventResult = await pool.query(
     'SELECT * FROM sub_events WHERE id = $1 AND leaderboard_id = $2',
-    [subEventId, leaderboardId]
+    [subEventId, event.id]
   )
   if (subEventResult.rows.length === 0) {
     return c.json({ error: 'Sub-event not found' }, 404)
