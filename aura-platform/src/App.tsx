@@ -81,13 +81,13 @@ function App() {
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/events" element={<EventsPage />} />
-          <Route path="/events/:id" element={<EventPage />} />
-          <Route path="/events/:id/sub/:subEventId" element={<EventPage />} />
-          <Route path="/events/:id/edit" element={<EditEventPage />} />
+          <Route path="/events/:slug" element={<EventPage />} />
+          <Route path="/events/:slug/sub/:subEventId" element={<EventPage />} />
+          <Route path="/events/:slug/edit" element={<EditEventPage />} />
           <Route path="/create-event" element={<CreateEventPage />} />
           <Route path="/my-events" element={<MyEventsPage />} />
           <Route path="/aura-farms" element={<AuraFarmsPage />} />
-          <Route path="/aura-farms/:id" element={<AuraFarmPage />} />
+          <Route path="/aura-farms/:slug" element={<AuraFarmPage />} />
           <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
           <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
           <Route path="/:entityType/:slug" element={<EntityPage />} />

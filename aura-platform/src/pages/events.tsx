@@ -46,7 +46,7 @@ export function EventsPage() {
             {events.map(event => (
               <Link
                 key={event.id}
-                to={`/events/${event.id}`}
+                to={`/events/${event.slug}`}
                 className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors overflow-hidden"
               >
                 {event.imageUrl && (

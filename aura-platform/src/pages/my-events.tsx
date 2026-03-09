@@ -56,7 +56,7 @@ export function MyEventsPage() {
             {events.map(event => (
               <Link
                 key={event.id}
-                to={`/events/${event.id}`}
+                to={`/events/${event.slug}`}
                 className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors overflow-hidden"
               >
                 {event.imageUrl && (
@@ -80,7 +80,7 @@ export function MyEventsPage() {
                     </div>
                     <div className="flex items-center">
                       <Link
-                        to={`/events/${event.id}/edit`}
+                        to={`/events/${event.slug}/edit`}
                         onClick={(e) => e.stopPropagation()}
                         className="p-1.5 rounded hover:bg-background"
                       >

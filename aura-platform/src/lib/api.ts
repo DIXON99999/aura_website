@@ -575,6 +575,7 @@ interface SubEventWithParticipants extends SubEvent {
 interface AuraFarm {
   id: string
   title: string
+  slug: string | null
   description: string | null
   entityId: string
   entityType: string

@@ -133,7 +133,7 @@ export function AuraFarmsPage() {
             {farms.map(farm => (
               <Link
                 key={farm.id}
-                to={`/aura-farms/${farm.id}`}
+                to={`/aura-farms/${farm.slug || farm.id}`}
                 className="block mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
               >
                 {farm.imageUrl && (

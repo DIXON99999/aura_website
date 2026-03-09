@@ -358,7 +358,7 @@ function CommentItem({
 }
 
 export function EventPage() {
-  const { id, subEventId } = useParams<{ id: string; subEventId?: string }>()
+  const { slug, subEventId } = useParams<{ slug: string; subEventId?: string }>()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const userProfiles = useAuraStore((s) => s.userProfiles)
@@ -429,11 +429,11 @@ export function EventPage() {
   }
 
   useEffect(() => {
-    if (!id) return
+    if (!slug) return
 
     Promise.all([
-      api.getEvent(id),
-      api.getSubEvents(id),
+      api.getEvent(slug),
+      api.getSubEvents(slug),
     ])
       .then(([eventData, subEventsData]) => {
         setEvent(eventData)
@@ -441,24 +441,24 @@ export function EventPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [id, visitorId])
+  }, [slug, visitorId])
 
   // Load sub-event from URL parameter
   useEffect(() => {
-    if (subEventId && id && !loading) {
+    if (subEventId && slug && !loading) {
       loadSubEvent(subEventId)
     } else if (!subEventId) {
       setSelectedSubEvent(null)
     }
-  }, [subEventId, id, loading])
+  }, [subEventId, slug, loading])
 
   const loadSubEvent = async (subEventIdToLoad: string) => {
-    if (!id) return
+    if (!slug) return
     try {
       const [subEventData, votesData, commentVotesData] = await Promise.all([
-        api.getSubEvent(id, subEventIdToLoad),
-        api.getSubEventVotes(id, subEventIdToLoad, visitorId),
-        api.getCommentVotes(id, subEventIdToLoad, visitorId),
+        api.getSubEvent(slug, subEventIdToLoad),
+        api.getSubEventVotes(slug, subEventIdToLoad, visitorId),
+        api.getCommentVotes(slug, subEventIdToLoad, visitorId),
       ])
       setSelectedSubEvent(subEventData)
       setEditName(subEventData.name)
@@ -511,7 +511,7 @@ export function EventPage() {
   }
 
   const handleSubEventVote = async (participantId: string, direction: 'UP' | 'DOWN') => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     // Check credits
     if (direction === 'UP' && credits.upvotesRemaining <= 0) return
@@ -525,7 +525,7 @@ export function EventPage() {
       // Call API multiple times for double-click perk
       let result
       for (let i = 0; i < voteMultiplier; i++) {
-        result = await api.voteSubEventParticipant(id, selectedSubEvent.id, { visitorId, participantId, direction, userId: user?.id })
+        result = await api.voteSubEventParticipant(slug, selectedSubEvent.id, { visitorId, participantId, direction, userId: user?.id })
       }
 
       if (result) {
@@ -542,7 +542,7 @@ export function EventPage() {
         }
       }
 
-      const updatedEvent = await api.getEvent(id)
+      const updatedEvent = await api.getEvent(slug)
       setEvent(updatedEvent)
     } catch (err) {
       console.error('Sub-event vote failed:', err)
@@ -550,12 +550,12 @@ export function EventPage() {
   }
 
   const handleCreateSubEvent = async () => {
-    if (!id || !newSubEventName.trim() || selectedParticipantIds.length === 0) return
+    if (!slug || !newSubEventName.trim() || selectedParticipantIds.length === 0) return
 
     setCreatingSubEvent(true)
     setSubEventError('')
     try {
-      const newSubEvent = await api.createSubEvent(id, {
+      const newSubEvent = await api.createSubEvent(slug, {
         name: newSubEventName.trim(),
         participantIds: selectedParticipantIds,
         imageUrl: newSubEventImage || undefined,
@@ -566,7 +566,7 @@ export function EventPage() {
       setSelectedParticipantIds([])
       setShowCreateSubEvent(false)
       setParticipantSearch('')
-      navigate(`/events/${id}/sub/${newSubEvent.id}`)
+      navigate(`/events/${slug}/sub/${newSubEvent.id}`)
     } catch (err) {
       console.error('Failed to create sub-event:', err)
       setSubEventError((err as Error).message || 'Failed to create sub-event')
@@ -576,15 +576,15 @@ export function EventPage() {
   }
 
   const handleDeleteSubEvent = async () => {
-    if (!id || !confirmDialog.subEventId) return
+    if (!slug || !confirmDialog.subEventId) return
 
     try {
-      await api.deleteSubEvent(id, confirmDialog.subEventId)
+      await api.deleteSubEvent(slug, confirmDialog.subEventId)
       setSubEvents(subEvents.filter(se => se.id !== confirmDialog.subEventId))
       if (selectedSubEvent?.id === confirmDialog.subEventId) {
-        navigate(`/events/${id}`)
+        navigate(`/events/${slug}`)
       }
-      const updatedEvent = await api.getEvent(id)
+      const updatedEvent = await api.getEvent(slug)
       setEvent(updatedEvent)
     } catch (err) {
       console.error('Failed to delete sub-event:', err)
@@ -594,11 +594,11 @@ export function EventPage() {
   }
 
   const handleSaveSubEventEdit = async () => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     try {
       // Update name and image (send null explicitly to clear image)
-      await api.updateSubEvent(id, selectedSubEvent.id, {
+      await api.updateSubEvent(slug, selectedSubEvent.id, {
         imageUrl: editImageUrl || undefined,
         name: editName.trim() || undefined,
       })
@@ -617,10 +617,10 @@ export function EventPage() {
   }
 
   const handleAddParticipantToSubEvent = async (leaderboardParticipantId: string) => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     try {
-      const newParticipant = await api.addSubEventParticipant(id, selectedSubEvent.id, { leaderboardParticipantId })
+      const newParticipant = await api.addSubEventParticipant(slug, selectedSubEvent.id, { leaderboardParticipantId })
       setEditParticipantIds([...editParticipantIds, leaderboardParticipantId])
       // Update selected sub-event with new participant
       setSelectedSubEvent({
@@ -633,7 +633,7 @@ export function EventPage() {
   }
 
   const handleRemoveParticipantFromSubEvent = async (leaderboardParticipantId: string) => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     // Find the sub-event participant id from the leaderboard participant id
     const subEventParticipant = selectedSubEvent.participants.find(
@@ -642,7 +642,7 @@ export function EventPage() {
     if (!subEventParticipant) return
 
     try {
-      await api.removeSubEventParticipant(id, selectedSubEvent.id, subEventParticipant.id)
+      await api.removeSubEventParticipant(slug, selectedSubEvent.id, subEventParticipant.id)
       setEditParticipantIds(editParticipantIds.filter(pid => pid !== leaderboardParticipantId))
       // Update selected sub-event by removing participant
       setSelectedSubEvent({
@@ -655,13 +655,13 @@ export function EventPage() {
   }
 
   const handleCommentVote = async (commentId: string, direction: 'UP' | 'DOWN') => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     const currentVote = commentVotes.get(commentId)
 
     try {
       console.log('Voting on comment:', commentId, direction)
-      const result = await api.voteComment(id, selectedSubEvent.id, commentId, { visitorId, direction })
+      const result = await api.voteComment(slug, selectedSubEvent.id, commentId, { visitorId, direction })
       console.log('Vote result:', result)
 
       // Update the comment's vote count using functional update to avoid stale state
@@ -689,14 +689,14 @@ export function EventPage() {
   }
 
   const handleAddComment = async (parentId?: string) => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     const content = parentId ? replyContent : newComment
     const imageUrl = parentId ? replyImageUrl : newCommentImage
     if (!content.trim() && !imageUrl) return
 
     try {
-      const comment = await api.addSubEventComment(id, selectedSubEvent.id, {
+      const comment = await api.addSubEventComment(slug, selectedSubEvent.id, {
         visitorId,
         content: content.trim(),
         username: getUsername(),
@@ -732,10 +732,10 @@ export function EventPage() {
   }
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!id || !selectedSubEvent) return
+    if (!slug || !selectedSubEvent) return
 
     try {
-      await api.deleteSubEventComment(id, selectedSubEvent.id, commentId, { visitorId, userId: user?.id })
+      await api.deleteSubEventComment(slug, selectedSubEvent.id, commentId, { visitorId, userId: user?.id })
       const idsToRemove = new Set<string>([commentId])
       const findReplies = (parentId: string) => {
         selectedSubEvent.comments
@@ -816,7 +816,7 @@ export function EventPage() {
         {/* Header section - centered, narrower width */}
         <div className="max-w-2xl mx-auto">
           <button
-            onClick={() => navigate(`/events/${id}`)}
+            onClick={() => navigate(`/events/${slug}`)}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1253,7 +1253,7 @@ export function EventPage() {
             </p>
           </div>
           {isOwner && (
-            <Link to={`/events/${event.id}/edit`}>
+            <Link to={`/events/${event.slug}/edit`}>
               <Button variant="outline" className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4" />
                 Edit
@@ -1482,7 +1482,7 @@ export function EventPage() {
                 <div
                   key={subEvent.id}
                   className="mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] cursor-pointer"
-                  onClick={() => navigate(`/events/${id}/sub/${subEvent.id}`)}
+                  onClick={() => navigate(`/events/${slug}/sub/${subEvent.id}`)}
                 >
                   {subEvent.imageUrl && (
                     <div className="relative w-full">

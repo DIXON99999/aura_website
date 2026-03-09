@@ -252,6 +252,7 @@ export const subEventVotes = pgTable('sub_event_votes', {
 export const auraFarms = pgTable('aura_farms', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
+  slug: text('slug'),
   description: text('description'),
   entityId: text('entity_id').notNull(),
   entityType: text('entity_type').notNull(),

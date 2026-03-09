@@ -325,7 +325,7 @@ function getVisitorId(): string {
 }
 
 export function AuraFarmPage() {
-  const { id } = useParams<{ id: string }>()
+  const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const userProfiles = useAuraStore((s) => s.userProfiles)
@@ -365,11 +365,11 @@ export function AuraFarmPage() {
   }
 
   useEffect(() => {
-    if (!id) return
+    if (!slug) return
 
     const loadFarm = async () => {
       try {
-        const farmData = await api.getAuraFarm(id)
+        const farmData = await api.getAuraFarm(slug)
         setFarm(farmData)
       } catch {
         navigate('/aura-farms')
@@ -379,19 +379,19 @@ export function AuraFarmPage() {
     }
 
     loadFarm()
-  }, [id, navigate])
+  }, [slug, navigate])
 
   // Load comments when farm is loaded
   useEffect(() => {
-    if (!id || !farm) return
+    if (!slug || !farm) return
 
     const loadComments = async () => {
       try {
-        const commentsData = await api.getAuraFarmComments(id)
+        const commentsData = await api.getAuraFarmComments(farm.id)
         setComments(commentsData)
 
         const visitorId = getVisitorId()
-        const votes = await api.getAuraFarmCommentVotes(id, visitorId)
+        const votes = await api.getAuraFarmCommentVotes(farm.id, visitorId)
         const votesMap = new Map<string, 'UP' | 'DOWN'>()
         for (const vote of votes) {
           votesMap.set(vote.commentId, vote.direction)
@@ -403,7 +403,7 @@ export function AuraFarmPage() {
     }
 
     loadComments()
-  }, [id, farm])
+  }, [slug, farm])
 
   const handleVote = async (direction: 'UP' | 'DOWN') => {
     if (!farm) return

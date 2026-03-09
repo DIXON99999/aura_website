@@ -524,7 +524,7 @@ export function EntityPage() {
                         {farms.map(farm => (
                           <Link
                             key={farm.id}
-                            to={`/aura-farms/${farm.id}`}
+                            to={`/aura-farms/${farm.slug || farm.id}`}
                             className="block p-4 rounded-lg border border-border hover:border-primary/50 transition-colors"
                           >
                             <div className="flex items-start gap-3">

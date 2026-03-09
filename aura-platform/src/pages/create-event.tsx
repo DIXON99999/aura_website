@@ -133,7 +133,7 @@ export function CreateEventPage() {
             : { tempName: p.tempName }
         ),
       })
-      navigate(`/events/${event.id}`)
+      navigate(`/events/${event.slug}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {

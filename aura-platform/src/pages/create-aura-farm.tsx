@@ -136,7 +136,7 @@ export function CreateAuraFarmPage() {
         entityType,
         imageUrl: imageUrl.trim() || undefined,
       })
-      navigate(`/aura-farms/${farm.id}`)
+      navigate(`/aura-farms/${farm.slug}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {

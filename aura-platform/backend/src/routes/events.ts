@@ -102,6 +102,27 @@ function generateSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
+async function generateUniqueSlug(name: string, table: string, excludeId?: string): Promise<string> {
+  const baseSlug = generateSlug(name)
+  let slug = baseSlug
+  let suffix = 2
+
+  while (true) {
+    let query = `SELECT id FROM ${table} WHERE slug = $1`
+    const params: string[] = [slug]
+    if (excludeId) {
+      query += ' AND id != $2'
+      params.push(excludeId)
+    }
+    const result = await pool.query(query, params)
+    if (result.rows.length === 0) {
+      return slug
+    }
+    slug = `${baseSlug}-${suffix}`
+    suffix++
+  }
+}
+
 async function getUserIdFromSession(sessionId: string | undefined): Promise<string | null> {
   if (!sessionId) return null
   const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
@@ -203,10 +224,14 @@ app.get('/my', async (c) => {
   return c.json(mapped)
 })
 
-app.get('/:id', async (c) => {
-  const id = c.req.param('id')
-  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [id])
-  
+app.get('/:idOrSlug', async (c) => {
+  const idOrSlug = c.req.param('idOrSlug')
+  // Try to find by ID first, then by slug
+  let eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [idOrSlug])
+  if (eventResult.rows.length === 0) {
+    eventResult = await pool.query('SELECT * FROM events WHERE slug = $1', [idOrSlug])
+  }
+
   if (eventResult.rows.length === 0) {
     return c.json({ error: 'Event not found' }, 404)
   }
@@ -221,7 +246,7 @@ app.get('/:id', async (c) => {
 
   const participantsResult = await pool.query(
     'SELECT * FROM event_participants WHERE event_id = $1 ORDER BY aura_score DESC',
-    [id]
+    [event.id]
   )
   const participants = participantsResult.rows as DbEventParticipant[]
 
@@ -283,7 +308,7 @@ app.post('/', async (c) => {
   }
 
   const eventId = generateId()
-  const slug = generateSlug(name)
+  const slug = await generateUniqueSlug(name, 'events')
   const now = new Date()
   const nowIso = now.toISOString()
 
@@ -339,7 +364,8 @@ app.patch('/:id', async (c) => {
   const { name, isPublic, description, imageUrl } = body
 
   if (name) {
-    await pool.query('UPDATE events SET name = $1, slug = $2 WHERE id = $3', [name, generateSlug(name), id])
+    const newSlug = await generateUniqueSlug(name, 'events', id)
+    await pool.query('UPDATE events SET name = $1, slug = $2 WHERE id = $3', [name, newSlug, id])
   }
   if (isPublic !== undefined) {
     await pool.query('UPDATE events SET is_public = $1 WHERE id = $2', [!!isPublic, id])
@@ -757,7 +783,7 @@ app.post('/:id/sub-events', async (c) => {
     }
 
     const subEventId = generateId()
-    const slug = generateSlug(name)
+    const slug = await generateUniqueSlug(name, 'sub_events')
     const now = new Date()
     const nowIso = now.toISOString()
 
@@ -816,7 +842,8 @@ app.patch('/:id/sub-events/:subEventId', async (c) => {
   const { name, imageUrl } = body
 
   if (name !== undefined && name.trim()) {
-    await pool.query('UPDATE sub_events SET name = $1, slug = $2 WHERE id = $3', [name.trim(), generateSlug(name.trim()), subEventId])
+    const newSlug = await generateUniqueSlug(name.trim(), 'sub_events', subEventId)
+    await pool.query('UPDATE sub_events SET name = $1, slug = $2 WHERE id = $3', [name.trim(), newSlug, subEventId])
   }
   if (imageUrl !== undefined) {
     await pool.query('UPDATE sub_events SET image_url = $1 WHERE id = $2', [imageUrl, subEventId])

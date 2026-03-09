@@ -49,6 +49,54 @@ async function initAuraFarmTables() {
 
 initAuraFarmTables().catch(console.error)
 
+// Add slug column to existing tables and backfill slugs
+async function migrateAuraFarmSlugs() {
+  await pool.query(`ALTER TABLE aura_farms ADD COLUMN IF NOT EXISTS slug TEXT`)
+
+  // Find farms without slugs and generate unique ones
+  const result = await pool.query('SELECT id, title FROM aura_farms WHERE slug IS NULL')
+  for (const row of result.rows as { id: string; title: string }[]) {
+    const baseSlug = row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    let slug = baseSlug
+    let suffix = 2
+
+    while (true) {
+      const existing = await pool.query('SELECT id FROM aura_farms WHERE slug = $1 AND id != $2', [slug, row.id])
+      if (existing.rows.length === 0) break
+      slug = `${baseSlug}-${suffix}`
+      suffix++
+    }
+
+    await pool.query('UPDATE aura_farms SET slug = $1 WHERE id = $2', [slug, row.id])
+  }
+}
+migrateAuraFarmSlugs().catch(console.error)
+
+function generateSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
+async function generateUniqueSlug(name: string, excludeId?: string): Promise<string> {
+  const baseSlug = generateSlug(name)
+  let slug = baseSlug
+  let suffix = 2
+
+  while (true) {
+    let query = 'SELECT id FROM aura_farms WHERE slug = $1'
+    const params: string[] = [slug]
+    if (excludeId) {
+      query += ' AND id != $2'
+      params.push(excludeId)
+    }
+    const result = await pool.query(query, params)
+    if (result.rows.length === 0) {
+      return slug
+    }
+    slug = `${baseSlug}-${suffix}`
+    suffix++
+  }
+}
+
 function getEntityTable(entityType: string): string | null {
   const tables: Record<string, string> = {
     player: 'players',
@@ -135,6 +183,7 @@ app.get('/', async (c) => {
     return {
       id: farm.id,
       title: farm.title,
+      slug: (farm as any).slug || null,
       description: farm.description,
       entityId: farm.entity_id,
       entityType: farm.entity_type,
@@ -186,6 +235,7 @@ app.get('/my', async (c) => {
     return {
       id: farm.id,
       title: farm.title,
+      slug: (farm as any).slug || null,
       description: farm.description,
       entityId: farm.entity_id,
       entityType: farm.entity_type,
@@ -207,9 +257,13 @@ app.get('/my', async (c) => {
   return c.json(enrichedFarms)
 })
 
-app.get('/:id', async (c) => {
-  const id = c.req.param('id')
-  const result = await pool.query('SELECT * FROM aura_farms WHERE id = $1', [id])
+app.get('/:idOrSlug', async (c) => {
+  const idOrSlug = c.req.param('idOrSlug')
+  // Try to find by ID first, then by slug
+  let result = await pool.query('SELECT * FROM aura_farms WHERE id = $1', [idOrSlug])
+  if (result.rows.length === 0) {
+    result = await pool.query('SELECT * FROM aura_farms WHERE slug = $1', [idOrSlug])
+  }
 
   if (result.rows.length === 0) {
     return c.json({ error: 'Aura farm not found' }, 404)
@@ -227,6 +281,7 @@ app.get('/:id', async (c) => {
   return c.json({
     id: farm.id,
     title: farm.title,
+    slug: (farm as any).slug || null,
     description: farm.description,
     entityId: farm.entity_id,
     entityType: farm.entity_type,
@@ -280,16 +335,18 @@ app.post('/', async (c) => {
   }
 
   const id = crypto.randomUUID()
+  const slug = await generateUniqueSlug(title.trim())
   const now = new Date()
 
   await pool.query(
-    'INSERT INTO aura_farms (id, title, description, entity_id, entity_type, owner_id, image_url, aura_score, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8)',
-    [id, title.trim(), description?.trim() || null, entityId, entityType, session.user_id, imageUrl?.trim() || null, now.toISOString()]
+    'INSERT INTO aura_farms (id, title, slug, description, entity_id, entity_type, owner_id, image_url, aura_score, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)',
+    [id, title.trim(), slug, description?.trim() || null, entityId, entityType, session.user_id, imageUrl?.trim() || null, now.toISOString()]
   )
 
   return c.json({
     id,
     title: title.trim(),
+    slug,
     description: description?.trim() || null,
     entityId,
     entityType,
@@ -335,6 +392,10 @@ app.patch('/:id', async (c) => {
   if (title !== undefined) {
     updates.push(`title = $${paramIndex++}`)
     values.push(title.trim())
+    // Also update slug when title changes
+    const newSlug = await generateUniqueSlug(title.trim(), id)
+    updates.push(`slug = $${paramIndex++}`)
+    values.push(newSlug)
   }
   if (description !== undefined) {
     updates.push(`description = $${paramIndex++}`)
@@ -363,6 +424,7 @@ app.patch('/:id', async (c) => {
   return c.json({
     id: updatedFarm.id,
     title: updatedFarm.title,
+    slug: (updatedFarm as any).slug || null,
     description: updatedFarm.description,
     entityId: updatedFarm.entity_id,
     entityType: updatedFarm.entity_type,

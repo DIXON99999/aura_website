@@ -9,7 +9,7 @@ import { MediaUpload } from '@/components/ui/media-upload'
 import { X, Search, UserPlus, Save, Check, ArrowLeft } from 'lucide-react'
 
 export function EditEventPage() {
-  const { id } = useParams<{ id: string }>()
+  const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const [event, setEvent] = useState<EventWithParticipants | null>(null)
@@ -31,9 +31,9 @@ export function EditEventPage() {
       navigate('/signin')
       return
     }
-    if (!id) return
+    if (!slug) return
 
-    api.getEvent(id)
+    api.getEvent(slug)
       .then(eventData => {
         if (eventData.ownerId !== user.id) {
           navigate('/my-events')
@@ -47,7 +47,7 @@ export function EditEventPage() {
       })
       .catch(() => navigate('/my-events'))
       .finally(() => setLoading(false))
-  }, [id, user, navigate])
+  }, [slug, user, navigate])
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -130,7 +130,7 @@ export function EditEventPage() {
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
       })
-      navigate(`/events/${event.id}`)
+      navigate(`/events/${event.slug}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -158,7 +158,7 @@ export function EditEventPage() {
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => navigate(`/events/${id}`)}
+          onClick={() => navigate(`/events/${slug}`)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -317,7 +317,7 @@ export function EditEventPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate(`/events/${event.id}`)}
+              onClick={() => navigate(`/events/${event.slug}`)}
             >
               Cancel
             </Button>

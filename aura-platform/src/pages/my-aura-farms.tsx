@@ -59,7 +59,7 @@ export function MyAuraFarmsPage() {
             {farms.map(farm => (
               <Link
                 key={farm.id}
-                to={`/aura-farms/${farm.id}`}
+                to={`/aura-farms/${farm.slug || farm.id}`}
                 className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
               >
                 <span className={`text-sm font-medium ${farm.auraScore > 0 ? 'text-green-500' : farm.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
