@@ -15,6 +15,7 @@ import {
   Sprout,
   Lightbulb,
   X,
+  Menu,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
 import { api } from '@/lib/api'
@@ -48,6 +49,7 @@ export function Nav() {
   const players = useAuraStore((s) => s.players)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [createDropdownOpen, setCreateDropdownOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [suggestModalOpen, setSuggestModalOpen] = useState(false)
   const [suggestionType, setSuggestionType] = useState('player')
@@ -58,6 +60,7 @@ export function Nav() {
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const createDropdownRef = useRef<HTMLDivElement>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
 
   const handleSubmitSuggestion = async () => {
     if (!suggestionName.trim()) return
@@ -94,6 +97,9 @@ export function Nav() {
       }
       if (createDropdownRef.current && !createDropdownRef.current.contains(event.target as Node)) {
         setCreateDropdownOpen(false)
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -138,7 +144,8 @@ export function Nav() {
           <span className="hidden sm:inline">Suggest</span>
         </button>
 
-        <div className="absolute inset-0 flex items-center justify-center gap-1">
+        {/* Desktop nav - centered */}
+        <div className="absolute inset-0 hidden md:flex items-center justify-center gap-1">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
@@ -154,12 +161,132 @@ export function Nav() {
                 }
               >
                 <item.icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{item.label}</span>
+                <span>{item.label}</span>
               </NavLink>
             ))}
         </div>
 
-        <div className="ml-auto z-10 flex items-center gap-2">
+        {/* Mobile menu area */}
+        <div className="flex md:hidden ml-auto z-10 items-center gap-2">
+          {/* Credits display - compact on mobile */}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border bg-card text-xs">
+            <ChevronUp className="w-3 h-3 text-green-500" />
+            <span className="font-medium text-green-500">{credits.upvotesRemaining}</span>
+            <ChevronDownIcon className="w-3 h-3 text-red-500" />
+            <span className="font-medium text-red-500">{credits.downvotesRemaining}</span>
+          </div>
+
+          {/* Notification bell for mobile */}
+          {user && <NotificationBell userId={user.id} />}
+
+          {/* Hamburger menu */}
+          <div className="relative" ref={mobileMenuRef}>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-lg transition-colors hover:bg-accent text-muted-foreground hover:text-accent-foreground"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
+            {mobileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-card shadow-lg py-1 z-50">
+                {/* Navigation */}
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-accent',
+                        isActive ? 'text-primary font-medium' : 'text-foreground'
+                      )
+                    }
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                  </NavLink>
+                ))}
+
+                {user ? (
+                  <>
+                    <div className="border-t my-1" />
+                    {/* Create options */}
+                    <Link
+                      to="/create-event"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <Trophy className="w-4 h-4" />
+                      Create Leaderboard
+                    </Link>
+                    <Link
+                      to="/create-aura-farm"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <Sprout className="w-4 h-4" />
+                      Create Aura Farm
+                    </Link>
+
+                    <div className="border-t my-1" />
+                    {/* Account options */}
+                    <Link
+                      to="/profile"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <User className="w-4 h-4" />
+                      Profile
+                    </Link>
+                    <Link
+                      to="/my-events"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <Trophy className="w-4 h-4" />
+                      My Leaderboards
+                    </Link>
+                    <Link
+                      to="/my-aura-farms"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <Sprout className="w-4 h-4" />
+                      My Aura Farms
+                    </Link>
+
+                    <div className="border-t my-1" />
+                    <button
+                      onClick={() => {
+                        signOut()
+                        setMobileMenuOpen(false)
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent flex items-center gap-2 text-destructive"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="border-t my-1" />
+                    <Link
+                      to="/signin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-primary hover:bg-accent"
+                    >
+                      <User className="w-4 h-4" />
+                      Sign In
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="hidden md:flex ml-auto z-10 items-center gap-2">
           {user ? (
             <>
               <div className="relative" ref={createDropdownRef}>
