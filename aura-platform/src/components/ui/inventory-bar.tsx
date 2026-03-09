@@ -121,7 +121,7 @@ export function InventoryBar() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <div className="flex items-center gap-1 px-2 py-1 rounded-lg border bg-card">
+      <div className="flex items-center gap-1">
         {Array.from({ length: INVENTORY_SLOTS }).map((_, index) => {
           const equippedPerkId = equipped[index]
           const perk = equippedPerkId ? PERKS.find(p => p.id === equippedPerkId) : null
@@ -155,7 +155,7 @@ export function InventoryBar() {
 
       {/* Perk selection dropdown */}
       {showPerkList && (
-        <div className="absolute top-full right-0 mt-2 w-64 rounded-lg border bg-card shadow-lg py-2 z-50">
+        <div className="absolute top-full left-0 mt-2 w-56 rounded-lg border bg-card shadow-lg py-2 z-50">
           {selectedSlot !== null && equipped[selectedSlot] ? (
             // Show unequip option for equipped perk
             <>

@@ -194,9 +194,6 @@ export function Nav() {
                 )}
               </div>
 
-              {/* Inventory Bar */}
-              <InventoryBar />
-
               {/* Credits display */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">
@@ -232,7 +229,14 @@ export function Nav() {
                 </button>
 
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-lg border bg-card shadow-lg py-1">
+                  <div className="absolute right-0 mt-2 w-64 rounded-lg border bg-card shadow-lg py-1">
+                    {/* Perks Inventory */}
+                    <div className="px-3 py-2 border-b">
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 text-center">Perks</div>
+                      <div className="flex justify-center">
+                        <InventoryBar />
+                      </div>
+                    </div>
                     <Link
                       to="/profile"
                       onClick={() => setDropdownOpen(false)}
@@ -271,9 +275,6 @@ export function Nav() {
             </>
           ) : (
             <div className="relative flex items-center gap-2">
-              {/* Inventory Bar */}
-              <InventoryBar />
-
               {/* Credits display for non-signed in users */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">

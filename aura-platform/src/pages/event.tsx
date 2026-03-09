@@ -9,7 +9,7 @@ import { CommentVotes } from '@/components/ui/comment-votes'
 import { MentionText } from '@/components/ui/mention-text'
 import { MentionInput } from '@/components/ui/mention-input'
 import { MediaUpload } from '@/components/ui/media-upload'
-import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Trash2, X, MessageSquare, Link as LinkIcon, Image } from 'lucide-react'
+import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Trash2, X, MessageSquare, Link as LinkIcon, Image, Play } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -23,6 +23,13 @@ function getVisitorId(): string {
 // Helper to convert name to slug
 function nameToSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+// Helper to check if URL is a video
+function isVideoUrl(url: string): boolean {
+  const videoExtensions = ['.mp4', '.webm']
+  const lowerUrl = url.toLowerCase()
+  return videoExtensions.some(ext => lowerUrl.includes(ext))
 }
 
 // Confirmation Dialog Component
@@ -1471,7 +1478,7 @@ export function EventPage() {
             )}
 
             {/* Sub-Events List */}
-            <div className="space-y-1">
+            <div className="columns-1 sm:columns-2 gap-3">
               {subEvents
                 .filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase()))
                 .sort((a, b) => {
@@ -1482,40 +1489,72 @@ export function EventPage() {
                 .map(subEvent => (
                 <div
                   key={subEvent.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer"
+                  className="mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] cursor-pointer"
                   onClick={() => navigate(`/events/${id}/sub/${subEvent.id}`)}
                 >
-                  <span className="font-medium text-sm truncate">{subEvent.name}</span>
-                  {isOwner && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setConfirmDialog({ open: true, subEventId: subEvent.id })
-                      }}
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-1" />
-                      Delete
-                    </Button>
+                  {subEvent.imageUrl && (
+                    <div className="relative w-full">
+                      {isVideoUrl(subEvent.imageUrl) ? (
+                        <>
+                          <video
+                            src={subEvent.imageUrl}
+                            className="w-full h-auto object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                            <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                              <Play className="w-6 h-6 text-white ml-1" fill="white" />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <img
+                          src={subEvent.imageUrl}
+                          alt={subEvent.name}
+                          className="w-full h-auto object-cover"
+                        />
+                      )}
+                    </div>
                   )}
+                  <div className="flex items-center justify-between p-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm line-clamp-2">{subEvent.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(subEvent.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {isOwner && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setConfirmDialog({ open: true, subEventId: subEvent.id })
+                        }}
+                        className="h-7 px-2 text-muted-foreground hover:text-destructive flex-shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
-
-              {subEvents.length === 0 && (
-                <div className="text-center text-muted-foreground py-8 text-sm">
-                  No sub-events yet
-                  {isOwner && <span className="block mt-1">Click "Add" to create one</span>}
-                </div>
-              )}
-
-              {subEvents.length > 0 && subEvents.filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase())).length === 0 && (
-                <div className="text-center text-muted-foreground py-4 text-sm">
-                  No sub-events match your search
-                </div>
-              )}
             </div>
+
+            {subEvents.length === 0 && (
+              <div className="text-center text-muted-foreground py-8 text-sm">
+                No sub-events yet
+                {isOwner && <span className="block mt-1">Click "Add" to create one</span>}
+              </div>
+            )}
+
+            {subEvents.length > 0 && subEvents.filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase())).length === 0 && (
+              <div className="text-center text-muted-foreground py-4 text-sm">
+                No sub-events match your search
+              </div>
+            )}
           </div>
         </div>
       </div>
