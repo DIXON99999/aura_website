@@ -68,18 +68,8 @@ export function VoteButtons({
     const hasDoubleClick = direction === 'UP' && hasPerkEquipped('double-click')
     const multiplier = hasDoubleClick ? 2 : 1
 
-    // Calculate floating number value
-    let delta = 0
-    if (currentVote === direction) {
-      // Removing vote
-      delta = direction === 'UP' ? -1 * multiplier : 1
-    } else if (currentVote) {
-      // Changing vote
-      delta = direction === 'UP' ? 2 * multiplier : -2
-    } else {
-      // New vote
-      delta = direction === 'UP' ? 1 * multiplier : -1
-    }
+    // Calculate floating number value - always show static vote value
+    const delta = direction === 'UP' ? multiplier : -1
 
     // Create floating number at click position relative to container
     if (containerRef.current) {
