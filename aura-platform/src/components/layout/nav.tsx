@@ -402,6 +402,10 @@ export function Nav() {
             </>
           ) : (
             <div className="relative flex items-center gap-2">
+              {/* Hint for profile */}
+              <div className="hidden md:flex items-center text-xs bg-accent/50 px-2 py-1 rounded">
+                <span className="text-muted-foreground">Make your own profile</span>
+              </div>
               {/* Credits display for non-signed in users */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">
@@ -414,9 +418,9 @@ export function Nav() {
                   <span className="text-sm font-medium text-red-500">{credits.downvotesRemaining}</span>
                 </div>
               </div>
-              {/* Hint text for sign in */}
-              <div className="hidden md:flex items-center gap-1 text-xs bg-accent/50 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Sign in for infinite credits</span>
+              {/* Hint for infinite credits */}
+              <div className="hidden md:flex items-center text-xs bg-accent/50 px-2 py-1 rounded">
+                <span className="text-muted-foreground">Infinite credits</span>
               </div>
               <Link
                 to="/signin"
