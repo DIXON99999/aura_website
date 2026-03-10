@@ -404,7 +404,7 @@ export function Nav() {
             <div className="relative flex items-center gap-2">
               {/* Hint for infinite credits */}
               <div className="hidden md:flex items-center text-xs bg-accent/50 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Infinite credits</span>
+                <span className="text-muted-foreground">Sign in for infinite credits</span>
               </div>
               {/* Credits display for non-signed in users */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
