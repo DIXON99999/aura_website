@@ -414,13 +414,9 @@ export function Nav() {
                   <span className="text-sm font-medium text-red-500">{credits.downvotesRemaining}</span>
                 </div>
               </div>
-              {/* Hint text based on tokens remaining */}
+              {/* Hint text for sign in */}
               <div className="hidden md:flex items-center gap-1 text-xs bg-accent/50 px-2 py-1 rounded">
-                {credits.upvotesRemaining === 0 && credits.downvotesRemaining === 0 ? (
-                  <span className="text-primary">Sign in for more tokens!</span>
-                ) : (
-                  <span className="text-muted-foreground">Use your aura tokens!</span>
-                )}
+                <span className="text-muted-foreground">Sign in for infinite credits</span>
               </div>
               <Link
                 to="/signin"
