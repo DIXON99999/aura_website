@@ -98,6 +98,12 @@ export function AuraFarmsPage() {
           />
         </div>
 
+        {!user && (
+          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
+            <Link to="/login" className="text-primary hover:underline">Sign in</Link> for infinite tokens
+          </div>
+        )}
+
         <div className="mb-6">
           <Popover open={sortOpen} onOpenChange={setSortOpen}>
             <PopoverTrigger asChild>
@@ -122,12 +128,6 @@ export function AuraFarmsPage() {
             </PopoverContent>
           </Popover>
         </div>
-
-        {!user && (
-          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
-            <Link to="/login" className="text-primary hover:underline">Sign in</Link> to create your own posts
-          </div>
-        )}
 
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>
