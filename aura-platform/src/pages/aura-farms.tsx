@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { VoteButtons } from '@/components/ui/vote-buttons'
 import { Search, ChevronDown, Play } from 'lucide-react'
-import { useAuraStore, hasPerkEquipped } from '@/stores'
+import { useAuraStore, useAuthStore, hasPerkEquipped } from '@/stores'
 
 // Helper to check if URL is a video
 function isVideoUrl(url: string): boolean {
@@ -30,6 +30,7 @@ export function AuraFarmsPage() {
   const [sort, setSort] = useState<'new' | 'popular' | 'oldest'>('new')
   const [sortOpen, setSortOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const user = useAuthStore((s) => s.user)
   const credits = useAuraStore((s) => s.credits)
   const setCredits = useAuraStore((s) => s.setCredits)
   const sortLabels: Record<'new' | 'popular' | 'oldest', string> = {
@@ -121,6 +122,12 @@ export function AuraFarmsPage() {
             </PopoverContent>
           </Popover>
         </div>
+
+        {!user && (
+          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
+            <Link to="/login" className="text-primary hover:underline">Sign in</Link> to create your own posts
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>

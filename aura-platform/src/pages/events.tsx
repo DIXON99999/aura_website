@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Event } from '@/lib/api'
 import { Input } from '@/components/ui/input'
+import { useAuthStore } from '@/stores'
 import { Search, Calendar } from 'lucide-react'
 
 export function EventsPage() {
+  const user = useAuthStore((s) => s.user)
   const [events, setEvents] = useState<Event[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -34,6 +36,12 @@ export function EventsPage() {
             className="pl-10"
           />
         </div>
+
+        {!user && (
+          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
+            <Link to="/login" className="text-primary hover:underline">Sign in</Link> to create your own custom leaderboards
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>
