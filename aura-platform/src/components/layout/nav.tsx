@@ -7,6 +7,7 @@ import {
   Trophy,
   Plus,
   ChevronDown,
+  ChevronRight,
   LogOut,
   RefreshCw,
   ChevronUp,
@@ -419,8 +420,9 @@ export function Nav() {
                 </div>
               </div>
               {/* Hint for profile */}
-              <div className="hidden md:flex items-center text-xs bg-accent/50 px-2 py-1 rounded">
+              <div className="hidden md:flex items-center gap-1 text-xs bg-accent/50 px-2 py-1 rounded">
                 <span className="text-muted-foreground">Make your own profile</span>
+                <ChevronRight className="w-3 h-3 text-muted-foreground" />
               </div>
               <Link
                 to="/signin"
