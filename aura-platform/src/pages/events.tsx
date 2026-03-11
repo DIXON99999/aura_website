@@ -72,7 +72,7 @@ export function EventsPage() {
 
         {!user && (
           <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
-            <Link to="/login" className="text-primary hover:underline">Sign in</Link> to create your own custom leaderboards
+            <Link to="/signup" className="text-primary hover:underline">Sign in</Link> to create your own custom leaderboards and join them
           </div>
         )}
 
