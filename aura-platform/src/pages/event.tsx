@@ -971,7 +971,7 @@ export function EventPage() {
         {!editingSubEvent && (
           <div className="relative">
             {/* Left: Leaderboard - fixed position aligned with title */}
-            <div className="hidden xl:block fixed w-[240px]" style={{ left: 'max(16px, calc((50% - 336px - 240px) / 2))', top: '120px' }}>
+            <div className="hidden xl:block fixed w-[280px]" style={{ left: 'max(16px, calc((50% - 336px - 280px) / 2))', top: '120px' }}>
                 <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
                 <div className="space-y-2">
                   {/* Search */}
@@ -984,7 +984,8 @@ export function EventPage() {
                       className="pl-7 h-8 text-xs"
                     />
                   </div>
-                  <div className="space-y-1 max-h-[80vh] overflow-y-auto">
+                  <div className="space-y-2 max-h-[80vh] overflow-y-auto" style={{ direction: 'rtl' }}>
+                  <div style={{ direction: 'ltr' }}>
                     {selectedSubEvent.participants
                       .filter(p => {
                         if (!leaderboardSearch.trim()) return true
@@ -1001,13 +1002,13 @@ export function EventPage() {
                         return (
                           <div
                             key={participant.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-card/50 hover:bg-card transition-colors"
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card/50 hover:bg-card transition-colors mb-2"
                           >
-                            <span className="text-xs font-bold text-muted-foreground w-5">
+                            <span className="text-sm font-bold text-muted-foreground w-6">
                               #{originalRank}
                             </span>
-                            <span className="flex-1 text-sm truncate">{displayName}</span>
-                            <span className={`text-xs font-bold min-w-[2.5rem] text-right ${
+                            <span className="flex-1 text-base truncate">{displayName}</span>
+                            <span className={`text-sm font-bold min-w-[3rem] text-right ${
                               participant.auraScore > 0 ? 'text-green-500' :
                               participant.auraScore < 0 ? 'text-red-500' :
                               'text-muted-foreground'
@@ -1021,15 +1022,16 @@ export function EventPage() {
                               downDisabled={credits.downvotesRemaining <= 0}
                               upTitle={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
                               downTitle={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
-                              size="sm"
+                              size="md"
                               layout="vertical"
                               hideButtons={isSelf}
                               hideScore
-                              className="w-[18px]"
+                              className="w-[24px]"
                             />
                           </div>
                         )
                       })}
+                  </div>
                   </div>
                 </div>
             </div>
@@ -1037,38 +1039,40 @@ export function EventPage() {
             {/* Mobile Leaderboard - shown only on small screens */}
             <div className="lg:hidden mb-6">
               <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
-              <div className="space-y-1 max-h-[50vh] overflow-y-auto">
-                {selectedSubEvent.participants.map((participant, index) => {
-                  const displayName = participant.player?.name || participant.tempName || 'Unknown'
-                  const currentUserPlayerId = user ? userProfiles[user.id] : null
-                  const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
-                  return (
-                    <div
-                      key={participant.id}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-card/50"
-                    >
-                      <span className="text-xs font-bold text-muted-foreground w-5">#{index + 1}</span>
-                      <span className="flex-1 text-sm truncate">{displayName}</span>
-                      <span className={`text-xs font-bold ${
-                        participant.auraScore > 0 ? 'text-green-500' :
-                        participant.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
-                      }`}>
-                        {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
-                      </span>
-                      <VoteButtons
-                        score={0}
-                        onVote={(dir) => handleSubEventVote(participant.id, dir)}
-                        upDisabled={credits.upvotesRemaining <= 0}
-                        downDisabled={credits.downvotesRemaining <= 0}
-                        size="sm"
-                        layout="vertical"
-                        hideButtons={isSelf}
-                        hideScore
-                        className="w-[18px]"
-                      />
-                    </div>
-                  )
-                })}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto" style={{ direction: 'rtl' }}>
+                <div style={{ direction: 'ltr' }}>
+                  {selectedSubEvent.participants.map((participant, index) => {
+                    const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                    const currentUserPlayerId = user ? userProfiles[user.id] : null
+                    const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
+                    return (
+                      <div
+                        key={participant.id}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card/50 mb-2"
+                      >
+                        <span className="text-sm font-bold text-muted-foreground w-6">#{index + 1}</span>
+                        <span className="flex-1 text-base truncate">{displayName}</span>
+                        <span className={`text-sm font-bold min-w-[3rem] text-right ${
+                          participant.auraScore > 0 ? 'text-green-500' :
+                          participant.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
+                        }`}>
+                          {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
+                        </span>
+                        <VoteButtons
+                          score={0}
+                          onVote={(dir) => handleSubEventVote(participant.id, dir)}
+                          upDisabled={credits.upvotesRemaining <= 0}
+                          downDisabled={credits.downvotesRemaining <= 0}
+                          size="md"
+                          layout="vertical"
+                          hideButtons={isSelf}
+                          hideScore
+                          className="w-[24px]"
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 

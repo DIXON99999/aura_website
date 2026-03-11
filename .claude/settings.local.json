@@ -13,7 +13,11 @@
       "Bash(npx tsc:*)",
       "Bash(./node_modules/.bin/tsc:*)",
       "Bash(bunx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git:*)",
+      "Bash(find /d/2026_projects/aura_websitev3/aura-platform -path \"*/node_modules\" -prune -o -type f -name \"*.ts\" -o -name \"*.tsx\" | xargs grep -l \"custom.*leaderboard\" | head -20)",
+      "Bash(find /d/2026_projects/aura_websitev3/aura-platform/backend -path \"*/node_modules\" -prune -o -type f -name \"*.ts\" -print | xargs grep -l \"leaderboard\" 2>/dev/null | head -30)",
+      "Bash(find /d/2026_projects/aura_websitev3/aura-platform/src -type f -name \"*.ts\" -o -name \"*.tsx\" | xargs grep -l \"addPlayerToLeaderboard\\\\|createSubEvent\\\\|custom.*leaderboard\" 2>/dev/null)"
     ]
   }
 }
