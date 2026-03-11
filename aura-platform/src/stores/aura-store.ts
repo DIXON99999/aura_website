@@ -231,7 +231,7 @@ export const useAuraStore = create<AuraStoreState>()(
     loading: false,
     initialized: false,
     error: null,
-    credits: { upvotesRemaining: 20, downvotesRemaining: 10 },
+    credits: { upvotesRemaining: 20, downvotesRemaining: 5 },
 
     // ========================================================================
     // DATA FETCHING

@@ -5,7 +5,7 @@ import type { DbVote, DbPlayer, DbRegion } from '../db/index.js'
 const VOTE_VALUE = 1
 const AURA_PROPAGATION_FACTOR = 0.1
 const DEFAULT_UPVOTES = 20
-const DEFAULT_DOWNVOTES = 10
+const DEFAULT_DOWNVOTES = 5
 
 async function initVotesTable() {
   await pool.query(`

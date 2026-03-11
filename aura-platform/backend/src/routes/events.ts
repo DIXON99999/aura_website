@@ -74,7 +74,7 @@ initEventsTables().catch(console.error)
 const app = new Hono()
 
 const DEFAULT_UPVOTES = 20
-const DEFAULT_DOWNVOTES = 10
+const DEFAULT_DOWNVOTES = 5
 
 interface DbVisitorCredits {
   visitor_id: string
