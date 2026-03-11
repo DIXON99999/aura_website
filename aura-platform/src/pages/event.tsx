@@ -411,8 +411,13 @@ export function EventPage() {
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
 
+  // Join leaderboard state
+  const [joiningLeaderboard, setJoiningLeaderboard] = useState(false)
+
   const visitorId = getVisitorId()
   const isOwner = user?.id === event?.ownerId
+  const isParticipant = user?.playerId && event?.participants.some(p => p.playerId === user.playerId)
+  const canCreateSubEvent = isOwner || isParticipant
 
   // Get username from user's profile
   const getUsername = () => {
@@ -546,6 +551,28 @@ export function EventPage() {
       setEvent(updatedEvent)
     } catch (err) {
       console.error('Sub-event vote failed:', err)
+    }
+  }
+
+  const handleJoinLeaderboard = async () => {
+    if (!slug) return
+
+    if (!user?.playerId) {
+      // Redirect to profile to create/link a player profile first
+      navigate('/profile')
+      return
+    }
+
+    setJoiningLeaderboard(true)
+    try {
+      await api.joinEvent(slug)
+      // Refresh event data to show the new participant
+      const updatedEvent = await api.getEvent(slug)
+      setEvent(updatedEvent)
+    } catch (err) {
+      console.error('Failed to join leaderboard:', err)
+    } finally {
+      setJoiningLeaderboard(false)
     }
   }
 
@@ -1252,14 +1279,26 @@ export function EventPage() {
               {event.ownerName && ` by ${event.ownerName}`}
             </p>
           </div>
-          {isOwner && (
-            <Link to={`/events/${event.slug}/edit`}>
-              <Button variant="outline" className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4" />
-                Edit
+          <div className="flex items-center gap-2">
+            {user && !isOwner && !isParticipant && (
+              <Button
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleJoinLeaderboard}
+                disabled={joiningLeaderboard}
+              >
+                <Plus className="w-4 h-4" />
+                {joiningLeaderboard ? 'Joining...' : 'Join'}
               </Button>
-            </Link>
-          )}
+            )}
+            {isOwner && (
+              <Link to={`/events/${event.slug}/edit`}>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1330,7 +1369,7 @@ export function EventPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Sub-Events</h2>
-              {isOwner && (
+              {canCreateSubEvent && (
                 <Button
                   type="button"
                   size="sm"
@@ -1345,7 +1384,7 @@ export function EventPage() {
             </div>
 
             {/* Create Sub-Event Form */}
-            {showCreateSubEvent && isOwner && (
+            {showCreateSubEvent && canCreateSubEvent && (
               <div className="mb-4 p-4 border rounded-lg bg-card space-y-3">
                 {/* Name */}
                 <div>
@@ -1538,7 +1577,7 @@ export function EventPage() {
             {subEvents.length === 0 && (
               <div className="text-center text-muted-foreground py-8 text-sm">
                 No sub-events yet
-                {isOwner && <span className="block mt-1">Click "Add" to create one</span>}
+                {canCreateSubEvent && <span className="block mt-1">Click "Add" to create one</span>}
               </div>
             )}
 

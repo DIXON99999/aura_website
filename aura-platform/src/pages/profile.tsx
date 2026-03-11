@@ -138,16 +138,20 @@ export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'associations' | 'farms' | 'suggestions'>('associations')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
 
   // Get profile reactively from store
   const profileId = user ? userProfiles[user.id] : undefined
   const profile = profileId ? players[profileId] : undefined
 
   useEffect(() => {
-    if (user && !profile) {
-      createUserProfile(user.id)
+    if (user && !profile && !profileError) {
+      createUserProfile(user.id).catch((err) => {
+        console.error('Failed to create profile:', err)
+        setProfileError(err.message || 'Failed to create profile')
+      })
     }
-  }, [user, profile, createUserProfile])
+  }, [user, profile, createUserProfile, profileError])
 
   useEffect(() => {
     if (profile?.name) {
@@ -248,7 +252,22 @@ export function ProfilePage() {
   if (!profile) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold mb-4">Creating profile...</h1>
+        <h1 className="text-2xl font-bold mb-4">
+          {profileError ? 'Profile Error' : 'Creating profile...'}
+        </h1>
+        {profileError && (
+          <div className="space-y-4">
+            <p className="text-destructive">{profileError}</p>
+            <Button onClick={() => {
+              setProfileError(null)
+              createUserProfile(user.id).catch((err) => {
+                setProfileError(err.message || 'Failed to create profile')
+              })
+            }}>
+              Try Again
+            </Button>
+          </div>
+        )}
       </div>
     )
   }

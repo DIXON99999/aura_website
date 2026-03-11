@@ -468,6 +468,70 @@ app.post('/:id/participants', async (c) => {
   })
 })
 
+// Join a leaderboard (for signed-in users with a linked player)
+app.post('/:id/join', async (c) => {
+  const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
+  const userId = await getUserIdFromSession(sessionId)
+
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  // Get user's playerId
+  const userResult = await pool.query('SELECT player_id FROM users WHERE id = $1', [userId])
+  if (userResult.rows.length === 0) {
+    return c.json({ error: 'User not found' }, 404)
+  }
+
+  const playerId = (userResult.rows[0] as { player_id: string | null }).player_id
+  if (!playerId) {
+    return c.json({ error: 'You must link a player profile to join leaderboards' }, 400)
+  }
+
+  const idOrSlug = c.req.param('id')
+  const event = await getEventByIdOrSlug(idOrSlug)
+
+  if (!event) {
+    return c.json({ error: 'Leaderboard not found' }, 404)
+  }
+
+  // Check if already a participant
+  const existingResult = await pool.query(
+    'SELECT * FROM event_participants WHERE event_id = $1 AND player_id = $2',
+    [event.id, playerId]
+  )
+  if (existingResult.rows.length > 0) {
+    return c.json({ error: 'You are already in this leaderboard' }, 400)
+  }
+
+  const participantId = generateId()
+  const now = new Date()
+
+  await pool.query(
+    'INSERT INTO event_participants (id, event_id, player_id, temp_name, aura_score, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [participantId, event.id, playerId, null, 0, now.toISOString()]
+  )
+
+  // Get player details for response
+  const playerResult = await pool.query('SELECT * FROM players WHERE id = $1', [playerId])
+  const player = playerResult.rows[0] as DbPlayer | undefined
+
+  return c.json({
+    id: participantId,
+    eventId: event.id,
+    playerId,
+    tempName: null,
+    auraScore: 0,
+    createdAt: now,
+    player: player ? {
+      id: player.id,
+      name: player.name,
+      slug: player.slug,
+      imageUrl: player.image_url,
+    } : null,
+  })
+})
+
 app.delete('/:id/participants/:participantId', async (c) => {
   const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
   const userId = await getUserIdFromSession(sessionId)
@@ -788,7 +852,26 @@ app.post('/:id/sub-events', async (c) => {
     const idOrSlug = c.req.param('id')
     const event = await getEventByIdOrSlug(idOrSlug)
 
-    if (!event || event.owner_id !== userId) {
+    if (!event) {
+      return c.json({ error: 'Leaderboard not found' }, 404)
+    }
+
+    // Check if user is owner OR a participant
+    let isAuthorized = event.owner_id === userId
+    if (!isAuthorized) {
+      // Check if user is a participant (via their linked playerId)
+      const userResult = await pool.query('SELECT player_id FROM users WHERE id = $1', [userId])
+      const playerId = userResult.rows.length > 0 ? (userResult.rows[0] as { player_id: string | null }).player_id : null
+      if (playerId) {
+        const participantResult = await pool.query(
+          'SELECT * FROM event_participants WHERE event_id = $1 AND player_id = $2',
+          [event.id, playerId]
+        )
+        isAuthorized = participantResult.rows.length > 0
+      }
+    }
+
+    if (!isAuthorized) {
       return c.json({ error: 'Not authorized' }, 403)
     }
 

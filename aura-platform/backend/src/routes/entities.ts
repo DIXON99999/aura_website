@@ -200,7 +200,7 @@ app.post('/players', async (c) => {
 
   await pool.query(
     `INSERT INTO players (id, name, slug, country_id, organisation_id, main_game_id, region_id, game_ids, is_user_profile, visitor_id, aura_score, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, 0, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, 0, $10)
      ON CONFLICT (id) DO NOTHING`,
     [playerId, name || '', slug, countryId || null, organisationId || null, mainGameId || null, regionId || null,
      JSON.stringify(gameIds || []), visitorId, new Date().toISOString()]

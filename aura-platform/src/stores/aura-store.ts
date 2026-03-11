@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { api, type Entity } from '@/lib/api'
+import { useAuthStore } from './auth-store'
 import {
   type EntitiesState,
   type EntityType,
@@ -518,9 +519,9 @@ export const useAuraStore = create<AuraStoreState>()(
     createUserProfile: async (visitorId: string) => {
       const existingProfileId = get().userProfiles[visitorId]
       if (existingProfileId && get().players[existingProfileId]) {
-        // Ensure player is linked to user's database record
+        // Ensure player is linked to user's database record (and update auth store's user)
         try {
-          await api.linkPlayer(existingProfileId)
+          await useAuthStore.getState().linkPlayer(existingProfileId)
         } catch {
           // Ignore if not authenticated or already linked
         }
@@ -536,9 +537,9 @@ export const useAuraStore = create<AuraStoreState>()(
           draft.userProfiles[visitorId] = player.id
         })
 
-        // Link the player to the user's database record so ownerName shows on created content
+        // Link the player to the user's database record (and update auth store's user with playerId)
         try {
-          await api.linkPlayer(player.id)
+          await useAuthStore.getState().linkPlayer(player.id)
         } catch {
           // Ignore if not authenticated or already linked
         }

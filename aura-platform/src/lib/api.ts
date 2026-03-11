@@ -239,6 +239,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  joinEvent: (eventIdOrSlug: string) =>
+    fetchApi<EventParticipant>(`/events/${eventIdOrSlug}/join`, {
+      method: 'POST',
+    }),
+
   removeEventParticipant: (eventId: string, participantId: string) =>
     fetchApi<{ success: boolean }>(`/events/${eventId}/participants/${participantId}`, {
       method: 'DELETE',
