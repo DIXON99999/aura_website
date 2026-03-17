@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
 import type { DbEvent, DbEventParticipant, DbEventVote, DbSession, DbPlayer, DbSubEvent, DbSubEventParticipant, DbSubEventVote, DbSubEventComment } from '../db/index.js'
-import { createNotification, extractMentions, findUsersByUsernames } from './notifications.js'
+import { createNotification, extractMentions, findUsersByUsernames, findUserByPlayerId, getUsernameFromUserId, createThrottledNotification } from './notifications.js'
 
 async function initEventsTables() {
   await pool.query(`
@@ -769,6 +769,31 @@ app.post('/:id/vote', async (c) => {
     await pool.query('UPDATE players SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, participant.player_id])
   }
 
+  // Notify participant if they are a real player (throttled)
+  if (participant.player_id && userId) {
+    const playerOwnerUserId = await findUserByPlayerId(participant.player_id)
+    if (playerOwnerUserId && playerOwnerUserId !== userId) {
+      const voterUsername = await getUsernameFromUserId(userId)
+      const voteAction = direction === 'UP' ? 'upvoted' : 'downvoted'
+      // Get event name for context
+      const eventResult = await pool.query('SELECT name, slug FROM events WHERE id = $1', [eventId])
+      const eventName = eventResult.rows.length > 0 ? (eventResult.rows[0] as any).name : 'a leaderboard'
+      const eventSlug = eventResult.rows.length > 0 ? (eventResult.rows[0] as any).slug : eventId
+      await createThrottledNotification({
+        userId: playerOwnerUserId,
+        type: 'entity_vote',
+        sourceType: 'event_vote',
+        sourceId: voteId,
+        sourceUrl: `/leaderboards/${eventSlug}`,
+        fromUserId: userId,
+        fromUsername: voterUsername,
+        content: `${voteAction} you in "${eventName}"`,
+        entityType: 'event_participant',
+        entityId: participantId,
+      })
+    }
+  }
+
   const updatedResult = await pool.query('SELECT * FROM event_participants WHERE id = $1', [participantId])
   const updated = updatedResult.rows[0] as DbEventParticipant
   const updatedCredits = await getOrCreateCredits(visitorId)
@@ -1334,6 +1359,30 @@ app.post('/:id/sub-events/:subEventId/vote', async (c) => {
 
   if (leaderboardParticipant?.player_id) {
     await pool.query('UPDATE players SET aura_score = ROUND((aura_score + $1)::numeric, 2) WHERE id = $2', [delta, leaderboardParticipant.player_id])
+  }
+
+  // Notify participant if they are a real player (throttled)
+  if (leaderboardParticipant?.player_id && userId) {
+    const playerOwnerUserId = await findUserByPlayerId(leaderboardParticipant.player_id)
+    if (playerOwnerUserId && playerOwnerUserId !== userId) {
+      const voterUsername = await getUsernameFromUserId(userId)
+      const voteAction = direction === 'UP' ? 'upvoted' : 'downvoted'
+      // Get sub-event name for context
+      const subEventResult = await pool.query('SELECT name FROM sub_events WHERE id = $1', [subEventId])
+      const subEventName = subEventResult.rows.length > 0 ? (subEventResult.rows[0] as any).name : 'a sub-event'
+      await createThrottledNotification({
+        userId: playerOwnerUserId,
+        type: 'entity_vote',
+        sourceType: 'sub_event_vote',
+        sourceId: voteId,
+        sourceUrl: `/leaderboards/${event.slug}?subEvent=${subEventId}`,
+        fromUserId: userId,
+        fromUsername: voterUsername,
+        content: `${voteAction} you in "${subEventName}"`,
+        entityType: 'sub_event_participant',
+        entityId: participantId,
+      })
+    }
   }
 
   const updatedResult = await pool.query('SELECT * FROM sub_event_participants WHERE id = $1', [participantId])

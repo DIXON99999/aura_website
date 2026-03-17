@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { pool, type DbAuraFarm, type DbAuraFarmVote, type DbPlayer } from '../db/index.js'
-import { createNotification, extractMentions, findUsersByUsernames } from './notifications.js'
+import { createNotification, extractMentions, findUsersByUsernames, findUserByPlayerId, getUsernameFromUserId, createThrottledNotification } from './notifications.js'
 
 const app = new Hono()
 
@@ -343,6 +343,24 @@ app.post('/', async (c) => {
     [id, title.trim(), slug, description?.trim() || null, entityId, entityType, session.user_id, imageUrl?.trim() || null, now.toISOString()]
   )
 
+  // Notify the player if an aura farm is created for their profile
+  if (entityType === 'player') {
+    const playerOwnerUserId = await findUserByPlayerId(entityId)
+    if (playerOwnerUserId && playerOwnerUserId !== session.user_id) {
+      const creatorUsername = await getUsernameFromUserId(session.user_id)
+      await createNotification({
+        userId: playerOwnerUserId,
+        type: 'aura_farm_created',
+        sourceType: 'aura_farm',
+        sourceId: id,
+        sourceUrl: `/aura-farms/${slug}`,
+        fromUserId: session.user_id,
+        fromUsername: creatorUsername,
+        content: `Created an Aura Farm about you: "${title.trim()}"`,
+      })
+    }
+  }
+
   return c.json({
     id,
     title: title.trim(),
@@ -476,7 +494,7 @@ app.delete('/:id', async (c) => {
 app.post('/:id/vote', async (c) => {
   const farmId = c.req.param('id')
   const body = await c.req.json()
-  const { visitorId, direction } = body
+  const { visitorId, direction, userId } = body
 
   if (!visitorId || !['UP', 'DOWN'].includes(direction)) {
     return c.json({ error: 'Invalid vote' }, 400)
@@ -503,6 +521,27 @@ app.post('/:id/vote', async (c) => {
   const table = getEntityTable(farm.entity_type)
   if (table) {
     await pool.query(`UPDATE ${table} SET aura_score = aura_score + $1 WHERE id = $2`, [voteValue, farm.entity_id])
+  }
+
+  // Notify entity owner if it's a player (throttled)
+  if (farm.entity_type === 'player' && userId) {
+    const playerOwnerUserId = await findUserByPlayerId(farm.entity_id)
+    if (playerOwnerUserId && playerOwnerUserId !== userId) {
+      const voterUsername = await getUsernameFromUserId(userId)
+      const voteAction = direction === 'UP' ? 'upvoted' : 'downvoted'
+      await createThrottledNotification({
+        userId: playerOwnerUserId,
+        type: 'entity_vote',
+        sourceType: 'aura_farm',
+        sourceId: farmId,
+        sourceUrl: `/aura-farms/${(farm as any).slug || farmId}`,
+        fromUserId: userId,
+        fromUsername: voterUsername,
+        content: `${voteAction} an Aura Farm about you`,
+        entityType: 'aura_farm',
+        entityId: farmId,
+      })
+    }
   }
 
   return c.json({

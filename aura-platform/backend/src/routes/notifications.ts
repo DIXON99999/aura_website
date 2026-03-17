@@ -143,4 +143,150 @@ export async function findUsersByUsernames(usernames: string[]): Promise<Map<str
   return map
 }
 
+// Helper to find user ID by player ID
+export async function findUserByPlayerId(playerId: string): Promise<string | null> {
+  const result = await pool.query(
+    'SELECT id FROM users WHERE player_id = $1',
+    [playerId]
+  )
+  return result.rows.length > 0 ? result.rows[0].id : null
+}
+
+// Helper to get username from user ID
+export async function getUsernameFromUserId(userId: string): Promise<string> {
+  const result = await pool.query(
+    `SELECT p.name as username, u.email
+     FROM users u
+     LEFT JOIN players p ON u.player_id = p.id
+     WHERE u.id = $1`,
+    [userId]
+  )
+  if (result.rows.length > 0) {
+    return result.rows[0].username || result.rows[0].email.split('@')[0] || 'Someone'
+  }
+  return 'Someone'
+}
+
+// Throttle duration in milliseconds (1 hour)
+const NOTIFICATION_THROTTLE_MS = 60 * 60 * 1000
+
+// Initialize throttle table
+async function initThrottleTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notification_throttle (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      notification_type TEXT NOT NULL,
+      last_notified_at TIMESTAMP WITH TIME ZONE NOT NULL
+    )
+  `)
+  // Add index for faster lookups
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_notification_throttle_lookup
+    ON notification_throttle (from_user_id, to_user_id, entity_type, entity_id, notification_type)
+  `)
+}
+initThrottleTable().catch(console.error)
+
+// Check if a notification should be throttled
+export async function shouldThrottleNotification(data: {
+  fromUserId: string
+  toUserId: string
+  entityType: string
+  entityId: string
+  notificationType: string
+}): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT last_notified_at FROM notification_throttle
+     WHERE from_user_id = $1 AND to_user_id = $2 AND entity_type = $3 AND entity_id = $4 AND notification_type = $5`,
+    [data.fromUserId, data.toUserId, data.entityType, data.entityId, data.notificationType]
+  )
+
+  if (result.rows.length === 0) {
+    return false // No previous notification, don't throttle
+  }
+
+  const lastNotified = new Date(result.rows[0].last_notified_at).getTime()
+  const now = Date.now()
+
+  return (now - lastNotified) < NOTIFICATION_THROTTLE_MS
+}
+
+// Update throttle timestamp
+export async function updateThrottle(data: {
+  fromUserId: string
+  toUserId: string
+  entityType: string
+  entityId: string
+  notificationType: string
+}) {
+  const id = `${data.fromUserId}:${data.toUserId}:${data.entityType}:${data.entityId}:${data.notificationType}`
+  const now = new Date().toISOString()
+
+  await pool.query(
+    `INSERT INTO notification_throttle (id, from_user_id, to_user_id, entity_type, entity_id, notification_type, last_notified_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO UPDATE SET last_notified_at = $7`,
+    [id, data.fromUserId, data.toUserId, data.entityType, data.entityId, data.notificationType, now]
+  )
+}
+
+// Create a throttled notification (checks throttle first)
+export async function createThrottledNotification(data: {
+  userId: string
+  type: string
+  sourceType: string
+  sourceId: string
+  sourceUrl: string
+  fromUserId: string
+  fromUsername: string
+  content: string
+  entityType: string
+  entityId: string
+}): Promise<string | null> {
+  // Don't notify yourself
+  if (data.userId === data.fromUserId) {
+    return null
+  }
+
+  // Check throttle
+  const shouldThrottle = await shouldThrottleNotification({
+    fromUserId: data.fromUserId,
+    toUserId: data.userId,
+    entityType: data.entityType,
+    entityId: data.entityId,
+    notificationType: data.type,
+  })
+
+  if (shouldThrottle) {
+    return null
+  }
+
+  // Create notification
+  const notificationId = await createNotification({
+    userId: data.userId,
+    type: data.type,
+    sourceType: data.sourceType,
+    sourceId: data.sourceId,
+    sourceUrl: data.sourceUrl,
+    fromUserId: data.fromUserId,
+    fromUsername: data.fromUsername,
+    content: data.content,
+  })
+
+  // Update throttle
+  await updateThrottle({
+    fromUserId: data.fromUserId,
+    toUserId: data.userId,
+    entityType: data.entityType,
+    entityId: data.entityId,
+    notificationType: data.type,
+  })
+
+  return notificationId
+}
+
 export default app

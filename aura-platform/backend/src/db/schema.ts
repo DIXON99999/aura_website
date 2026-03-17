@@ -275,15 +275,26 @@ export const auraFarmVotes = pgTable('aura_farm_votes', {
 export const notifications = pgTable('notifications', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(), // The user being notified
-  type: text('type').notNull(), // 'mention', 'reply', etc.
-  sourceType: text('source_type').notNull(), // 'aura_farm_comment', 'sub_event_comment'
-  sourceId: text('source_id').notNull(), // The comment ID
+  type: text('type').notNull(), // 'mention', 'reply', 'aura_farm_created', 'entity_vote', etc.
+  sourceType: text('source_type').notNull(), // 'aura_farm_comment', 'sub_event_comment', 'aura_farm', 'vote'
+  sourceId: text('source_id').notNull(), // The comment/farm/vote ID
   sourceUrl: text('source_url').notNull(), // URL to navigate to
   fromUserId: text('from_user_id'), // Who triggered the notification
   fromUsername: text('from_username').notNull(),
   content: text('content').notNull(), // Preview of the content
   read: boolean('read').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
+// Notification Throttle - prevents spam for repeated actions (e.g., votes)
+export const notificationThrottle = pgTable('notification_throttle', {
+  id: text('id').primaryKey(),
+  fromUserId: text('from_user_id').notNull(), // The user/visitor who triggered
+  toUserId: text('to_user_id').notNull(), // The user being notified
+  entityType: text('entity_type').notNull(), // 'player', 'aura_farm', etc.
+  entityId: text('entity_id').notNull(), // The entity ID
+  notificationType: text('notification_type').notNull(), // 'entity_vote', 'aura_farm_vote', etc.
+  lastNotifiedAt: timestamp('last_notified_at', { withTimezone: true }).notNull(),
 })
 
 // Aura Farm Comments
@@ -344,6 +355,7 @@ export type SubEventVote = typeof subEventVotes.$inferSelect
 export type AuraFarm = typeof auraFarms.$inferSelect
 export type AuraFarmVote = typeof auraFarmVotes.$inferSelect
 export type Notification = typeof notifications.$inferSelect
+export type NotificationThrottle = typeof notificationThrottle.$inferSelect
 export type AuraFarmComment = typeof auraFarmComments.$inferSelect
 export type AuraFarmCommentVote = typeof auraFarmCommentVotes.$inferSelect
 export type SubEventCommentVote = typeof subEventCommentVotes.$inferSelect

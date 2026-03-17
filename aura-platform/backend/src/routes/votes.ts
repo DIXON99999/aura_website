@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
 import type { DbVote, DbPlayer, DbRegion } from '../db/index.js'
+import { findUserByPlayerId, getUsernameFromUserId, createThrottledNotification } from './notifications.js'
 
 const VOTE_VALUE = 1
 const AURA_PROPAGATION_FACTOR = 0.1
@@ -216,6 +217,30 @@ app.post('/', async (c) => {
 
   for (const parent of parents) {
     await updateAuraScore(parent.type, parent.id, propagatedDelta)
+  }
+
+  // Notify player if their entity is voted on (throttled)
+  if (entityType === 'player' && userId) {
+    const playerOwnerUserId = await findUserByPlayerId(entityId)
+    if (playerOwnerUserId && playerOwnerUserId !== userId) {
+      const voterUsername = await getUsernameFromUserId(userId)
+      const voteAction = direction === 'UP' ? 'upvoted' : 'downvoted'
+      // Get player name for better notification context
+      const playerResult = await pool.query('SELECT name, slug FROM players WHERE id = $1', [entityId])
+      const playerSlug = playerResult.rows.length > 0 ? (playerResult.rows[0] as any).slug : entityId
+      await createThrottledNotification({
+        userId: playerOwnerUserId,
+        type: 'entity_vote',
+        sourceType: 'vote',
+        sourceId: voteId,
+        sourceUrl: `/entity/player/${playerSlug}`,
+        fromUserId: userId,
+        fromUsername: voterUsername,
+        content: `${voteAction} your profile`,
+        entityType: 'player',
+        entityId: entityId,
+      })
+    }
   }
 
   const updatedCredits = await getOrCreateCredits(visitorId)

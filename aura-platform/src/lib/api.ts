@@ -375,7 +375,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  voteAuraFarm: (farmId: string, data: { visitorId: string; direction: 'UP' | 'DOWN' }) =>
+  voteAuraFarm: (farmId: string, data: { visitorId: string; direction: 'UP' | 'DOWN'; userId?: string }) =>
     fetchApi<{ farmId: string; auraScore: number; direction: string }>(`/aura-farms/${farmId}/vote`, {
       method: 'POST',
       body: JSON.stringify(data),

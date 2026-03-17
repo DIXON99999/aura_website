@@ -355,9 +355,14 @@ export function HomePage() {
         />
 
         {!user && (
-          <div className="mt-6 px-4 py-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+          <div
+            className="mt-6 px-4 py-3 rounded-lg bg-violet-500/10 border border-violet-500/30 text-center"
+            style={{
+              boxShadow: '0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.15)',
+            }}
+          >
             <p className="text-sm text-muted-foreground">
-              <Link to="/signin" className="text-primary font-medium hover:underline">
+              <Link to="/signin" className="text-violet-400 font-medium hover:underline hover:text-violet-300">
                 Sign up
               </Link>
               {' '}to join custom leaderboards and create your player profile

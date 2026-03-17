@@ -424,7 +424,7 @@ export function AuraFarmPage() {
       let result
       for (let i = 0; i < voteMultiplier; i++) {
         console.log('Calling vote API, iteration:', i + 1)
-        result = await api.voteAuraFarm(farm.id, { visitorId, direction })
+        result = await api.voteAuraFarm(farm.id, { visitorId, direction, userId: user?.id })
       }
 
       if (result) {

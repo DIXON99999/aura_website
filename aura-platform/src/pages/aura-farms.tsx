@@ -65,7 +65,7 @@ export function AuraFarmsPage() {
       // Call API multiple times for double-click perk
       let result
       for (let i = 0; i < voteMultiplier; i++) {
-        result = await api.voteAuraFarm(farmId, { visitorId, direction })
+        result = await api.voteAuraFarm(farmId, { visitorId, direction, userId: user?.id })
       }
 
       if (result) {

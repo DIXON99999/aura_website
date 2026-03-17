@@ -97,8 +97,40 @@ export function NotificationBell({ userId }: NotificationBellProps) {
         return '@'
       case 'reply':
         return 'Re:'
+      case 'aura_farm_created':
+        return '🌾'
+      case 'entity_vote':
+        return '▲'
       default:
         return '!'
+    }
+  }
+
+  const getNotificationText = (notification: Notification) => {
+    switch (notification.type) {
+      case 'mention':
+        return 'mentioned you'
+      case 'reply':
+        return 'replied'
+      case 'aura_farm_created':
+        return 'created an Aura Farm about you'
+      case 'entity_vote':
+        return 'voted on your profile'
+      default:
+        return 'interacted with you'
+    }
+  }
+
+  const getNotificationIconStyle = (type: string) => {
+    switch (type) {
+      case 'mention':
+        return 'bg-blue-500/20 text-blue-500'
+      case 'aura_farm_created':
+        return 'bg-green-500/20 text-green-500'
+      case 'entity_vote':
+        return 'bg-yellow-500/20 text-yellow-500'
+      default:
+        return 'bg-primary/20 text-primary'
     }
   }
 
@@ -154,7 +186,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
-                      notification.type === 'mention' ? "bg-blue-500/20 text-blue-500" : "bg-primary/20 text-primary"
+                      getNotificationIconStyle(notification.type)
                     )}>
                       {getNotificationIcon(notification.type)}
                     </div>
@@ -163,7 +195,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                         <span className="font-medium">{notification.fromUsername}</span>
                         {' '}
                         <span className="text-muted-foreground">
-                          {notification.type === 'mention' ? 'mentioned you' : 'replied'}
+                          {getNotificationText(notification)}
                         </span>
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
