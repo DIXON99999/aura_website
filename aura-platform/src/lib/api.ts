@@ -141,6 +141,7 @@ export const api = {
     associatedEntityIds: string[]
     imageUrl: string
     bio: string
+    auraScore: number
   }>) =>
     fetchApi<Entity>(`/players/${id}`, {
       method: 'PATCH',

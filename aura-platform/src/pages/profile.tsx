@@ -145,6 +145,8 @@ export function ProfilePage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [entityCreatorOpen, setEntityCreatorOpen] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [bioInput, setBioInput] = useState('')
+  const bioTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Get profile reactively from store
@@ -165,6 +167,12 @@ export function ProfilePage() {
       setNameInput(profile.name)
     }
   }, [profile?.name])
+
+  useEffect(() => {
+    if (profile?.bio !== undefined) {
+      setBioInput(profile.bio || '')
+    }
+  }, [profile?.bio])
 
   // Check if user is admin
   useEffect(() => {
@@ -665,17 +673,25 @@ export function ProfilePage() {
           )}
 
           {/* Bio Section */}
-          <div className="w-full max-w-md mt-4">
+          <div className="w-full max-w-md mt-6">
+            <label className="block text-xs text-muted-foreground mb-2 text-center">Bio</label>
             <div className="relative">
               <textarea
-                value={profile.bio || ''}
-                onChange={(e) => updateUserProfile(user.id, { bio: e.target.value })}
-                placeholder="Add a bio..."
-                className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[60px] resize-none text-center placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={bioInput}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setBioInput(value)
+                  if (bioTimeoutRef.current) clearTimeout(bioTimeoutRef.current)
+                  bioTimeoutRef.current = setTimeout(() => {
+                    updateUserProfile(user.id, { bio: value })
+                  }, 500)
+                }}
+                placeholder="Tell us about yourself..."
+                className="w-full px-4 py-3 rounded-xl border-2 border-border bg-muted/30 text-sm min-h-[80px] resize-none placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:bg-background transition-all"
                 maxLength={160}
               />
-              <span className="absolute bottom-2 right-2 text-xs text-muted-foreground">
-                {(profile.bio || '').length}/160
+              <span className="absolute bottom-2 right-3 text-xs text-muted-foreground/50">
+                {bioInput.length}/160
               </span>
             </div>
           </div>

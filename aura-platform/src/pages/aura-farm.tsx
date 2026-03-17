@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { api, type AuraFarm, type AuraFarmComment } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -100,7 +100,7 @@ function CommentItem({
   const avatarColor = comment.username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360
 
   return (
-    <div className={depth > 0 ? 'pl-4 border-l-2 border-border/60 hover:border-border ml-3' : ''}>
+    <div id={`comment-${comment.id}`} className={depth > 0 ? 'pl-4 border-l-2 border-border/60 hover:border-border ml-3' : ''}>
       <div className="py-2">
         {/* Header with avatar */}
         <div className="flex items-center gap-2 mb-1">
@@ -327,6 +327,7 @@ function getVisitorId(): string {
 export function AuraFarmPage() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const userProfiles = useAuraStore((s) => s.userProfiles)
   const players = useAuraStore((s) => s.players)
@@ -404,6 +405,20 @@ export function AuraFarmPage() {
 
     loadComments()
   }, [slug, farm])
+
+  // Scroll to comment if hash is present
+  useEffect(() => {
+    if (location.hash && comments.length > 0) {
+      const element = document.getElementById(location.hash.slice(1))
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          element.classList.add('bg-primary/10')
+          setTimeout(() => element.classList.remove('bg-primary/10'), 2000)
+        }, 100)
+      }
+    }
+  }, [location.hash, comments])
 
   const handleVote = async (direction: 'UP' | 'DOWN') => {
     if (!farm) return

@@ -113,7 +113,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
       case 'reply':
         return 'replied'
       case 'aura_farm_created':
-        return 'created an Aura Farm about you'
+        return 'has created Aurafarm about you'
       case 'entity_vote':
         return 'voted on your profile'
       default:
@@ -193,7 +193,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">
                         <span className="font-medium">{notification.fromUsername}</span>
-                        {' - '}
+                        {' '}
                         <span className="text-muted-foreground">
                           {getNotificationText(notification)}
                         </span>

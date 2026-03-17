@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Nav } from '@/components/layout'
 import { useSeedData } from '@/hooks'
 import { useInitialized, useAuthStore, useAuraStore } from '@/stores'
@@ -24,6 +24,7 @@ import {
   AuraFarmPage,
   CreateAuraFarmPage,
   MyAuraFarmsPage,
+  CreateTierListPage,
 } from '@/pages'
 
 function App() {
@@ -67,45 +68,55 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-background">
-        <Nav />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/players" element={<PlayersPage />} />
-          <Route path="/teams" element={<TeamsPage />} />
-          <Route path="/games" element={<GamesPage />} />
-          <Route path="/regions" element={<RegionsPage />} />
-          <Route path="/peripherals" element={<PeripheralsPage />} />
-          <Route path="/game-meta" element={<GameMetaPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          {/* Community (formerly Custom Leaderboards/Events) */}
-          <Route path="/community" element={<EventsPage />} />
-          <Route path="/community/:slug" element={<EventPage />} />
-          <Route path="/community/:slug/sub/:subEventId" element={<EventPage />} />
-          <Route path="/community/:slug/edit" element={<EditEventPage />} />
-          <Route path="/create-event" element={<CreateEventPage />} />
-          <Route path="/my-events" element={<MyEventsPage />} />
-          {/* Legacy routes - redirect to new paths */}
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/events/:slug" element={<EventPage />} />
-          <Route path="/events/:slug/sub/:subEventId" element={<EventPage />} />
-          <Route path="/events/:slug/edit" element={<EditEventPage />} />
-          {/* Posts (formerly Aura Farms) */}
-          <Route path="/posts" element={<AuraFarmsPage />} />
-          <Route path="/posts/:slug" element={<AuraFarmPage />} />
-          <Route path="/create-post" element={<CreateAuraFarmPage />} />
-          <Route path="/my-posts" element={<MyAuraFarmsPage />} />
-          {/* Legacy routes */}
-          <Route path="/aura-farms" element={<AuraFarmsPage />} />
-          <Route path="/aura-farms/:slug" element={<AuraFarmPage />} />
-          <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
-          <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
-          <Route path="/:entityType/:slug" element={<EntityPage />} />
-        </Routes>
-      </div>
+      <AppRoutes />
     </BrowserRouter>
+  )
+}
+
+function AppRoutes() {
+  const location = useLocation()
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Nav />
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/players" element={<PlayersPage />} />
+        <Route path="/teams" element={<TeamsPage />} />
+        <Route path="/games" element={<GamesPage />} />
+        <Route path="/regions" element={<RegionsPage />} />
+        <Route path="/peripherals" element={<PeripheralsPage />} />
+        <Route path="/game-meta" element={<GameMetaPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/signin" element={<SignInPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+        {/* Community (formerly Custom Leaderboards/Events) */}
+        <Route path="/community" element={<EventsPage />} />
+        <Route path="/community/:slug" element={<EventPage />} />
+        <Route path="/community/:slug/sub/:subEventId" element={<EventPage />} />
+        <Route path="/community/:slug/edit" element={<EditEventPage />} />
+        <Route path="/create-event" element={<CreateEventPage />} />
+        <Route path="/my-events" element={<MyEventsPage />} />
+        {/* Legacy routes - redirect to new paths */}
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/events/:slug" element={<EventPage />} />
+        <Route path="/events/:slug/sub/:subEventId" element={<EventPage />} />
+        <Route path="/events/:slug/edit" element={<EditEventPage />} />
+        {/* Posts (formerly Aura Farms) */}
+        <Route path="/posts" element={<AuraFarmsPage />} />
+        <Route path="/posts/:slug" element={<AuraFarmPage />} />
+        <Route path="/create-post" element={<CreateAuraFarmPage />} />
+        <Route path="/my-posts" element={<MyAuraFarmsPage />} />
+        {/* Legacy routes */}
+        <Route path="/aura-farms" element={<AuraFarmsPage />} />
+        <Route path="/aura-farms/:slug" element={<AuraFarmPage />} />
+        <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
+        <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
+        {/* Tier Lists */}
+        <Route path="/create-tier-list" element={<CreateTierListPage />} />
+        <Route path="/:entityType/:slug" element={<EntityPage />} />
+      </Routes>
+    </div>
   )
 }
 

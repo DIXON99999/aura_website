@@ -36,6 +36,9 @@ async function initAuraFarmTables() {
   // Backfill vote_count column for existing tables
   await pool.query(`ALTER TABLE aura_farm_comments ADD COLUMN IF NOT EXISTS vote_count INTEGER NOT NULL DEFAULT 0`)
 
+  // Add tier_list_data column for tier list posts
+  await pool.query(`ALTER TABLE aura_farms ADD COLUMN IF NOT EXISTS tier_list_data JSONB`)
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS aura_farm_comment_votes (
       id TEXT PRIMARY KEY,
@@ -314,24 +317,29 @@ app.post('/', async (c) => {
   const session = sessionResult.rows[0] as { user_id: string }
 
   const body = await c.req.json()
-  const { title, description, entityId, entityType, imageUrl } = body
+  const { title, description, entityId, entityType, imageUrl, tierListData } = body
 
   if (!title?.trim()) {
     return c.json({ error: 'Title is required' }, 400)
   }
 
-  if (!entityId || !entityType) {
+  // For tier lists, entity is optional
+  const isTierList = !!tierListData
+
+  if (!isTierList && (!entityId || !entityType)) {
     return c.json({ error: 'Entity is required' }, 400)
   }
 
-  const table = getEntityTable(entityType)
-  if (!table) {
-    return c.json({ error: 'Invalid entity type' }, 400)
-  }
+  if (!isTierList) {
+    const table = getEntityTable(entityType)
+    if (!table) {
+      return c.json({ error: 'Invalid entity type' }, 400)
+    }
 
-  const entityResult = await pool.query(`SELECT id FROM ${table} WHERE id = $1`, [entityId])
-  if (entityResult.rows.length === 0) {
-    return c.json({ error: 'Entity not found' }, 404)
+    const entityResult = await pool.query(`SELECT id FROM ${table} WHERE id = $1`, [entityId])
+    if (entityResult.rows.length === 0) {
+      return c.json({ error: 'Entity not found' }, 404)
+    }
   }
 
   const id = crypto.randomUUID()
@@ -339,8 +347,8 @@ app.post('/', async (c) => {
   const now = new Date()
 
   await pool.query(
-    'INSERT INTO aura_farms (id, title, slug, description, entity_id, entity_type, owner_id, image_url, aura_score, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)',
-    [id, title.trim(), slug, description?.trim() || null, entityId, entityType, session.user_id, imageUrl?.trim() || null, now.toISOString()]
+    'INSERT INTO aura_farms (id, title, slug, description, entity_id, entity_type, owner_id, image_url, aura_score, created_at, tier_list_data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10)',
+    [id, title.trim(), slug, description?.trim() || null, entityId || null, entityType || 'tier_list', session.user_id, imageUrl?.trim() || null, now.toISOString(), tierListData ? JSON.stringify(tierListData) : null]
   )
 
   // Notify the player if an aura farm is created for their profile
@@ -356,7 +364,7 @@ app.post('/', async (c) => {
         sourceUrl: `/aura-farms/${slug}`,
         fromUserId: session.user_id,
         fromUsername: creatorUsername,
-        content: `"${title.trim()}"`,
+        content: title.trim(),
       })
     }
   }
@@ -366,12 +374,13 @@ app.post('/', async (c) => {
     title: title.trim(),
     slug,
     description: description?.trim() || null,
-    entityId,
-    entityType,
+    entityId: entityId || null,
+    entityType: entityType || 'tier_list',
     ownerId: session.user_id,
     imageUrl: imageUrl?.trim() || null,
     auraScore: 0,
     createdAt: now,
+    tierListData: tierListData || null,
   })
 })
 
@@ -675,7 +684,7 @@ app.post('/:id/comments', async (c) => {
             type: 'mention',
             sourceType: 'aura_farm_comment',
             sourceId: commentId,
-            sourceUrl: `/aura-farms/${farmId}`,
+            sourceUrl: `/aura-farms/${farmId}#comment-${commentId}`,
             fromUserId: userId,
             fromUsername: username || 'Anonymous',
             content: trimmedContent.length > 100 ? trimmedContent.substring(0, 100) + '...' : trimmedContent,

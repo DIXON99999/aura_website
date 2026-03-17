@@ -302,10 +302,10 @@ app.get('/check', async (c) => {
 app.patch('/countries/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, flagCode, imageUrl, aliases } = body
+  const { name, flagCode, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -324,6 +324,10 @@ app.patch('/countries/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -341,10 +345,10 @@ app.patch('/countries/:id', async (c) => {
 app.patch('/games/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, gameType, imageUrl, aliases } = body
+  const { name, gameType, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -363,6 +367,10 @@ app.patch('/games/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -380,10 +388,10 @@ app.patch('/games/:id', async (c) => {
 app.patch('/regions/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, gameId, imageUrl, aliases } = body
+  const { name, gameId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -402,6 +410,10 @@ app.patch('/regions/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -419,10 +431,10 @@ app.patch('/regions/:id', async (c) => {
 app.patch('/organisations/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, imageUrl, aliases } = body
+  const { name, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -436,6 +448,10 @@ app.patch('/organisations/:id', async (c) => {
   if (aliases !== undefined) {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
+  }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
   }
 
   if (updates.length === 0) {
@@ -454,10 +470,10 @@ app.patch('/organisations/:id', async (c) => {
 app.patch('/organisation-games/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, organisationId, gameId, imageUrl, aliases } = body
+  const { name, organisationId, gameId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -480,6 +496,10 @@ app.patch('/organisation-games/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -497,10 +517,10 @@ app.patch('/organisation-games/:id', async (c) => {
 app.patch('/brands/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, imageUrl, aliases } = body
+  const { name, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -514,6 +534,10 @@ app.patch('/brands/:id', async (c) => {
   if (aliases !== undefined) {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
+  }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
   }
 
   if (updates.length === 0) {
@@ -532,10 +556,10 @@ app.patch('/brands/:id', async (c) => {
 app.patch('/peripherals/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, peripheralType, brandId, imageUrl, aliases } = body
+  const { name, peripheralType, brandId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -558,6 +582,10 @@ app.patch('/peripherals/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -575,10 +603,10 @@ app.patch('/peripherals/:id', async (c) => {
 app.patch('/roles/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, gameId, imageUrl, aliases } = body
+  const { name, gameId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -596,6 +624,10 @@ app.patch('/roles/:id', async (c) => {
   if (aliases !== undefined) {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
+  }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
   }
 
   if (updates.length === 0) {
@@ -614,10 +646,10 @@ app.patch('/roles/:id', async (c) => {
 app.patch('/weapons/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, gameId, imageUrl, aliases } = body
+  const { name, gameId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -635,6 +667,10 @@ app.patch('/weapons/:id', async (c) => {
   if (aliases !== undefined) {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
+  }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
   }
 
   if (updates.length === 0) {
@@ -653,10 +689,10 @@ app.patch('/weapons/:id', async (c) => {
 app.patch('/characters/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, gameId, imageUrl, aliases } = body
+  const { name, gameId, imageUrl, aliases, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -675,6 +711,10 @@ app.patch('/characters/:id', async (c) => {
     updates.push(`aliases = $${paramIndex++}`)
     params.push(JSON.stringify(aliases))
   }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
+  }
 
   if (updates.length === 0) {
     return c.json({ error: 'No updates provided' }, 400)
@@ -692,10 +732,10 @@ app.patch('/characters/:id', async (c) => {
 app.patch('/players/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
-  const { name, countryId, organisationId, mainGameId, regionId, imageUrl, aliases, associatedEntityIds } = body
+  const { name, countryId, organisationId, mainGameId, regionId, imageUrl, aliases, associatedEntityIds, auraScore } = body
 
   const updates: string[] = []
-  const params: (string | null)[] = []
+  const params: (string | number | null)[] = []
   let paramIndex = 1
 
   if (name !== undefined) {
@@ -729,6 +769,10 @@ app.patch('/players/:id', async (c) => {
   if (associatedEntityIds !== undefined) {
     updates.push(`associated_entity_ids = $${paramIndex++}`)
     params.push(JSON.stringify(associatedEntityIds))
+  }
+  if (auraScore !== undefined) {
+    updates.push(`aura_score = $${paramIndex++}`)
+    params.push(auraScore)
   }
 
   if (updates.length === 0) {

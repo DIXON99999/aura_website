@@ -467,6 +467,13 @@ export function EntityPage() {
           <h1 className="text-3xl font-bold mb-2">{entity.name}</h1>
           {renderSubtitle()}
 
+          {/* Bio for player profiles */}
+          {entity.type === EntityTypes.PLAYER && (entity as Player).bio && (
+            <p className="text-sm text-muted-foreground mt-3 max-w-md text-center">
+              {(entity as Player).bio}
+            </p>
+          )}
+
           {/* Auto-derived associations */}
           {associations.length > 0 && (
             <div className="w-full mt-8">

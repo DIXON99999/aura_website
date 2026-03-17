@@ -246,6 +246,7 @@ app.patch('/players/:id', async (c) => {
   if (body.associatedEntityIds !== undefined) { updates.push(`associated_entity_ids = $${paramIndex++}`); params.push(JSON.stringify(body.associatedEntityIds)) }
   if (body.imageUrl !== undefined) { updates.push(`image_url = $${paramIndex++}`); params.push(body.imageUrl || null) }
   if (body.bio !== undefined) { updates.push(`bio = $${paramIndex++}`); params.push(body.bio || null) }
+  if (body.auraScore !== undefined) { updates.push(`aura_score = $${paramIndex++}`); params.push(body.auraScore) }
 
   if (updates.length > 0) {
     params.push(id)

@@ -17,6 +17,7 @@ import {
   Lightbulb,
   X,
   Menu,
+  LayoutList,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
 import { api } from '@/lib/api'
@@ -138,7 +139,8 @@ export function Nav() {
         </NavLink>
 
         {/* Desktop nav - centered */}
-        <div className="absolute inset-0 hidden md:flex items-center justify-center gap-1">
+        <div className="absolute inset-0 hidden md:flex items-center justify-center gap-1 pointer-events-none">
+          <div className="flex items-center gap-1 pointer-events-auto">
             {navItems.map((item) => (
               <div key={item.to} className="relative">
                 <NavLink
@@ -158,6 +160,7 @@ export function Nav() {
                 </NavLink>
               </div>
             ))}
+          </div>
         </div>
 
         {/* Mobile menu area */}
@@ -221,6 +224,14 @@ export function Nav() {
                     >
                       <MessageSquare className="w-4 h-4" />
                       Create Post
+                    </Link>
+                    <Link
+                      to="/create-tier-list"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                      Tier List
                     </Link>
 
                     <div className="border-t my-1" />
@@ -286,7 +297,7 @@ export function Nav() {
               <div className="relative" ref={createDropdownRef}>
                 <button
                   onClick={() => setCreateDropdownOpen(!createDropdownOpen)}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-accent text-muted-foreground hover:text-accent-foreground"
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shadow-[0_0_10px_rgba(var(--primary-rgb),0.15)]"
                 >
                   <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Create</span>
@@ -310,6 +321,14 @@ export function Nav() {
                     >
                       <MessageSquare className="w-4 h-4" />
                       Post
+                    </Link>
+                    <Link
+                      to="/create-tier-list"
+                      onClick={() => setCreateDropdownOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                      Tier List
                     </Link>
                   </div>
                 )}
