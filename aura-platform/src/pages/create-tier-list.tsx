@@ -8,7 +8,7 @@ import { useAuraStore, useAuthStore } from '@/stores'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { EntityTypes } from '@/types'
-import type { Entity, Country, Player, OrganisationGame } from '@/types'
+import type { Entity, Country, Player } from '@/types'
 
 const emptyPlayerFilters: PlayerFilters = {
   gameIds: [],
@@ -349,13 +349,6 @@ export function CreateTierListPage() {
     }
   }
 
-  const handleEntityDragOver = (tierId: string, index: number, e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDropTarget({ tierId, index })
-    setDragOverTier(tierId)
-  }
-
   const addTier = () => {
     const newId = `tier-${Date.now()}`
     const colorIndex = tiers.length % TIER_COLORS.length
@@ -476,13 +469,6 @@ export function CreateTierListPage() {
       </div>
     )
   }
-
-  // Calculate heights
-  const tierRowHeight = 84 // Fits 72px cards with padding
-  const tierGap = 6
-  const addButtonHeight = 44
-  const titleHeight = 48
-  const totalTierHeight = titleHeight + (tiers.length * tierRowHeight) + ((tiers.length - 1) * tierGap) + addButtonHeight
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">

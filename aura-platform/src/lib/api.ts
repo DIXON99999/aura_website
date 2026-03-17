@@ -832,4 +832,4 @@ interface Notification {
   createdAt: Date
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, TierListData, Suggestion, Notification }
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification }

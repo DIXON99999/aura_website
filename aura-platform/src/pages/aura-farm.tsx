@@ -11,8 +11,6 @@ import { MentionInput } from '@/components/ui/mention-input'
 import { MediaUpload } from '@/components/ui/media-upload'
 import { Trash2, ArrowLeft, ExternalLink, Edit2, Save, X, MessageSquare, Image, Link as LinkIcon } from 'lucide-react'
 import { useAuthStore, useAuraStore, hasPerkEquipped } from '@/stores'
-import { EntityTypes } from '@/types'
-import type { Country } from '@/types'
 
 // Helper to convert name to slug
 function nameToSlug(name: string): string {
