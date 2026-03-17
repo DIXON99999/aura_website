@@ -4,6 +4,20 @@ import { createNotification, extractMentions, findUsersByUsernames, findUserByPl
 
 const app = new Hono()
 
+// Admin email for moderation
+const ADMIN_EMAIL = 'liam.t.dixon@gmail.com'
+
+// Helper to check if user is admin
+async function isAdmin(sessionId: string): Promise<boolean> {
+  const sessionResult = await pool.query(
+    'SELECT s.*, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = $1 AND s.expires_at > NOW()',
+    [sessionId]
+  )
+  if (sessionResult.rows.length === 0) return false
+  const session = sessionResult.rows[0] as { email: string }
+  return session.email === ADMIN_EMAIL
+}
+
 interface DbAuraFarmComment {
   id: string
   farm_id: string
@@ -411,7 +425,8 @@ app.patch('/:id', async (c) => {
   }
 
   const farm = farmResult.rows[0] as DbAuraFarm
-  if (farm.owner_id !== session.user_id) {
+  const userIsAdmin = await isAdmin(sessionId)
+  if (farm.owner_id !== session.user_id && !userIsAdmin) {
     return c.json({ error: 'Unauthorized' }, 403)
   }
 
@@ -496,7 +511,8 @@ app.delete('/:id', async (c) => {
   }
 
   const farm = farmResult.rows[0] as DbAuraFarm
-  if (farm.owner_id !== session.user_id) {
+  const userIsAdmin = await isAdmin(sessionId)
+  if (farm.owner_id !== session.user_id && !userIsAdmin) {
     return c.json({ error: 'Unauthorized' }, 403)
   }
 
@@ -725,11 +741,21 @@ app.delete('/:id/comments/:commentId', async (c) => {
   }
   const comment = commentResult.rows[0] as DbAuraFarmComment
 
-  let canDelete = false
-  if (comment.user_id) {
-    canDelete = comment.user_id === userId
-  } else {
-    canDelete = comment.visitor_id === visitorId
+  // Check if user is admin
+  const authHeader = c.req.header('Authorization')
+  let userIsAdmin = false
+  if (authHeader?.startsWith('Bearer ')) {
+    const sessionId = authHeader.slice(7)
+    userIsAdmin = await isAdmin(sessionId)
+  }
+
+  let canDelete = userIsAdmin
+  if (!canDelete) {
+    if (comment.user_id) {
+      canDelete = comment.user_id === userId
+    } else {
+      canDelete = comment.visitor_id === visitorId
+    }
   }
 
   if (!canDelete) {

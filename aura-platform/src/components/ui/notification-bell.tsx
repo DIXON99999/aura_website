@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type Notification } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -84,6 +84,17 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     }
   }
 
+  const handleClearAll = async () => {
+    if (!confirm('Clear all notifications?')) return
+    try {
+      await api.clearAllNotifications(userId)
+      setNotifications([])
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to clear notifications:', error)
+    }
+  }
+
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
       handleMarkRead(notification.id)
@@ -152,15 +163,26 @@ export function NotificationBell({ userId }: NotificationBellProps) {
         <div className="absolute right-0 mt-2 w-80 max-h-[400px] rounded-lg border bg-card shadow-lg overflow-hidden z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
             <h3 className="font-semibold text-sm">Notifications</h3>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                Mark all read
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="overflow-y-auto max-h-[340px]">

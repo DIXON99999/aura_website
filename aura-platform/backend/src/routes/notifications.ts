@@ -81,6 +81,15 @@ app.patch('/:userId/read-all', async (c) => {
   return c.json({ success: true })
 })
 
+// Clear all notifications for a user
+app.delete('/:userId/clear-all', async (c) => {
+  const userId = c.req.param('userId')
+
+  await pool.query('DELETE FROM notifications WHERE user_id = $1', [userId])
+
+  return c.json({ success: true })
+})
+
 // Helper function to create a notification (exported for use in other routes)
 export async function createNotification(data: {
   userId: string

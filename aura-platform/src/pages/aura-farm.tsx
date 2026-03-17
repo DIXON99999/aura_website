@@ -96,6 +96,7 @@ function CommentItem({
   allComments,
   visitorId,
   currentUserId,
+  currentUserEmail,
   commentVotes,
   replyingTo,
   replyContent,
@@ -113,6 +114,7 @@ function CommentItem({
   allComments: AuraFarmComment[]
   visitorId: string
   currentUserId?: string
+  currentUserEmail?: string
   commentVotes: Map<string, 'UP' | 'DOWN'>
   replyingTo: string | null
   replyContent: string
@@ -131,9 +133,10 @@ function CommentItem({
   const [imageUrlInput, setImageUrlInput] = useState('')
   const replies = allComments.filter(c => c.parentId === comment.id)
   const vote = commentVotes.get(comment.id)
-  const canDelete = comment.userId
+  const isAdmin = currentUserEmail === 'liam.t.dixon@gmail.com'
+  const canDelete = isAdmin || (comment.userId
     ? comment.userId === currentUserId
-    : comment.visitorId === visitorId
+    : comment.visitorId === visitorId)
   const isReplying = replyingTo === comment.id
   const replyFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -342,6 +345,7 @@ function CommentItem({
                     allComments={allComments}
                     visitorId={visitorId}
                     currentUserId={currentUserId}
+                    currentUserEmail={currentUserEmail}
                     commentVotes={commentVotes}
                     replyingTo={replyingTo}
                     replyContent={replyContent}
@@ -665,6 +669,8 @@ export function AuraFarmPage() {
   }
 
   const isOwner = user && user.id === farm.ownerId
+  const isAdmin = user?.email === 'liam.t.dixon@gmail.com'
+  const canEditDelete = isOwner || isAdmin
 
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
@@ -829,7 +835,7 @@ export function AuraFarmPage() {
                   <div className="mt-0.5">By {farm.ownerName}</div>
                 )}
               </div>
-              {isOwner && !editing && (
+              {canEditDelete && !editing && (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -985,6 +991,7 @@ export function AuraFarmPage() {
                   allComments={comments}
                   visitorId={getVisitorId()}
                   currentUserId={user?.id}
+                  currentUserEmail={user?.email}
                   commentVotes={commentVotes}
                   replyingTo={replyingTo}
                   replyContent={replyContent}

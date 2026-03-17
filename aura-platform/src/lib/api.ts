@@ -459,6 +459,11 @@ export const api = {
       method: 'PATCH',
     }),
 
+  clearAllNotifications: (userId: string) =>
+    fetchApi<{ success: boolean }>(`/notifications/${userId}/clear-all`, {
+      method: 'DELETE',
+    }),
+
   // Admin - check if current user is admin
   checkAdmin: () =>
     fetchApi<{ isAdmin: boolean }>('/admin/check'),
