@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { useAuraStore, useAuthStore } from '@/stores'
 import { useVisitorId } from '@/hooks'
 import { cn } from '@/lib/utils'
 import { VoteButtons } from '@/components/ui/vote-buttons'
+import { Button } from '@/components/ui/button'
 import { VoteDirection, EntityTypes } from '@/types'
 import { api, type AuraFarm } from '@/lib/api'
+import { EntityEditor } from '@/components/EntityEditor'
 import type { Entity, EntityType, Country, Player, Game, Organisation, OrganisationGame, Peripheral, Role, Weapon, Character, Brand } from '@/types'
 
 function getFlagUrl(countryCode: string): string {
@@ -257,6 +259,8 @@ export function EntityPage() {
   const [activeTab, setActiveTab] = useState<'associations' | 'farms'>('associations')
   const [farms, setFarms] = useState<AuraFarm[]>([])
   const [farmsLoading, setFarmsLoading] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
 
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
@@ -282,6 +286,17 @@ export function EntityPage() {
   const { entity, type } = entityType && slug
     ? getEntityFromStores(entityType, slug, stores)
     : { entity: undefined, type: EntityTypes.PLAYER }
+
+  // Check if user is admin
+  useEffect(() => {
+    if (!authUser) {
+      setIsAdmin(false)
+      return
+    }
+    api.checkAdmin()
+      .then(() => setIsAdmin(true))
+      .catch(() => setIsAdmin(false))
+  }, [authUser])
 
   // Get associated entities from associatedEntityIds (for player profiles)
   const associatedEntities = useMemo(() => {
@@ -422,13 +437,26 @@ export function EntityPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <button
-        onClick={handleBack}
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back
-      </button>
+      <div className="flex items-center justify-between mb-8">
+        <button
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditorOpen(true)}
+            className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30 hover:border-purple-500/50"
+          >
+            <Pencil className="w-4 h-4 mr-2 text-purple-500" />
+            Edit
+          </Button>
+        )}
+      </div>
 
       <div className="max-w-2xl mx-auto">
         <div className="flex flex-col items-center text-center">
@@ -502,10 +530,42 @@ export function EntityPage() {
                 {activeTab === 'associations' && (
                   <div>
                     {associatedEntities.length > 0 ? (
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {associatedEntities.map(e => (
-                          <MiniCard key={e.id} entity={e} />
-                        ))}
+                      <div className="space-y-4">
+                        {/* Games & Teams */}
+                        {associatedEntities.filter(e => e.type === EntityTypes.GAME || e.type === EntityTypes.ORGANISATION_GAME).length > 0 && (
+                          <div>
+                            <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Games & Teams</h3>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {associatedEntities.filter(e => e.type === EntityTypes.GAME || e.type === EntityTypes.ORGANISATION_GAME).map(e => (
+                                <MiniCard key={e.id} entity={e} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Peripherals */}
+                        {associatedEntities.filter(e => e.type === EntityTypes.PERIPHERAL).length > 0 && (
+                          <div>
+                            <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Peripherals</h3>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {associatedEntities.filter(e => e.type === EntityTypes.PERIPHERAL).map(e => (
+                                <MiniCard key={e.id} entity={e} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Roles, Weapons & Characters */}
+                        {associatedEntities.filter(e => e.type === EntityTypes.ROLE || e.type === EntityTypes.WEAPON || e.type === EntityTypes.CHARACTER).length > 0 && (
+                          <div>
+                            <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Roles, Weapons & Characters</h3>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {associatedEntities.filter(e => e.type === EntityTypes.ROLE || e.type === EntityTypes.WEAPON || e.type === EntityTypes.CHARACTER).map(e => (
+                                <MiniCard key={e.id} entity={e} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">
@@ -524,7 +584,7 @@ export function EntityPage() {
                         {farms.map(farm => (
                           <Link
                             key={farm.id}
-                            to={`/aura-farms/${farm.slug || farm.id}`}
+                            to={`/posts/${farm.slug || farm.id}`}
                             className="block p-4 rounded-lg border border-border hover:border-primary/50 transition-colors"
                           >
                             <div className="flex items-start gap-3">
@@ -568,6 +628,16 @@ export function EntityPage() {
           )}
         </div>
       </div>
+
+      {/* Admin Entity Editor Modal */}
+      {isAdmin && entity && (
+        <EntityEditor
+          entity={entity}
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          onDeleted={() => navigate('/')}
+        />
+      )}
     </div>
   )
 }

@@ -136,7 +136,7 @@ export function CreateAuraFarmPage() {
         entityType,
         imageUrl: imageUrl.trim() || undefined,
       })
-      navigate(`/aura-farms/${farm.slug}`)
+      navigate(`/posts/${farm.slug}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -149,7 +149,7 @@ export function CreateAuraFarmPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Create Aura Farm</h1>
+        <h1 className="text-2xl font-bold mb-6">Create Post</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -157,7 +157,7 @@ export function CreateAuraFarmPage() {
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter a title for your aura farm"
+              placeholder="Enter a title for your post"
               disabled={loading}
             />
           </div>
@@ -167,7 +167,7 @@ export function CreateAuraFarmPage() {
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe your aura farm (optional)"
+              placeholder="Describe your post (optional)"
               disabled={loading}
               rows={4}
             />
@@ -289,7 +289,7 @@ export function CreateAuraFarmPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/posts')}
               disabled={loading}
             >
               Cancel

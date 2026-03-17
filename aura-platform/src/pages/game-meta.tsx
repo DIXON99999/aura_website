@@ -3,11 +3,11 @@ import { SearchBar, useSearch } from '@/components/layout'
 import {
   Leaderboard,
   SortButton,
-  MetaFilter,
-  MetaActiveFilters,
+  MetaSidebarFilter,
+  MobileMetaFilterButton,
   type SortDirection,
-  type MetaFilters,
 } from '@/components/leaderboard'
+import type { MetaFilters } from '@/components/leaderboard/meta-sidebar-filter'
 import { useAuraStore } from '@/stores'
 import type { Entity, Role, Weapon, Character } from '@/types'
 
@@ -49,21 +49,15 @@ export function GameMetaPage() {
     return [...rolesList, ...weaponsList, ...charactersList]
   }, [roles, weapons, characters, filters])
 
-  const removeFilter = (type: 'gameIds' | 'types', id: string) => {
-    setFilters({
-      ...filters,
-      [type]: filters[type].filter((i) => i !== id),
-    })
-  }
-
-  const clearAllFilters = () => {
-    setFilters(emptyFilters)
-  }
-
   const hasFilters = filters.gameIds.length > 0 || filters.types.length > 0
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
+      {/* Left Sidebar Filter - Fixed in left margin space */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        <MetaSidebarFilter filters={filters} onChange={setFilters} />
+      </aside>
+
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">Game Meta</h1>
         <p className="text-muted-foreground mb-6">
@@ -77,9 +71,9 @@ export function GameMetaPage() {
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <MetaFilter filters={filters} onChange={setFilters} />
+            <MobileMetaFilterButton filters={filters} onChange={setFilters} />
             <SortButton
               direction={sortDirection}
               onChange={setSortDirection}
@@ -90,21 +84,13 @@ export function GameMetaPage() {
           </span>
         </div>
 
-        <MetaActiveFilters
-          filters={filters}
-          onRemove={removeFilter}
-          onClearAll={clearAllFilters}
+        <Leaderboard
+          entities={filteredMeta}
+          entityType="mixed"
+          searchQuery={query}
+          sortDirection={sortDirection}
+          emptyMessage={hasFilters ? "No items match your filters" : "No roles, weapons, or characters yet"}
         />
-
-        <div className={hasFilters ? 'mt-4' : 'mt-2'}>
-          <Leaderboard
-            entities={filteredMeta}
-            entityType="mixed"
-            searchQuery={query}
-            sortDirection={sortDirection}
-            emptyMessage={hasFilters ? "No items match your filters" : "No roles, weapons, or characters yet"}
-          />
-        </div>
       </div>
     </div>
   )

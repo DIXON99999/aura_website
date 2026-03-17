@@ -7,13 +7,13 @@ import {
   Trophy,
   Plus,
   ChevronDown,
-  ChevronRight,
   LogOut,
   RefreshCw,
   ChevronUp,
   ChevronDown as ChevronDownIcon,
-  Home,
-  Sprout,
+  Database,
+  MessageSquare,
+  Users,
   Lightbulb,
   X,
   Menu,
@@ -26,13 +26,10 @@ import { NotificationBell } from '@/components/ui/notification-bell'
 import { InventoryBar } from '@/components/ui/inventory-bar'
 
 const navItems = [
-  { to: '/', label: 'Home', icon: Home },
-  { to: '/events', label: 'Custom Leaderboards', icon: Trophy },
-  { to: '/aura-farms', label: 'Aura Farms', icon: Sprout },
+  { to: '/', label: 'Database', icon: Database },
+  { to: '/community', label: 'Community', icon: Users },
+  { to: '/posts', label: 'Posts', icon: MessageSquare },
 ]
-
-const HINT_LEADERBOARDS_KEY = 'aura_hint_leaderboards_dismissed'
-const HINT_SUGGEST_KEY = 'aura_hint_suggest_dismissed'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -65,24 +62,6 @@ export function Nav() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const createDropdownRef = useRef<HTMLDivElement>(null)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
-
-  // Hint states
-  const [showLeaderboardsHint, setShowLeaderboardsHint] = useState(() => {
-    return !localStorage.getItem(HINT_LEADERBOARDS_KEY)
-  })
-  const [showSuggestHint, setShowSuggestHint] = useState(() => {
-    return !localStorage.getItem(HINT_SUGGEST_KEY)
-  })
-
-  const dismissLeaderboardsHint = () => {
-    localStorage.setItem(HINT_LEADERBOARDS_KEY, 'true')
-    setShowLeaderboardsHint(false)
-  }
-
-  const dismissSuggestHint = () => {
-    localStorage.setItem(HINT_SUGGEST_KEY, 'true')
-    setShowSuggestHint(false)
-  }
 
   const handleSubmitSuggestion = async () => {
     if (!suggestionName.trim()) return
@@ -158,34 +137,6 @@ export function Nav() {
           Aura
         </NavLink>
 
-        <div className="relative ml-4 z-10">
-          <button
-            onClick={() => setSuggestModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-accent text-muted-foreground hover:text-accent-foreground"
-          >
-            <Lightbulb className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Suggest</span>
-          </button>
-          {/* Suggest hint bubble */}
-          {showSuggestHint && (
-            <div className="absolute left-[60%] -translate-x-1/2 top-full mt-2 hidden md:block">
-              <div className="relative bg-amber-500 text-white text-xs font-medium px-3 py-3 rounded shadow-lg w-32 text-center">
-                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-amber-500 rotate-45" />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    dismissSuggestHint()
-                  }}
-                  className="absolute top-1 right-1 p-0.5 hover:bg-amber-600 rounded"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-                <span>Want to add a player?</span>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Desktop nav - centered */}
         <div className="absolute inset-0 hidden md:flex items-center justify-center gap-1">
             {navItems.map((item) => (
@@ -205,27 +156,6 @@ export function Nav() {
                   <item.icon className="w-4 h-4" />
                   <span>{item.label}</span>
                 </NavLink>
-                {/* Custom Leaderboards hint bubble */}
-                {item.to === '/events' && showLeaderboardsHint && (
-                  <div className="absolute left-[55%] -translate-x-1/2 top-full mt-2">
-                    <div className="relative bg-green-500 text-white text-xs font-medium px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
-                      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-green-500 rotate-45" />
-                      <div className="flex items-center gap-2">
-                        <span>Join custom leaderboards!</span>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            dismissLeaderboardsHint()
-                          }}
-                          className="p-0.5 hover:bg-green-600 rounded"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
         </div>
@@ -285,12 +215,12 @@ export function Nav() {
                       Create Leaderboard
                     </Link>
                     <Link
-                      to="/create-aura-farm"
+                      to="/create-post"
                       onClick={() => setMobileMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
                     >
-                      <Sprout className="w-4 h-4" />
-                      Create Aura Farm
+                      <MessageSquare className="w-4 h-4" />
+                      Create Post
                     </Link>
 
                     <div className="border-t my-1" />
@@ -312,12 +242,12 @@ export function Nav() {
                       My Leaderboards
                     </Link>
                     <Link
-                      to="/my-aura-farms"
+                      to="/my-posts"
                       onClick={() => setMobileMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent"
                     >
-                      <Sprout className="w-4 h-4" />
-                      My Aura Farms
+                      <MessageSquare className="w-4 h-4" />
+                      My Posts
                     </Link>
 
                     <div className="border-t my-1" />
@@ -374,12 +304,12 @@ export function Nav() {
                       Custom Leaderboard
                     </Link>
                     <Link
-                      to="/create-aura-farm"
+                      to="/create-post"
                       onClick={() => setCreateDropdownOpen(false)}
                       className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent"
                     >
-                      <Sprout className="w-4 h-4" />
-                      Aura Farm
+                      <MessageSquare className="w-4 h-4" />
+                      Post
                     </Link>
                   </div>
                 )}
@@ -443,11 +373,11 @@ export function Nav() {
                       My Leaderboards
                     </Link>
                     <Link
-                      to="/my-aura-farms"
+                      to="/my-posts"
                       onClick={() => setDropdownOpen(false)}
                       className="block px-4 py-2 text-sm hover:bg-accent"
                     >
-                      My Aura Farms
+                      My Posts
                     </Link>
                     <div className="border-t my-1" />
                     <button
@@ -466,10 +396,6 @@ export function Nav() {
             </>
           ) : (
             <div className="relative flex items-center gap-2">
-              {/* Hint for infinite credits */}
-              <div className="hidden md:flex items-center text-xs bg-accent/50 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Sign in for infinite credits</span>
-              </div>
               {/* Credits display for non-signed in users */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-card">
                 <div className="flex items-center gap-1">
@@ -482,11 +408,6 @@ export function Nav() {
                   <span className="text-sm font-medium text-red-500">{credits.downvotesRemaining}</span>
                 </div>
               </div>
-              {/* Hint for profile */}
-              <div className="hidden md:flex items-center gap-1 text-xs bg-accent/50 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Make your own profile</span>
-                <ChevronRight className="w-3 h-3 text-muted-foreground" />
-              </div>
               <Link
                 to="/signin"
                 className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
@@ -497,6 +418,21 @@ export function Nav() {
           )}
         </div>
       </div>
+
+      {/* Floating Suggest Button - bottom right */}
+      {createPortal(
+        <button
+          onClick={() => setSuggestModalOpen(true)}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-yellow-500 text-black font-medium shadow-lg transition-all hover:bg-yellow-400 hover:scale-105"
+          style={{
+            boxShadow: '0 0 20px rgba(234, 179, 8, 0.5), 0 0 40px rgba(234, 179, 8, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          <Lightbulb className="w-5 h-5" />
+          <span>Suggest</span>
+        </button>,
+        document.body
+      )}
 
       {/* Suggestion Modal - rendered via portal to escape nav stacking context */}
       {suggestModalOpen && createPortal(

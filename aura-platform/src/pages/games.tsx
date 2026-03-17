@@ -1,6 +1,12 @@
 import { useState, useMemo } from 'react'
 import { SearchBar, useSearch } from '@/components/layout'
-import { Leaderboard, GameFilter, SortButton, type SortDirection } from '@/components/leaderboard'
+import {
+  Leaderboard,
+  SortButton,
+  GameSidebarFilter,
+  MobileGameFilterButton,
+  type SortDirection,
+} from '@/components/leaderboard'
 import { useAuraStore } from '@/stores'
 import { EntityTypes } from '@/types'
 import type { Game } from '@/types'
@@ -24,7 +30,15 @@ export function GamesPage() {
   }, [games, selectedTypes])
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
+      {/* Left Sidebar Filter - Fixed in left margin space */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        <GameSidebarFilter
+          selectedTypes={selectedTypes}
+          onChange={setSelectedTypes}
+        />
+      </aside>
+
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">Games</h1>
         <p className="text-muted-foreground mb-6">
@@ -40,7 +54,7 @@ export function GamesPage() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <GameFilter
+            <MobileGameFilterButton
               selectedTypes={selectedTypes}
               onChange={setSelectedTypes}
             />
@@ -59,7 +73,7 @@ export function GamesPage() {
           entityType={EntityTypes.GAME}
           searchQuery={query}
           sortDirection={sortDirection}
-          emptyMessage="No games match your filters"
+          emptyMessage={selectedTypes.length > 0 ? "No games match your filters" : "No games yet"}
         />
       </div>
     </div>

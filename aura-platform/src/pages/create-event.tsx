@@ -133,7 +133,7 @@ export function CreateEventPage() {
             : { tempName: p.tempName }
         ),
       })
-      navigate(`/events/${event.slug}`)
+      navigate(`/community/${event.slug}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -337,7 +337,7 @@ export function CreateEventPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/community')}
               disabled={loading}
             >
               Cancel

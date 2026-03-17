@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Filter, X, Search, Users, Globe, Gamepad2, User } from 'lucide-react'
+import { Filter, X, Search, Users, Globe, Gamepad2, User, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,13 +11,48 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useAuraStore } from '@/stores'
 
-type FilterTab = 'game' | 'team' | 'country' | 'player'
-
 export interface PlayerFilters {
   gameIds: string[]
   organisationIds: string[]
   countryIds: string[]
   playerIds: string[]
+}
+
+interface FilterSectionProps {
+  title: string
+  icon: React.ReactNode
+  count: number
+  children: React.ReactNode
+  defaultOpen?: boolean
+}
+
+function FilterSection({ title, icon, count, children, defaultOpen = false }: FilterSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-2.5 px-1 hover:bg-accent/50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-medium">{title}</span>
+          {count > 0 && (
+            <Badge variant="default" className="px-1.5 py-0 text-xs h-5">
+              {count}
+            </Badge>
+          )}
+        </div>
+        {isOpen ? (
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        )}
+      </button>
+      {isOpen && <div className="pb-3 px-1">{children}</div>}
+    </div>
+  )
 }
 
 interface PlayerFilterProps {
@@ -27,8 +62,10 @@ interface PlayerFilterProps {
 
 export function PlayerFilter({ filters, onChange }: PlayerFilterProps) {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<FilterTab>('game')
-  const [search, setSearch] = useState('')
+  const [gameSearch, setGameSearch] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
+  const [countrySearch, setCountrySearch] = useState('')
+  const [playerSearch, setPlayerSearch] = useState('')
 
   const games = useAuraStore((s) => s.games)
   const organisations = useAuraStore((s) => s.organisations)
@@ -46,71 +83,65 @@ export function PlayerFilter({ filters, onChange }: PlayerFilterProps) {
     filters.countryIds.length +
     filters.playerIds.length
 
-  const filteredItems = useMemo(() => {
-    const query = search.toLowerCase()
-    switch (tab) {
-      case 'game':
-        return gameList.filter(
-          (g) =>
-            g.name.toLowerCase().includes(query) ||
-            g.slug.includes(query) ||
-            g.aliases?.some((a) => a.toLowerCase().includes(query))
-        )
-      case 'team':
-        return orgList.filter(
-          (o) => o.name.toLowerCase().includes(query) || o.slug.includes(query)
-        )
-      case 'country':
-        return countryList.filter(
-          (c) => c.name.toLowerCase().includes(query) || c.slug.includes(query)
-        )
-      case 'player':
-        return playerList.filter(
-          (p) =>
-            p.name.toLowerCase().includes(query) ||
-            p.slug.includes(query) ||
-            p.aliases?.some((a) => a.toLowerCase().includes(query))
-        )
-      default:
-        return []
-    }
-  }, [tab, search, gameList, orgList, countryList, playerList])
+  const filteredGames = useMemo(() => {
+    if (!gameSearch) return gameList.slice(0, 20)
+    const q = gameSearch.toLowerCase()
+    return gameList.filter(g =>
+      g.name.toLowerCase().includes(q) || g.aliases?.some(a => a.toLowerCase().includes(q))
+    ).slice(0, 20)
+  }, [gameList, gameSearch])
 
-  const toggleFilter = (id: string) => {
-    const key = tab === 'game' ? 'gameIds'
-      : tab === 'team' ? 'organisationIds'
-      : tab === 'country' ? 'countryIds'
-      : 'playerIds'
+  const filteredTeams = useMemo(() => {
+    if (!teamSearch) return orgList.slice(0, 20)
+    const q = teamSearch.toLowerCase()
+    return orgList.filter(o => o.name.toLowerCase().includes(q)).slice(0, 20)
+  }, [orgList, teamSearch])
 
-    const current = filters[key]
-    if (current.includes(id)) {
-      onChange({ ...filters, [key]: current.filter((i) => i !== id) })
-    } else {
-      onChange({ ...filters, [key]: [...current, id] })
-    }
+  const filteredCountries = useMemo(() => {
+    if (!countrySearch) return countryList.slice(0, 30)
+    const q = countrySearch.toLowerCase()
+    return countryList.filter(c => c.name.toLowerCase().includes(q)).slice(0, 30)
+  }, [countryList, countrySearch])
+
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearch) return playerList.slice(0, 20)
+    const q = playerSearch.toLowerCase()
+    return playerList.filter(p =>
+      p.name.toLowerCase().includes(q) || p.aliases?.some(a => a.toLowerCase().includes(q))
+    ).slice(0, 20)
+  }, [playerList, playerSearch])
+
+  const toggleGame = (id: string) => {
+    const newIds = filters.gameIds.includes(id)
+      ? filters.gameIds.filter(i => i !== id)
+      : [...filters.gameIds, id]
+    onChange({ ...filters, gameIds: newIds })
   }
 
-  const isSelected = (id: string) => {
-    switch (tab) {
-      case 'game': return filters.gameIds.includes(id)
-      case 'team': return filters.organisationIds.includes(id)
-      case 'country': return filters.countryIds.includes(id)
-      case 'player': return filters.playerIds.includes(id)
-      default: return false
-    }
+  const toggleTeam = (id: string) => {
+    const newIds = filters.organisationIds.includes(id)
+      ? filters.organisationIds.filter(i => i !== id)
+      : [...filters.organisationIds, id]
+    onChange({ ...filters, organisationIds: newIds })
+  }
+
+  const toggleCountry = (id: string) => {
+    const newIds = filters.countryIds.includes(id)
+      ? filters.countryIds.filter(i => i !== id)
+      : [...filters.countryIds, id]
+    onChange({ ...filters, countryIds: newIds })
+  }
+
+  const togglePlayer = (id: string) => {
+    const newIds = filters.playerIds.includes(id)
+      ? filters.playerIds.filter(i => i !== id)
+      : [...filters.playerIds, id]
+    onChange({ ...filters, playerIds: newIds })
   }
 
   const clearAll = () => {
     onChange({ gameIds: [], organisationIds: [], countryIds: [], playerIds: [] })
-    setSearch('')
   }
-
-  const tabs = [
-    { id: 'game' as FilterTab, label: 'Game', icon: Gamepad2 },
-    { id: 'team' as FilterTab, label: 'Team', icon: Users },
-    { id: 'country' as FilterTab, label: 'Country', icon: Globe },
-    { id: 'player' as FilterTab, label: 'Player', icon: User },
-  ]
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -125,7 +156,7 @@ export function PlayerFilter({ filters, onChange }: PlayerFilterProps) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="start">
         <div className="flex items-center justify-between p-3 border-b">
           <span className="text-sm font-medium">Filter Players</span>
           {totalFilters > 0 && (
@@ -138,56 +169,147 @@ export function PlayerFilter({ filters, onChange }: PlayerFilterProps) {
           )}
         </div>
 
-        <div className="flex border-b">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setTab(t.id); setSearch('') }}
-              className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
-                tab === t.id
-                  ? 'text-foreground border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="max-h-[400px] overflow-y-auto p-2">
+          {/* Game Section */}
+          <FilterSection
+            title="Game"
+            icon={<Gamepad2 className="w-4 h-4 text-muted-foreground" />}
+            count={filters.gameIds.length}
+            defaultOpen={true}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={gameSearch}
+                  onChange={(e) => setGameSearch(e.target.value)}
+                  placeholder="Search games..."
+                  className="pl-7 h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {filteredGames.map(game => (
+                  <button
+                    key={game.id}
+                    onClick={() => toggleGame(game.id)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors',
+                      filters.gameIds.includes(game.id)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-primary/50'
+                    )}
+                  >
+                    {game.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </FilterSection>
 
-        <div className="p-3">
-          <div className="relative mb-3">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${tab}s...`}
-              className="pl-8 h-9 text-sm"
-            />
-          </div>
+          {/* Team Section */}
+          <FilterSection
+            title="Team"
+            icon={<Users className="w-4 h-4 text-muted-foreground" />}
+            count={filters.organisationIds.length}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={teamSearch}
+                  onChange={(e) => setTeamSearch(e.target.value)}
+                  placeholder="Search teams..."
+                  className="pl-7 h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {filteredTeams.map(team => (
+                  <button
+                    key={team.id}
+                    onClick={() => toggleTeam(team.id)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors',
+                      filters.organisationIds.includes(team.id)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-primary/50'
+                    )}
+                  >
+                    {team.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </FilterSection>
 
-          <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-            {filteredItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2">No {tab}s found</p>
-            ) : (
-              filteredItems.slice(0, 50).map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => toggleFilter(item.id)}
-                  className={cn(
-                    'px-3 py-1.5 text-xs font-medium rounded-full border transition-colors',
-                    isSelected(item.id)
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-transparent text-muted-foreground border-border hover:border-primary/50'
-                  )}
-                >
-                  {item.name}
-                </button>
-              ))
-            )}
-          </div>
+          {/* Country Section */}
+          <FilterSection
+            title="Country"
+            icon={<Globe className="w-4 h-4 text-muted-foreground" />}
+            count={filters.countryIds.length}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={countrySearch}
+                  onChange={(e) => setCountrySearch(e.target.value)}
+                  placeholder="Search countries..."
+                  className="pl-7 h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {filteredCountries.map(country => (
+                  <button
+                    key={country.id}
+                    onClick={() => toggleCountry(country.id)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors',
+                      filters.countryIds.includes(country.id)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-primary/50'
+                    )}
+                  >
+                    {country.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </FilterSection>
+
+          {/* Player Section */}
+          <FilterSection
+            title="Player"
+            icon={<User className="w-4 h-4 text-muted-foreground" />}
+            count={filters.playerIds.length}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={playerSearch}
+                  onChange={(e) => setPlayerSearch(e.target.value)}
+                  placeholder="Search players..."
+                  className="pl-7 h-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {filteredPlayers.map(player => (
+                  <button
+                    key={player.id}
+                    onClick={() => togglePlayer(player.id)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors',
+                      filters.playerIds.includes(player.id)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-primary/50'
+                    )}
+                  >
+                    {player.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </FilterSection>
         </div>
       </PopoverContent>
     </Popover>

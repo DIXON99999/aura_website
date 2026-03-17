@@ -1,6 +1,12 @@
 import { useState, useMemo } from 'react'
 import { SearchBar, useSearch } from '@/components/layout'
-import { Leaderboard, SortButton, TeamGameFilter, ActiveFilters, type SortDirection } from '@/components/leaderboard'
+import {
+  Leaderboard,
+  SortButton,
+  TeamSidebarFilter,
+  MobileTeamFilterButton,
+  type SortDirection,
+} from '@/components/leaderboard'
 import { useAuraStore } from '@/stores'
 import { EntityTypes } from '@/types'
 import type { Entity, OrganisationGame } from '@/types'
@@ -24,16 +30,16 @@ export function TeamsPage() {
     return Object.values(organisations)
   }, [organisations, organisationGames, selectedGameIds])
 
-  const removeGameFilter = (gameId: string) => {
-    setSelectedGameIds(selectedGameIds.filter((id) => id !== gameId))
-  }
-
-  const clearAllFilters = () => {
-    setSelectedGameIds([])
-  }
-
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
+      {/* Left Sidebar Filter - Fixed in left margin space */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        <TeamSidebarFilter
+          selectedGameIds={selectedGameIds}
+          onChange={setSelectedGameIds}
+        />
+      </aside>
+
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">Teams</h1>
         <p className="text-muted-foreground mb-6">
@@ -47,9 +53,9 @@ export function TeamsPage() {
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <TeamGameFilter
+            <MobileTeamFilterButton
               selectedGameIds={selectedGameIds}
               onChange={setSelectedGameIds}
             />
@@ -63,21 +69,13 @@ export function TeamsPage() {
           </span>
         </div>
 
-        <ActiveFilters
-          selectedGameIds={selectedGameIds}
-          onRemove={removeGameFilter}
-          onClearAll={clearAllFilters}
+        <Leaderboard
+          entities={displayedEntities}
+          entityType={selectedGameIds.length > 0 ? EntityTypes.ORGANISATION_GAME : EntityTypes.ORGANISATION}
+          searchQuery={query}
+          sortDirection={sortDirection}
+          emptyMessage={selectedGameIds.length > 0 ? "No teams for selected games" : "No teams yet"}
         />
-
-        <div className={selectedGameIds.length > 0 ? 'mt-4' : 'mt-2'}>
-          <Leaderboard
-            entities={displayedEntities}
-            entityType={selectedGameIds.length > 0 ? EntityTypes.ORGANISATION_GAME : EntityTypes.ORGANISATION}
-            searchQuery={query}
-            sortDirection={sortDirection}
-            emptyMessage={selectedGameIds.length > 0 ? "No teams for selected games" : "No teams yet"}
-          />
-        </div>
       </div>
     </div>
   )

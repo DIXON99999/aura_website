@@ -3,11 +3,11 @@ import { SearchBar, useSearch } from '@/components/layout'
 import {
   Leaderboard,
   SortButton,
-  PeripheralFilter,
-  PeripheralActiveFilters,
+  PeripheralSidebarFilter,
+  MobilePeripheralFilterButton,
   type SortDirection,
-  type PeripheralFilters,
 } from '@/components/leaderboard'
+import type { PeripheralFilters } from '@/components/leaderboard/peripheral-sidebar-filter'
 import { useAuraStore } from '@/stores'
 import { EntityTypes } from '@/types'
 import type { Peripheral } from '@/types'
@@ -45,21 +45,15 @@ export function PeripheralsPage() {
     return result
   }, [peripherals, filters])
 
-  const removeFilter = (type: 'types' | 'brandIds', id: string) => {
-    setFilters({
-      ...filters,
-      [type]: filters[type].filter((i) => i !== id),
-    })
-  }
-
-  const clearAllFilters = () => {
-    setFilters(emptyFilters)
-  }
-
   const hasFilters = filters.types.length > 0 || filters.brandIds.length > 0
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
+      {/* Left Sidebar Filter - Fixed in left margin space */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        <PeripheralSidebarFilter filters={filters} onChange={setFilters} />
+      </aside>
+
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">Peripherals</h1>
         <p className="text-muted-foreground mb-6">
@@ -73,9 +67,9 @@ export function PeripheralsPage() {
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <PeripheralFilter filters={filters} onChange={setFilters} />
+            <MobilePeripheralFilterButton filters={filters} onChange={setFilters} />
             <SortButton
               direction={sortDirection}
               onChange={setSortDirection}
@@ -86,21 +80,13 @@ export function PeripheralsPage() {
           </span>
         </div>
 
-        <PeripheralActiveFilters
-          filters={filters}
-          onRemove={removeFilter}
-          onClearAll={clearAllFilters}
+        <Leaderboard
+          entities={filteredPeripherals}
+          entityType={EntityTypes.PERIPHERAL}
+          searchQuery={query}
+          sortDirection={sortDirection}
+          emptyMessage={hasFilters ? "No peripherals match your filters" : "No peripherals yet"}
         />
-
-        <div className={hasFilters ? 'mt-4' : 'mt-2'}>
-          <Leaderboard
-            entities={filteredPeripherals}
-            entityType={EntityTypes.PERIPHERAL}
-            searchQuery={query}
-            sortDirection={sortDirection}
-            emptyMessage={hasFilters ? "No peripherals match your filters" : "No peripherals yet"}
-          />
-        </div>
       </div>
     </div>
   )

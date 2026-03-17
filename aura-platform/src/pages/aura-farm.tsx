@@ -372,7 +372,7 @@ export function AuraFarmPage() {
         const farmData = await api.getAuraFarm(slug)
         setFarm(farmData)
       } catch {
-        navigate('/aura-farms')
+        navigate('/posts')
       } finally {
         setLoading(false)
       }
@@ -447,7 +447,7 @@ export function AuraFarmPage() {
 
     try {
       await api.deleteAuraFarm(farm.id)
-      navigate('/aura-farms')
+      navigate('/posts')
     } catch {
       // Ignore
     }
@@ -605,7 +605,7 @@ export function AuraFarmPage() {
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => navigate('/aura-farms')}
+          onClick={() => navigate('/posts')}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="w-4 h-4" />

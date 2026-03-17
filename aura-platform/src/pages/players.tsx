@@ -3,11 +3,11 @@ import { SearchBar, useSearch } from '@/components/layout'
 import {
   Leaderboard,
   SortButton,
-  PlayerFilter,
-  PlayerActiveFilters,
+  SidebarFilter,
+  MobileFilterButton,
   type SortDirection,
-  type PlayerFilters,
 } from '@/components/leaderboard'
+import type { PlayerFilters } from '@/components/leaderboard/sidebar-filter'
 import { useAuraStore } from '@/stores'
 import { EntityTypes } from '@/types'
 import type { Player } from '@/types'
@@ -67,17 +67,6 @@ export function PlayersPage() {
     return result
   }, [players, filters])
 
-  const removeFilter = (type: keyof PlayerFilters, id: string) => {
-    setFilters({
-      ...filters,
-      [type]: filters[type].filter((i) => i !== id),
-    })
-  }
-
-  const clearAllFilters = () => {
-    setFilters(emptyFilters)
-  }
-
   const hasFilters =
     filters.gameIds.length > 0 ||
     filters.organisationIds.length > 0 ||
@@ -85,7 +74,12 @@ export function PlayersPage() {
     filters.playerIds.length > 0
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
+      {/* Left Sidebar Filter - Fixed in left margin space */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        <SidebarFilter filters={filters} onChange={setFilters} />
+      </aside>
+
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">Players</h1>
         <p className="text-muted-foreground mb-6">
@@ -99,9 +93,9 @@ export function PlayersPage() {
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <PlayerFilter filters={filters} onChange={setFilters} />
+            <MobileFilterButton filters={filters} onChange={setFilters} />
             <SortButton
               direction={sortDirection}
               onChange={setSortDirection}
@@ -112,21 +106,13 @@ export function PlayersPage() {
           </span>
         </div>
 
-        <PlayerActiveFilters
-          filters={filters}
-          onRemove={removeFilter}
-          onClearAll={clearAllFilters}
+        <Leaderboard
+          entities={filteredPlayers}
+          entityType={EntityTypes.PLAYER}
+          searchQuery={query}
+          sortDirection={sortDirection}
+          emptyMessage={hasFilters ? "No players match your filters" : "No players yet"}
         />
-
-        <div className={hasFilters ? 'mt-4' : 'mt-2'}>
-          <Leaderboard
-            entities={filteredPlayers}
-            entityType={EntityTypes.PLAYER}
-            searchQuery={query}
-            sortDirection={sortDirection}
-            emptyMessage={hasFilters ? "No players match your filters" : "No players yet"}
-          />
-        </div>
       </div>
     </div>
   )

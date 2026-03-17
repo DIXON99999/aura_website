@@ -85,20 +85,27 @@ export function AuraFarmsPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Aura Farms</h1>
-
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search aura farms..."
-            className="pl-10"
-          />
+      <div className="max-w-5xl mx-auto">
+        {/* Centered Title */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold mb-2">Posts</h1>
+          <p className="text-muted-foreground">Share and vote on aura moments</p>
         </div>
 
-        <div className="mb-6">
+        {/* Centered Search Bar */}
+        <div className="max-w-md mx-auto mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search posts..."
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-center mb-6">
           <Popover open={sortOpen} onOpenChange={setSortOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -106,7 +113,7 @@ export function AuraFarmsPage() {
                 <ChevronDown className="w-4 h-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 p-1" align="start">
+            <PopoverContent className="w-48 p-1" align="center">
               {(['new', 'popular', 'oldest'] as const).map((option) => (
                 <button
                   key={option}
@@ -124,8 +131,8 @@ export function AuraFarmsPage() {
         </div>
 
         {!user && (
-          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
-            <Link to="/login" className="text-primary hover:underline">Sign in</Link> to create your own posts
+          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center max-w-md mx-auto">
+            <Link to="/signin" className="text-primary hover:underline">Sign in</Link> to create your own posts
           </div>
         )}
 
@@ -133,14 +140,14 @@ export function AuraFarmsPage() {
           <div className="text-center text-muted-foreground py-12">Loading...</div>
         ) : farms.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
-            {search ? 'No aura farms found' : 'No aura farms yet'}
+            {search ? 'No posts found' : 'No posts yet'}
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3">
             {farms.map(farm => (
               <Link
                 key={farm.id}
-                to={`/aura-farms/${farm.slug || farm.id}`}
+                to={`/posts/${farm.slug || farm.id}`}
                 className="block mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
               >
                 {farm.imageUrl && (

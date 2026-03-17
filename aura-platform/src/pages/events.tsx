@@ -32,7 +32,6 @@ export function EventsPage() {
     e.stopPropagation()
 
     if (!user?.playerId) {
-      // Redirect to profile to create/link a player profile first
       navigate('/profile')
       return
     }
@@ -42,8 +41,8 @@ export function EventsPage() {
     try {
       await api.joinEvent(eventSlug)
       setJoinedEvents(prev => new Set(prev).add(eventSlug))
-    } catch (err: any) {
-      const message = err?.message || 'Failed to join'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to join'
       if (message.includes('already')) {
         setJoinedEvents(prev => new Set(prev).add(eventSlug))
       } else {
@@ -57,30 +56,42 @@ export function EventsPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Custom Leaderboards</h1>
+      <div className="max-w-5xl mx-auto">
+        {/* Centered Title */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold mb-2">Community</h1>
+          <p className="text-muted-foreground">Join leaderboards and compete with others</p>
+        </div>
 
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search leaderboards..."
-            className="pl-10"
-          />
+        {/* Centered Search Bar */}
+        <div className="max-w-md mx-auto mb-8">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search leaderboards..."
+              className="pl-10"
+            />
+          </div>
         </div>
 
         {!user && (
-          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center">
-            <Link to="/signup" className="text-primary hover:underline">Sign in</Link> to create your own custom leaderboards and join them
+          <div className="mb-6 p-3 rounded-lg bg-accent/50 text-sm text-muted-foreground text-center max-w-md mx-auto">
+            <Link to="/signup" className="text-primary hover:underline">Sign in</Link> to create your own leaderboards and join them
           </div>
         )}
 
         {joinError && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm text-center">
+          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm text-center max-w-md mx-auto">
             {joinError}
           </div>
         )}
+
+        {/* Leaderboards - Centered */}
+        <div className="text-center mb-4">
+          <h2 className="text-xl font-semibold">Leaderboards</h2>
+        </div>
 
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>
@@ -89,12 +100,12 @@ export function EventsPage() {
             {search ? 'No leaderboards found' : 'No public leaderboards yet'}
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+          <div className="flex flex-wrap justify-center gap-4">
             {events.map(event => (
               <Link
                 key={event.id}
-                to={`/events/${event.slug}`}
-                className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors overflow-hidden"
+                to={`/community/${event.slug}`}
+                className="w-full sm:w-[calc(50%-0.5rem)] md:w-[calc(33.333%-0.75rem)] max-w-[280px] rounded-lg border bg-card hover:bg-accent/50 transition-colors overflow-hidden"
               >
                 {event.imageUrl && (
                   <div className="aspect-[3/2] w-full overflow-hidden bg-muted">

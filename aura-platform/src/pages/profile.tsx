@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Pencil, ChevronDown, LogOut, Trash2, Plus, X, Star, Search, Check, XCircle, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Pencil, ChevronDown, LogOut, Trash2, Plus, X, Star, Search, Check, XCircle, ExternalLink, Database, MessageSquare, Camera } from 'lucide-react'
 import { useAuraStore, useAuthStore } from '@/stores'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/popover'
 import { EntityTypes } from '@/types'
 import type { Entity, Country } from '@/types'
-import { api, type Suggestion } from '@/lib/api'
+import { api, type Suggestion, type AuraFarm } from '@/lib/api'
+import { EntityCreator } from '@/components/EntityCreator'
 
 function getFlagUrl(countryCode: string): string {
   return `https://flagcdn.com/w160/${countryCode.toLowerCase()}.png`
@@ -138,7 +139,13 @@ export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'associations' | 'farms' | 'suggestions'>('associations')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [farms, setFarms] = useState<AuraFarm[]>([])
+  const [farmsLoading, setFarmsLoading] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [entityCreatorOpen, setEntityCreatorOpen] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Get profile reactively from store
   const profileId = user ? userProfiles[user.id] : undefined
@@ -159,6 +166,14 @@ export function ProfilePage() {
     }
   }, [profile?.name])
 
+  // Check if user is admin
+  useEffect(() => {
+    if (!user) return
+    api.checkAdmin()
+      .then(() => setIsAdmin(true))
+      .catch(() => setIsAdmin(false))
+  }, [user])
+
   // Fetch suggestions when tab is active
   useEffect(() => {
     if (activeTab !== 'suggestions' || !user) return
@@ -167,6 +182,16 @@ export function ProfilePage() {
       .then(setSuggestions)
       .catch(console.error)
       .finally(() => setSuggestionsLoading(false))
+  }, [activeTab, user])
+
+  // Fetch farms when tab is active
+  useEffect(() => {
+    if (activeTab !== 'farms' || !user) return
+    setFarmsLoading(true)
+    api.getMyAuraFarms()
+      .then(setFarms)
+      .catch(console.error)
+      .finally(() => setFarmsLoading(false))
   }, [activeTab, user])
 
   const handleUpdateSuggestion = async (id: string, status: 'approved' | 'rejected') => {
@@ -364,6 +389,24 @@ export function ProfilePage() {
     updateUserProfile(user.id, { mainGameId: gameId })
   }
 
+  const handleProfilePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingImage(true)
+    try {
+      const { imageUrl } = await api.uploadImage(file)
+      await updateUserProfile(user.id, { imageUrl })
+    } catch (error) {
+      console.error('Failed to upload profile picture:', error)
+    }
+    setUploadingImage(false)
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSignOut = async () => {
     await signOut()
     navigate('/')
@@ -384,28 +427,67 @@ export function ProfilePage() {
     <div className="container mx-auto px-4 py-8 min-h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex items-center justify-between mb-8">
         <button
-          onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
+          onClick={() => navigate('/')}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
-        <Button variant="outline" size="sm" onClick={handleSignOut}>
-          <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEntityCreatorOpen(true)}
+              className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30 hover:border-purple-500/50"
+            >
+              <Database className="w-4 h-4 mr-2 text-purple-500" />
+              Create Entity
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handleSignOut}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
       </div>
 
       <div className="max-w-2xl mx-auto flex-1 w-full">
         <div className="flex flex-col items-center text-center">
-          <div className="w-32 h-32 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden mb-6">
-            {profile.name ? (
-              <span className="text-4xl font-bold text-muted-foreground">
-                {profile.name.charAt(0).toUpperCase()}
-              </span>
-            ) : (
-              <span className="text-4xl font-bold text-muted-foreground">?</span>
-            )}
+          <div className="relative group mb-6">
+            <div className="w-32 h-32 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
+              {profile.imageUrl ? (
+                <img
+                  src={profile.imageUrl}
+                  alt={profile.name || 'Profile'}
+                  className="w-full h-full object-cover"
+                />
+              ) : profile.name ? (
+                <span className="text-4xl font-bold text-muted-foreground">
+                  {profile.name.charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <span className="text-4xl font-bold text-muted-foreground">?</span>
+              )}
+            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingImage}
+              className="absolute inset-0 rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer disabled:cursor-wait"
+            >
+              {uploadingImage ? (
+                <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="w-8 h-8 text-white" />
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProfilePictureChange}
+              className="hidden"
+            />
           </div>
 
           <div className="flex items-center gap-3 mb-4">
@@ -582,8 +664,24 @@ export function ProfilePage() {
             </div>
           )}
 
+          {/* Bio Section */}
+          <div className="w-full max-w-md mt-4">
+            <div className="relative">
+              <textarea
+                value={profile.bio || ''}
+                onChange={(e) => updateUserProfile(user.id, { bio: e.target.value })}
+                placeholder="Add a bio..."
+                className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[60px] resize-none text-center placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                maxLength={160}
+              />
+              <span className="absolute bottom-2 right-2 text-xs text-muted-foreground">
+                {(profile.bio || '').length}/160
+              </span>
+            </div>
+          </div>
+
           {!isProfileComplete && (
-            <p className="text-sm text-amber-500 mb-4">
+            <p className="text-sm text-amber-500 mb-4 mt-4">
               Set a username and country to appear on leaderboards
             </p>
           )}
@@ -700,16 +798,56 @@ export function ProfilePage() {
                   </div>
 
                   {associatedEntities.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {associatedEntities.map(entity => (
-                        <MiniCard
-                          key={entity.id}
-                          entity={entity}
-                          onRemove={() => handleRemoveEntity(entity)}
-                          isMainGame={entity.type === EntityTypes.GAME && profile.mainGameId === entity.id}
-                          onSetMainGame={entity.type === EntityTypes.GAME ? () => handleSetMainGame(entity.id) : undefined}
-                        />
-                      ))}
+                    <div className="space-y-4">
+                      {/* Games & Teams */}
+                      {associatedEntities.filter(e => e.type === EntityTypes.GAME || e.type === EntityTypes.ORGANISATION_GAME).length > 0 && (
+                        <div>
+                          <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Games & Teams</h3>
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            {associatedEntities.filter(e => e.type === EntityTypes.GAME || e.type === EntityTypes.ORGANISATION_GAME).map(entity => (
+                              <MiniCard
+                                key={entity.id}
+                                entity={entity}
+                                onRemove={() => handleRemoveEntity(entity)}
+                                isMainGame={entity.type === EntityTypes.GAME && profile.mainGameId === entity.id}
+                                onSetMainGame={entity.type === EntityTypes.GAME ? () => handleSetMainGame(entity.id) : undefined}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Peripherals */}
+                      {associatedEntities.filter(e => e.type === EntityTypes.PERIPHERAL).length > 0 && (
+                        <div>
+                          <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Peripherals</h3>
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            {associatedEntities.filter(e => e.type === EntityTypes.PERIPHERAL).map(entity => (
+                              <MiniCard
+                                key={entity.id}
+                                entity={entity}
+                                onRemove={() => handleRemoveEntity(entity)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Roles, Weapons & Characters */}
+                      {associatedEntities.filter(e => e.type === EntityTypes.ROLE || e.type === EntityTypes.WEAPON || e.type === EntityTypes.CHARACTER).length > 0 && (
+                        <div>
+                          <h3 className="text-xs font-medium text-muted-foreground mb-2 text-center">Roles, Weapons & Characters</h3>
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            {associatedEntities.filter(e => e.type === EntityTypes.ROLE || e.type === EntityTypes.WEAPON || e.type === EntityTypes.CHARACTER).map(entity => (
+                              <MiniCard
+                                key={entity.id}
+                                entity={entity}
+                                onRemove={() => handleRemoveEntity(entity)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground text-center py-4">
@@ -720,8 +858,48 @@ export function ProfilePage() {
               )}
 
               {activeTab === 'farms' && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground">Coming soon...</p>
+                <div>
+                  {farmsLoading ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">Loading posts...</p>
+                    </div>
+                  ) : farms.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground mb-4">You haven't created any posts yet.</p>
+                      <Link to="/create-post">
+                        <Button size="sm">
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Create Post
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-end mb-2">
+                        <Link to="/create-post">
+                          <Button size="sm" variant="outline">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create Post
+                          </Button>
+                        </Link>
+                      </div>
+                      {farms.map(farm => (
+                        <Link
+                          key={farm.id}
+                          to={`/posts/${farm.slug || farm.id}`}
+                          className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                        >
+                          <span className={cn(
+                            'text-sm font-medium tabular-nums min-w-[3rem] text-right',
+                            farm.auraScore > 0 ? 'text-green-500' : farm.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
+                          )}>
+                            {farm.auraScore.toFixed(0)}
+                          </span>
+                          <h3 className="font-medium text-sm flex-1 line-clamp-1">{farm.title}</h3>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -851,6 +1029,14 @@ export function ProfilePage() {
           </Button>
         )}
       </div>
+
+      {/* Admin Entity Creator Modal */}
+      {isAdmin && (
+        <EntityCreator
+          open={entityCreatorOpen}
+          onOpenChange={setEntityCreatorOpen}
+        />
+      )}
     </div>
   )
 }

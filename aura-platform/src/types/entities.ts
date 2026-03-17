@@ -130,6 +130,7 @@ export interface Player extends BaseEntity {
   associatedEntityIds?: string[]
   isUserProfile?: boolean
   visitorId?: string
+  bio?: string
 }
 
 // ============================================================================

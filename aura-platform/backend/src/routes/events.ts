@@ -58,6 +58,9 @@ async function initEventsTables() {
   await pool.query(`ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS image_url TEXT`)
   await pool.query(`ALTER TABLE sub_event_comments ADD COLUMN IF NOT EXISTS user_id TEXT`)
 
+  // Add column for weekly reset tracking
+  await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_reset_week INTEGER`)
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sub_event_comment_votes (
       id TEXT PRIMARY KEY,
@@ -100,6 +103,42 @@ function generateId(): string {
 
 function generateSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
+// Get current ISO week number (1-53)
+function getCurrentWeekNumber(): number {
+  const now = new Date()
+  const start = new Date(now.getUTCFullYear(), 0, 1)
+  const diff = now.getTime() - start.getTime()
+  const oneWeek = 604800000 // ms in a week
+  return Math.ceil((diff + start.getUTCDay() * 86400000) / oneWeek)
+}
+
+// Check and perform weekly reset for an event's participants
+async function checkAndResetWeeklyScores(eventId: string): Promise<boolean> {
+  const currentWeek = getCurrentWeekNumber()
+
+  // Get the event's last reset week
+  const eventResult = await pool.query('SELECT last_reset_week FROM events WHERE id = $1', [eventId])
+  if (eventResult.rows.length === 0) return false
+
+  const lastResetWeek = eventResult.rows[0].last_reset_week
+
+  // If we're in a new week (or never reset), reset scores
+  if (lastResetWeek === null || lastResetWeek < currentWeek) {
+    // Reset all participant scores to 0
+    await pool.query('UPDATE event_participants SET aura_score = 0 WHERE event_id = $1', [eventId])
+
+    // Update the last reset week
+    await pool.query('UPDATE events SET last_reset_week = $1 WHERE id = $2', [currentWeek, eventId])
+
+    // Also clear votes for this event so users can vote again
+    await pool.query('DELETE FROM event_votes WHERE event_id = $1', [eventId])
+
+    return true
+  }
+
+  return false
 }
 
 async function generateUniqueSlug(name: string, table: string, excludeId?: string): Promise<string> {
@@ -251,6 +290,9 @@ app.get('/:idOrSlug', async (c) => {
   if (!event.is_public && event.owner_id !== userId) {
     return c.json({ error: 'Event not found' }, 404)
   }
+
+  // Check if weekly reset is needed
+  await checkAndResetWeeklyScores(event.id)
 
   const participantsResult = await pool.query(
     'SELECT * FROM event_participants WHERE event_id = $1 ORDER BY aura_score DESC',
@@ -530,6 +572,82 @@ app.post('/:id/join', async (c) => {
       imageUrl: player.image_url,
     } : null,
   })
+})
+
+// Leave a leaderboard (for participants to remove themselves)
+app.post('/:id/leave', async (c) => {
+  const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
+  const userId = await getUserIdFromSession(sessionId)
+
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  // Get user's playerId
+  const userResult = await pool.query('SELECT player_id FROM users WHERE id = $1', [userId])
+  if (userResult.rows.length === 0) {
+    return c.json({ error: 'User not found' }, 404)
+  }
+
+  const playerId = (userResult.rows[0] as { player_id: string | null }).player_id
+  if (!playerId) {
+    return c.json({ error: 'You must have a linked player profile' }, 400)
+  }
+
+  const idOrSlug = c.req.param('id')
+  const event = await getEventByIdOrSlug(idOrSlug)
+
+  if (!event) {
+    return c.json({ error: 'Leaderboard not found' }, 404)
+  }
+
+  // Find the participant entry for this player
+  const participantResult = await pool.query(
+    'SELECT * FROM event_participants WHERE event_id = $1 AND player_id = $2',
+    [event.id, playerId]
+  )
+
+  if (participantResult.rows.length === 0) {
+    return c.json({ error: 'You are not in this leaderboard' }, 400)
+  }
+
+  const participant = participantResult.rows[0] as DbEventParticipant
+
+  // Remove any sub-event participations
+  const subEventParticipants = await pool.query(
+    'SELECT sep.* FROM sub_event_participants sep ' +
+    'JOIN sub_events se ON sep.sub_event_id = se.id ' +
+    'WHERE se.leaderboard_id = $1 AND sep.leaderboard_participant_id = $2',
+    [event.id, participant.id]
+  )
+
+  for (const sep of subEventParticipants.rows as DbSubEventParticipant[]) {
+    // Reverse any aura score from sub-events
+    if (sep.aura_score !== 0) {
+      await pool.query(
+        'UPDATE players SET aura_score = ROUND((aura_score - $1)::numeric, 2) WHERE id = $2',
+        [sep.aura_score, playerId]
+      )
+    }
+    await pool.query('DELETE FROM sub_event_votes WHERE participant_id = $1', [sep.id])
+    await pool.query('DELETE FROM sub_event_participants WHERE id = $1', [sep.id])
+  }
+
+  // Reverse any aura score from main leaderboard
+  if (participant.aura_score !== 0) {
+    await pool.query(
+      'UPDATE players SET aura_score = ROUND((aura_score - $1)::numeric, 2) WHERE id = $2',
+      [participant.aura_score, playerId]
+    )
+  }
+
+  // Delete votes for this participant
+  await pool.query('DELETE FROM event_votes WHERE participant_id = $1', [participant.id])
+
+  // Delete the participant
+  await pool.query('DELETE FROM event_participants WHERE id = $1', [participant.id])
+
+  return c.json({ success: true })
 })
 
 app.delete('/:id/participants/:participantId', async (c) => {

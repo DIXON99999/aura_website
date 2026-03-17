@@ -139,6 +139,8 @@ export const api = {
     regionId: string
     gameIds: string[]
     associatedEntityIds: string[]
+    imageUrl: string
+    bio: string
   }>) =>
     fetchApi<Entity>(`/players/${id}`, {
       method: 'PATCH',
@@ -244,6 +246,11 @@ export const api = {
       method: 'POST',
     }),
 
+  leaveEvent: (eventIdOrSlug: string) =>
+    fetchApi<{ success: boolean }>(`/events/${eventIdOrSlug}/leave`, {
+      method: 'POST',
+    }),
+
   removeEventParticipant: (eventId: string, participantId: string) =>
     fetchApi<{ success: boolean }>(`/events/${eventId}/participants/${participantId}`, {
       method: 'DELETE',
@@ -271,7 +278,7 @@ export const api = {
   getSubEvent: (leaderboardId: string, subEventId: string) =>
     fetchApi<SubEventWithParticipants>(`/events/${leaderboardId}/sub-events/${subEventId}`),
 
-  createSubEvent: (leaderboardId: string, data: { name: string; participantIds: string[]; imageUrl?: string }) =>
+  createSubEvent: (leaderboardId: string, data: { name: string; participantIds: string[]; imageUrl?: string; description?: string }) =>
     fetchApi<SubEvent>(`/events/${leaderboardId}/sub-events`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -308,7 +315,7 @@ export const api = {
   getSubEventVotes: (leaderboardId: string, subEventId: string, visitorId: string) =>
     fetchApi<Array<{ participantId: string; direction: 'UP' | 'DOWN' }>>(`/events/${leaderboardId}/sub-events/${subEventId}/votes?visitorId=${visitorId}`),
 
-  updateSubEvent: (leaderboardId: string, subEventId: string, data: { imageUrl?: string; name?: string }) =>
+  updateSubEvent: (leaderboardId: string, subEventId: string, data: { imageUrl?: string; name?: string; description?: string }) =>
     fetchApi<SubEvent>(`/events/${leaderboardId}/sub-events/${subEventId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -450,6 +457,168 @@ export const api = {
     fetchApi<{ success: boolean }>(`/notifications/${userId}/read-all`, {
       method: 'PATCH',
     }),
+
+  // Admin - check if current user is admin
+  checkAdmin: () =>
+    fetchApi<{ isAdmin: boolean }>('/admin/check'),
+
+  // Admin - Create entities
+  adminCreateCountry: (data: { name: string; flagCode: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/countries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateGame: (data: { name: string; gameType: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/games', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateRegion: (data: { name: string; gameId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/regions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateOrganisation: (data: { name: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/organisations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateOrganisationGame: (data: { name: string; organisationId: string; gameId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/organisation-games', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateBrand: (data: { name: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/brands', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreatePeripheral: (data: { name: string; peripheralType: string; brandId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/peripherals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateRole: (data: { name: string; gameId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/roles', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateWeapon: (data: { name: string; gameId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/weapons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateCharacter: (data: { name: string; gameId: string; imageUrl?: string; aliases?: string[] }) =>
+    fetchApi<any>('/admin/characters', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  adminCreatePlayer: (data: {
+    name: string
+    countryId?: string
+    organisationId?: string
+    mainGameId?: string
+    regionId?: string
+    imageUrl?: string
+    aliases?: string[]
+    associatedEntityIds?: string[]
+  }) =>
+    fetchApi<any>('/admin/players', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Admin - Update entities
+  adminUpdateCountry: (id: string, data: { name?: string; flagCode?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/countries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateGame: (id: string, data: { name?: string; gameType?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/games/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateRegion: (id: string, data: { name?: string; gameId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/regions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateOrganisation: (id: string, data: { name?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/organisations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateOrganisationGame: (id: string, data: { name?: string; organisationId?: string; gameId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/organisation-games/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateBrand: (id: string, data: { name?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/brands/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdatePeripheral: (id: string, data: { name?: string; peripheralType?: string; brandId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/peripherals/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateRole: (id: string, data: { name?: string; gameId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/roles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateWeapon: (id: string, data: { name?: string; gameId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/weapons/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateCharacter: (id: string, data: { name?: string; gameId?: string; imageUrl?: string; aliases?: string[]; auraScore?: number }) =>
+    fetchApi<any>(`/admin/characters/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdatePlayer: (id: string, data: {
+    name?: string
+    countryId?: string
+    organisationId?: string
+    mainGameId?: string
+    regionId?: string
+    imageUrl?: string
+    aliases?: string[]
+    associatedEntityIds?: string[]
+    auraScore?: number
+  }) =>
+    fetchApi<any>(`/admin/players/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  adminDeleteEntity: (entityType: string, id: string) =>
+    fetchApi<{ success: boolean }>(`/admin/${entityType}/${id}`, {
+      method: 'DELETE',
+    }),
 }
 
 // Types for API responses
@@ -540,6 +709,7 @@ interface SubEvent {
   name: string
   slug: string
   imageUrl: string | null
+  description: string | null
   createdAt: Date
 }
 

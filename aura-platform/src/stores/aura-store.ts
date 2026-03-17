@@ -63,6 +63,8 @@ interface AuraStoreState extends EntitiesState {
     regionId?: string
     gameIds?: string[]
     associatedEntityIds?: string[]
+    imageUrl?: string
+    bio?: string
   }) => Promise<void>
   getUserProfile: (visitorId: string) => Player | undefined
   loadUserProfile: (visitorId: string) => Promise<Player | undefined>

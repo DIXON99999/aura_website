@@ -9,6 +9,7 @@ import uploads from './routes/uploads.js'
 import auraFarms from './routes/aura-farms.js'
 import suggestions from './routes/suggestions.js'
 import notifications from './routes/notifications.js'
+import admin from './routes/admin.js'
 
 const app = new Hono()
 
@@ -86,6 +87,8 @@ app.route('/api/suggestions', suggestions)
 app.route('/suggestions', suggestions)
 app.route('/api/notifications', notifications)
 app.route('/notifications', notifications)
+app.route('/api/admin', admin)
+app.route('/admin', admin)
 
 const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)

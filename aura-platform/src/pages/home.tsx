@@ -1,25 +1,31 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useMemo, useState, useEffect } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import { SearchBar, useSearch } from '@/components/layout'
 import {
   Leaderboard,
   SortButton,
   PlayerFilter,
   PlayerActiveFilters,
+  SidebarFilter,
   TeamGameFilter,
   ActiveFilters,
+  TeamSidebarFilter,
+  GameSidebarFilter,
   PeripheralFilter,
   PeripheralActiveFilters,
+  PeripheralSidebarFilter,
   MetaFilter,
   MetaActiveFilters,
+  MetaSidebarFilter,
   RegionFilter,
   RegionActiveFilters,
+  RegionSidebarFilter,
   type SortDirection,
   type PlayerFilters,
   type PeripheralFilters,
   type MetaFilters,
 } from '@/components/leaderboard'
-import { useAuraStore } from '@/stores'
+import { useAuraStore, useAuthStore } from '@/stores'
 import type { Entity, Player, OrganisationGame } from '@/types'
 import { EntityTypes } from '@/types'
 import { cn } from '@/lib/utils'
@@ -66,31 +72,43 @@ export function HomePage() {
   const { query, setQuery } = useSearch()
   const [searchParams, setSearchParams] = useSearchParams()
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const user = useAuthStore((s) => s.user)
 
-  // Read filter from URL, default to 'all'
+  // Read filter from URL, default to 'players'
   const filterParam = searchParams.get('tab') as FilterType | null
   const filter: FilterType = filterParam && ['all', 'players', 'teams', 'games', 'regions', 'peripherals', 'meta'].includes(filterParam)
     ? filterParam
-    : 'all'
+    : 'players'
 
   const setFilter = (newFilter: FilterType) => {
-    if (newFilter === 'all') {
-      searchParams.delete('tab')
-    } else {
-      searchParams.set('tab', newFilter)
-    }
+    searchParams.set('tab', newFilter)
     setSearchParams(searchParams, { replace: true })
   }
 
   // Filter states for each category
   const [playerFilters, setPlayerFilters] = useState<PlayerFilters>(emptyPlayerFilters)
+  const [hasSetDefaultFilter, setHasSetDefaultFilter] = useState(false)
   const [teamGameIds, setTeamGameIds] = useState<string[]>([])
+  const [gameTypes, setGameTypes] = useState<string[]>([])
   const [peripheralFilters, setPeripheralFilters] = useState<PeripheralFilters>(emptyPeripheralFilters)
   const [metaFilters, setMetaFilters] = useState<MetaFilters>(emptyMetaFilters)
   const [regionCountryIds, setRegionCountryIds] = useState<string[]>([])
 
   const countries = useAuraStore((s) => s.countries)
   const games = useAuraStore((s) => s.games)
+
+  // Set Marvel Rivals as default filter on first load
+  useEffect(() => {
+    if (!hasSetDefaultFilter && Object.keys(games).length > 0) {
+      const marvelRivals = Object.values(games).find(g =>
+        g.name.toLowerCase().includes('marvel rivals')
+      )
+      if (marvelRivals) {
+        setPlayerFilters(prev => ({ ...prev, gameIds: [marvelRivals.id] }))
+      }
+      setHasSetDefaultFilter(true)
+    }
+  }, [games, hasSetDefaultFilter])
   const regions = useAuraStore((s) => s.regions)
   const organisations = useAuraStore((s) => s.organisations)
   const organisationGames = useAuraStore((s) => s.organisationGames)
@@ -141,8 +159,15 @@ export function HomePage() {
         }
         return Object.values(organisations)
       }
-      case 'games':
-        return Object.values(games)
+      case 'games': {
+        let result = Object.values(games)
+        if (gameTypes.length > 0) {
+          result = result.filter((game) =>
+            gameTypes.includes((game as any).gameType)
+          )
+        }
+        return result
+      }
       case 'regions': {
         if (regionCountryIds.length > 0) {
           return Object.values(countries).filter((c) => regionCountryIds.includes(c.id))
@@ -221,6 +246,7 @@ export function HomePage() {
     validPlayers,
     playerFilters,
     teamGameIds,
+    gameTypes,
     peripheralFilters,
     metaFilters,
     regionCountryIds,
@@ -236,6 +262,8 @@ export function HomePage() {
           playerFilters.playerIds.length > 0
       case 'teams':
         return teamGameIds.length > 0
+      case 'games':
+        return gameTypes.length > 0
       case 'regions':
         return regionCountryIds.length > 0
       case 'peripherals':
@@ -245,7 +273,7 @@ export function HomePage() {
       default:
         return false
     }
-  }, [filter, playerFilters, teamGameIds, regionCountryIds, peripheralFilters, metaFilters])
+  }, [filter, playerFilters, teamGameIds, gameTypes, regionCountryIds, peripheralFilters, metaFilters])
 
   // Filter removal handlers
   const removePlayerFilter = (type: keyof PlayerFilters, id: string) => {
@@ -288,6 +316,28 @@ export function HomePage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col">
+      {/* Left Sidebar Filter - Fixed in left margin */}
+      <aside className="hidden xl:block fixed left-4 top-24 w-64 z-40">
+        {filter === 'players' && (
+          <SidebarFilter filters={playerFilters} onChange={setPlayerFilters} />
+        )}
+        {filter === 'teams' && (
+          <TeamSidebarFilter selectedGameIds={teamGameIds} onChange={setTeamGameIds} />
+        )}
+        {filter === 'games' && (
+          <GameSidebarFilter selectedTypes={gameTypes} onChange={setGameTypes} />
+        )}
+        {filter === 'peripherals' && (
+          <PeripheralSidebarFilter filters={peripheralFilters} onChange={setPeripheralFilters} />
+        )}
+        {filter === 'meta' && (
+          <MetaSidebarFilter filters={metaFilters} onChange={setMetaFilters} />
+        )}
+        {filter === 'regions' && (
+          <RegionSidebarFilter selectedCountryIds={regionCountryIds} onChange={setRegionCountryIds} />
+        )}
+      </aside>
+
       <div className="flex-1 flex flex-col items-center pt-16 pb-8 px-4">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold tracking-tight mb-3 bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
@@ -303,6 +353,17 @@ export function HomePage() {
           onChange={setQuery}
           placeholder="Search players, teams, games..."
         />
+
+        {!user && (
+          <div className="mt-6 px-4 py-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+            <p className="text-sm text-muted-foreground">
+              <Link to="/signin" className="text-primary font-medium hover:underline">
+                Sign up
+              </Link>
+              {' '}to join custom leaderboards and create your player profile
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap justify-center gap-2 mt-6">
           {filterButtons.map((btn) => (

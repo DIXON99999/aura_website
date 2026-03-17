@@ -17,6 +17,9 @@ dist-ssr
 *.db-journal
 backend/aura.db
 
+# Uploads (local files, don't overwrite production)
+backend/uploads/
+
 # Environment variables
 .env
 .env.*

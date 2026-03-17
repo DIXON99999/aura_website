@@ -9,7 +9,7 @@ import { CommentVotes } from '@/components/ui/comment-votes'
 import { MentionText } from '@/components/ui/mention-text'
 import { MentionInput } from '@/components/ui/mention-input'
 import { MediaUpload } from '@/components/ui/media-upload'
-import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Trash2, X, MessageSquare, Link as LinkIcon, Image, Play } from 'lucide-react'
+import { Lock, Globe, Edit2, Plus, ArrowLeft, Check, Search, Trash2, X, MessageSquare, Link as LinkIcon, Image, Play, Clock, Trophy, ChevronUp, ChevronDown } from 'lucide-react'
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -31,6 +31,38 @@ function isVideoUrl(url: string): boolean {
   const lowerUrl = url.toLowerCase()
   return videoExtensions.some(ext => lowerUrl.includes(ext))
 }
+
+// Calculate time until next Monday 00:00 UTC (start of calendar week)
+function getTimeUntilReset() {
+  const now = new Date()
+  const dayOfWeek = now.getUTCDay() // 0 = Sunday, 1 = Monday, etc.
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
+
+  const nextMonday = new Date(now)
+  nextMonday.setUTCDate(now.getUTCDate() + daysUntilMonday)
+  nextMonday.setUTCHours(0, 0, 0, 0)
+
+  return nextMonday.getTime() - now.getTime()
+}
+
+function formatTimeRemaining(ms: number) {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    return `${days}d ${hours % 24}h ${minutes % 60}m`
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m ${seconds % 60}s`
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`
+  }
+  return `${seconds}s`
+}
+
 
 // Confirmation Dialog Component
 function ConfirmDialog({
@@ -375,6 +407,7 @@ export function EventPage() {
   const [, setSubEventVotes] = useState<Map<string, 'UP' | 'DOWN'>>(new Map())
   const [showCreateSubEvent, setShowCreateSubEvent] = useState(false)
   const [newSubEventName, setNewSubEventName] = useState('')
+  const [newSubEventDescription, setNewSubEventDescription] = useState('')
   const [newSubEventImage, setNewSubEventImage] = useState('')
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   const [creatingSubEvent, setCreatingSubEvent] = useState(false)
@@ -382,16 +415,15 @@ export function EventPage() {
   const [subEventError, setSubEventError] = useState('')
   const [subEventSearch, setSubEventSearch] = useState('')
   const [subEventSort, setSubEventSort] = useState<'newest' | 'oldest'>('newest')
+  const [, setTimerTick] = useState(0) // Forces re-render for timer
 
   // Edit sub-event state
   const [editingSubEvent, setEditingSubEvent] = useState(false)
   const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
   const [editParticipantIds, setEditParticipantIds] = useState<string[]>([])
   const [editImageUrl, setEditImageUrl] = useState('')
   const [editParticipantSearch, setEditParticipantSearch] = useState('')
-
-  // Leaderboard search state
-  const [leaderboardSearch, setLeaderboardSearch] = useState('')
 
   // Comments state
   const [newComment, setNewComment] = useState('')
@@ -411,12 +443,16 @@ export function EventPage() {
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
 
-  // Join leaderboard state
+  // Join/Leave leaderboard state
   const [joiningLeaderboard, setJoiningLeaderboard] = useState(false)
+  const [leavingLeaderboard, setLeavingLeaderboard] = useState(false)
 
   const visitorId = getVisitorId()
   const isOwner = user?.id === event?.ownerId
-  const isParticipant = user?.playerId && event?.participants.some(p => p.playerId === user.playerId)
+
+  // Check if user is a participant - compare playerId strings
+  const userPlayerId = user?.playerId
+  const isParticipant = !!(userPlayerId && event?.participants.some(p => p.playerId === userPlayerId))
   const canCreateSubEvent = isOwner || isParticipant
 
   // Get username from user's profile
@@ -457,6 +493,14 @@ export function EventPage() {
     }
   }, [subEventId, slug, loading])
 
+  // Update timer every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimerTick(t => t + 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   const loadSubEvent = async (subEventIdToLoad: string) => {
     if (!slug) return
     try {
@@ -467,6 +511,7 @@ export function EventPage() {
       ])
       setSelectedSubEvent(subEventData)
       setEditName(subEventData.name)
+      setEditDescription(subEventData.description || '')
       setEditImageUrl(subEventData.imageUrl || '')
       setEditParticipantIds(subEventData.participants.map(p => p.leaderboardParticipantId))
       const votesMap = new Map<string, 'UP' | 'DOWN'>()
@@ -476,7 +521,6 @@ export function EventPage() {
       commentVotesData.forEach(v => commentVotesMap.set(v.commentId, v.direction))
       setCommentVotes(commentVotesMap)
       setEditingSubEvent(false)
-      setLeaderboardSearch('')
     } catch (err) {
       console.error('Failed to load sub-event:', err)
     }
@@ -576,6 +620,22 @@ export function EventPage() {
     }
   }
 
+  const handleLeaveLeaderboard = async () => {
+    if (!slug) return
+
+    setLeavingLeaderboard(true)
+    try {
+      await api.leaveEvent(slug)
+      // Refresh event data to show removal
+      const updatedEvent = await api.getEvent(slug)
+      setEvent(updatedEvent)
+    } catch (err) {
+      console.error('Failed to leave leaderboard:', err)
+    } finally {
+      setLeavingLeaderboard(false)
+    }
+  }
+
   const handleCreateSubEvent = async () => {
     if (!slug || !newSubEventName.trim() || selectedParticipantIds.length === 0) return
 
@@ -586,14 +646,16 @@ export function EventPage() {
         name: newSubEventName.trim(),
         participantIds: selectedParticipantIds,
         imageUrl: newSubEventImage || undefined,
+        description: newSubEventDescription.trim() || undefined,
       })
       setSubEvents([newSubEvent, ...subEvents])
       setNewSubEventName('')
+      setNewSubEventDescription('')
       setNewSubEventImage('')
       setSelectedParticipantIds([])
       setShowCreateSubEvent(false)
       setParticipantSearch('')
-      navigate(`/events/${slug}/sub/${newSubEvent.id}`)
+      navigate(`/community/${slug}/sub/${newSubEvent.id}`)
     } catch (err) {
       console.error('Failed to create sub-event:', err)
       setSubEventError((err as Error).message || 'Failed to create sub-event')
@@ -609,7 +671,7 @@ export function EventPage() {
       await api.deleteSubEvent(slug, confirmDialog.subEventId)
       setSubEvents(subEvents.filter(se => se.id !== confirmDialog.subEventId))
       if (selectedSubEvent?.id === confirmDialog.subEventId) {
-        navigate(`/events/${slug}`)
+        navigate(`/community/${slug}`)
       }
       const updatedEvent = await api.getEvent(slug)
       setEvent(updatedEvent)
@@ -624,15 +686,16 @@ export function EventPage() {
     if (!slug || !selectedSubEvent) return
 
     try {
-      // Update name and image (send null explicitly to clear image)
+      // Update name, description and image
       await api.updateSubEvent(slug, selectedSubEvent.id, {
         imageUrl: editImageUrl || undefined,
         name: editName.trim() || undefined,
+        description: editDescription.trim() || undefined,
       })
 
-      // Update sub-events list with new name
+      // Update sub-events list with new data
       setSubEvents(subEvents.map(se =>
-        se.id === selectedSubEvent.id ? { ...se, name: editName.trim(), imageUrl: editImageUrl || null } : se
+        se.id === selectedSubEvent.id ? { ...se, name: editName.trim(), imageUrl: editImageUrl || null, description: editDescription.trim() || null } : se
       ))
 
       // Reload sub-event
@@ -828,7 +891,7 @@ export function EventPage() {
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground">{error || 'Event not found'}</p>
-          <Link to="/events" className="text-primary hover:underline mt-2 block">
+          <Link to="/community" className="text-primary hover:underline mt-2 block">
             Back to events
           </Link>
         </div>
@@ -843,19 +906,16 @@ export function EventPage() {
         {/* Header section - centered, narrower width */}
         <div className="max-w-2xl mx-auto">
           <button
-            onClick={() => navigate(`/events/${slug}`)}
+            onClick={() => navigate(`/community/${slug}`)}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to {event.name}
           </button>
 
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold mb-2">{selectedSubEvent.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                Votes contribute to the overall {event.name} standings
-              </p>
+              <h1 className="text-2xl font-bold">{selectedSubEvent.name}</h1>
             </div>
             {isOwner && (
               <Button
@@ -869,6 +929,17 @@ export function EventPage() {
             )}
           </div>
 
+          {/* Description */}
+          {selectedSubEvent.description && !editingSubEvent && (
+            <p className="text-muted-foreground mb-4">
+              {selectedSubEvent.description}
+            </p>
+          )}
+
+          <p className="text-xs text-muted-foreground mb-6">
+            Votes contribute to the overall {event.name} standings
+          </p>
+
           {/* Edit Mode */}
           {editingSubEvent && isOwner && (
             <div className="mb-6 p-4 border rounded-lg bg-card space-y-4">
@@ -881,6 +952,17 @@ export function EventPage() {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   placeholder="Sub-event name"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Add a description..."
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[80px] resize-none"
                 />
               </div>
 
@@ -967,118 +1049,85 @@ export function EventPage() {
           )}
         </div>
 
-        {/* Main Content: Leaderboard on left side, Comments centered */}
-        {!editingSubEvent && (
-          <div className="relative">
-            {/* Left: Leaderboard - fixed position aligned with title */}
-            <div className="hidden xl:block fixed w-[280px]" style={{ left: 'max(16px, calc((50% - 336px - 280px) / 2))', top: '120px' }}>
-                <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
-                <div className="space-y-2">
-                  {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input
-                      value={leaderboardSearch}
-                      onChange={(e) => setLeaderboardSearch(e.target.value)}
-                      placeholder="Search..."
-                      className="pl-7 h-8 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-2 max-h-[80vh] overflow-y-auto" style={{ direction: 'rtl' }}>
-                  <div style={{ direction: 'ltr' }}>
-                    {selectedSubEvent.participants
-                      .filter(p => {
-                        if (!leaderboardSearch.trim()) return true
-                        const name = (p.player?.name || p.tempName || '').toLowerCase()
-                        return name.includes(leaderboardSearch.toLowerCase())
-                      })
-                      .map((participant, _index, _filteredArr) => {
-                        const displayName = participant.player?.name || participant.tempName || 'Unknown'
-                        // Get original rank from full list
-                        const originalRank = selectedSubEvent.participants.findIndex(p => p.id === participant.id) + 1
-                        const currentUserPlayerId = user ? userProfiles[user.id] : null
-                        const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
+        {/* Left Sidebar - Participants */}
+        {!editingSubEvent && selectedSubEvent.participants.length > 0 && (
+          <aside className="hidden xl:block fixed top-24 z-40" style={{ left: 'calc((100vw - 672px) / 4 - 260px)' }}>
+            <div className="p-4 rounded-xl border bg-card/50">
+              <h2 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wide text-center">
+                Participants
+              </h2>
+              <div className="grid grid-cols-5 gap-2">
+                {selectedSubEvent.participants.map((participant) => {
+                  const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                  const currentUserPlayerId = user ? userProfiles[user.id] : null
+                  const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
+                  const playerData = participant.player?.id ? players[participant.player.id] : null
+                  const imageUrl = playerData?.imageUrl
 
-                        return (
-                          <div
-                            key={participant.id}
-                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card/50 hover:bg-card transition-colors mb-2"
-                          >
-                            <span className="text-sm font-bold text-muted-foreground w-6">
-                              #{originalRank}
-                            </span>
-                            <span className="flex-1 text-base truncate">{displayName}</span>
-                            <span className={`text-sm font-bold min-w-[3rem] text-right ${
-                              participant.auraScore > 0 ? 'text-green-500' :
-                              participant.auraScore < 0 ? 'text-red-500' :
-                              'text-muted-foreground'
-                            }`}>
-                              {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
-                            </span>
-                            <VoteButtons
-                              score={0}
-                              onVote={(dir) => handleSubEventVote(participant.id, dir)}
-                              upDisabled={credits.upvotesRemaining <= 0}
-                              downDisabled={credits.downvotesRemaining <= 0}
-                              upTitle={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
-                              downTitle={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
-                              size="md"
-                              layout="vertical"
-                              hideButtons={isSelf}
-                              hideScore
-                              className="w-[24px]"
-                            />
-                          </div>
-                        )
-                      })}
-                  </div>
-                  </div>
-                </div>
-            </div>
-
-            {/* Mobile Leaderboard - shown only on small screens */}
-            <div className="lg:hidden mb-6">
-              <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Leaderboard</h2>
-              <div className="space-y-2 max-h-[50vh] overflow-y-auto" style={{ direction: 'rtl' }}>
-                <div style={{ direction: 'ltr' }}>
-                  {selectedSubEvent.participants.map((participant, index) => {
-                    const displayName = participant.player?.name || participant.tempName || 'Unknown'
-                    const currentUserPlayerId = user ? userProfiles[user.id] : null
-                    const isSelf = !!(participant.player?.id && currentUserPlayerId && participant.player.id === currentUserPlayerId)
-                    return (
-                      <div
-                        key={participant.id}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card/50 mb-2"
-                      >
-                        <span className="text-sm font-bold text-muted-foreground w-6">#{index + 1}</span>
-                        <span className="flex-1 text-base truncate">{displayName}</span>
-                        <span className={`text-sm font-bold min-w-[3rem] text-right ${
-                          participant.auraScore > 0 ? 'text-green-500' :
-                          participant.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'
-                        }`}>
-                          {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
-                        </span>
-                        <VoteButtons
-                          score={0}
-                          onVote={(dir) => handleSubEventVote(participant.id, dir)}
-                          upDisabled={credits.upvotesRemaining <= 0}
-                          downDisabled={credits.downvotesRemaining <= 0}
-                          size="md"
-                          layout="vertical"
-                          hideButtons={isSelf}
-                          hideScore
-                          className="w-[24px]"
+                  return (
+                    <div
+                      key={participant.id}
+                      className="w-24 h-24 rounded-lg border bg-card flex flex-col items-center justify-between p-2 hover:bg-accent/50 transition-colors"
+                    >
+                      {/* Profile Picture or Initial */}
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={displayName}
+                          className="w-10 h-10 rounded-full object-cover"
                         />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-sm font-bold">
+                          {displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      {/* Name */}
+                      <span className="text-[11px] font-medium text-center truncate w-full leading-tight">
+                        {displayName}
+                      </span>
+                      {/* Score & Vote */}
+                      <div className="flex items-center justify-center">
+                        {!isSelf && (
+                          <button
+                            onClick={() => handleSubEventVote(participant.id, 'UP')}
+                            disabled={credits.upvotesRemaining <= 0}
+                            className="p-0.5 rounded hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={credits.upvotesRemaining <= 0 ? 'No upvotes remaining' : `${credits.upvotesRemaining} upvotes left`}
+                          >
+                            <ChevronUp className="w-5 h-5 text-green-500" />
+                          </button>
+                        )}
+                        <span className={`text-xs font-bold min-w-[20px] text-center ${
+                          participant.auraScore > 0 ? 'text-green-500' :
+                          participant.auraScore < 0 ? 'text-red-500' :
+                          'text-muted-foreground'
+                        }`}>
+                          {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(0)}
+                        </span>
+                        {!isSelf && (
+                          <button
+                            onClick={() => handleSubEventVote(participant.id, 'DOWN')}
+                            disabled={credits.downvotesRemaining <= 0}
+                            className="p-0.5 rounded hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={credits.downvotesRemaining <= 0 ? 'No downvotes remaining' : `${credits.downvotesRemaining} downvotes left`}
+                          >
+                            <ChevronDown className="w-5 h-5 text-red-500" />
+                          </button>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
+          </aside>
+        )}
 
-            {/* Center: Comments Section (Main Focus) - Reddit Style */}
-            <div className="max-w-2xl mx-auto">
-                <h2 className="text-sm font-semibold text-muted-foreground mb-4">
+        {/* Main Content: Comments */}
+        {!editingSubEvent && (
+          <div className="max-w-2xl mx-auto">
+            {/* Comments Section */}
+            <h2 className="text-sm font-semibold text-muted-foreground mb-4">
                   {selectedSubEvent.comments.length} Comments
                 </h2>
 
@@ -1221,7 +1270,6 @@ export function EventPage() {
                     </div>
                   )}
                 </div>
-            </div>
           </div>
         )}
       </div>
@@ -1259,31 +1307,66 @@ export function EventPage() {
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto">
-        <button
-          onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
+      <div>
+        {/* Header with Title and Banner */}
+        <div className="max-w-3xl mx-auto mb-2">
+          {/* Title row with back, title, and edit */}
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => navigate('/community')}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
 
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{event.name}</h1>
-              {event.isPublic ? (
-                <Globe className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <Lock className="w-5 h-5 text-muted-foreground" />
-              )}
+            <div className="flex flex-col items-center">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">{event.name}</h1>
+                {event.isPublic ? (
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <Lock className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Created {new Date(event.createdAt).toLocaleDateString()}
+                {event.ownerName && ` by ${event.ownerName}`}
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Created {new Date(event.createdAt).toLocaleDateString()}
-              {event.ownerName && ` by ${event.ownerName}`}
-            </p>
+
+            {isOwner ? (
+              <Link to={`/community/${event.slug}/edit`}>
+                <Button variant="outline" size="sm" className="flex items-center gap-2">
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </Button>
+              </Link>
+            ) : (
+              <div className="w-16" />
+            )}
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Banner Image */}
+          {event.imageUrl && (
+            <div className="rounded-xl overflow-hidden mb-4">
+              <img
+                src={event.imageUrl}
+                alt={event.name}
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
+
+          {/* Description */}
+          {event.description && (
+            <p className="text-center text-muted-foreground mb-2">
+              {event.description}
+            </p>
+          )}
+
+          {/* Join/Leave buttons */}
+          <div className="flex items-center justify-center gap-2 mb-2">
             {user && !isOwner && !isParticipant && (
               <Button
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
@@ -1294,91 +1377,163 @@ export function EventPage() {
                 {joiningLeaderboard ? 'Joining...' : 'Join'}
               </Button>
             )}
-            {isOwner && (
-              <Link to={`/events/${event.slug}/edit`}>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Edit2 className="w-4 h-4" />
-                  Edit
-                </Button>
-              </Link>
+            {user && !isOwner && isParticipant && (
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 text-red-500 border-red-500/30 hover:bg-red-500/10 hover:text-red-600"
+                onClick={handleLeaveLeaderboard}
+                disabled={leavingLeaderboard}
+              >
+                <X className="w-4 h-4" />
+                {leavingLeaderboard ? 'Leaving...' : 'Leave'}
+              </Button>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Main Leaderboard */}
-          <div>
-            <h2 className="text-lg font-semibold mb-3">Overall Standings</h2>
-            <div className="space-y-0.5">
-              {event.participants.map((participant, index) => {
-                const displayName = participant.player?.name || participant.tempName || 'Unknown'
-                const isRealPlayer = !!participant.player
-                const currentUserPlayerId = user ? userProfiles[user.id] : null
-                const isSelf = !!(participant.playerId && currentUserPlayerId && participant.playerId === currentUserPlayerId)
-
-                return (
-                  <div
-                    key={participant.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded bg-card/50 hover:bg-card"
-                  >
-                    <span className="text-xs font-bold text-muted-foreground w-5">
-                      {index + 1}
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      {isRealPlayer ? (
-                        <Link
-                          to={`/player/${participant.player!.slug}`}
-                          className="text-sm hover:text-primary hover:underline truncate block"
-                        >
-                          {displayName}
-                        </Link>
-                      ) : (
-                        <span className="text-sm truncate block">{displayName}</span>
-                      )}
-                    </div>
-
-                    <span className={`text-xs font-bold min-w-[2.5rem] text-right ${
-                      participant.auraScore > 0 ? 'text-green-500' :
-                      participant.auraScore < 0 ? 'text-red-500' :
-                      'text-muted-foreground'
-                    }`}>
-                      {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(1)}
-                    </span>
-
-                    <VoteButtons
-                      score={0}
-                      onVote={(dir) => handleVote(participant.id, dir)}
-                      upDisabled={credits.upvotesRemaining <= 0}
-                      downDisabled={credits.downvotesRemaining <= 0}
-                      size="sm"
-                      layout="horizontal"
-                      hideButtons={isSelf}
-                      hideScore
-                      className="w-[36px]"
-                    />
+        {/* Fixed Left Sidebar: Weekly Leaderboard */}
+        <aside
+          className="hidden xl:block fixed top-40 z-40 w-72"
+          style={{ left: 'calc((100vw - 768px) / 4 - 144px)' }}
+        >
+          <div className="rounded-2xl border bg-gradient-to-b from-card to-card/80 shadow-xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10 border-b px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-yellow-500/20">
+                    <Trophy className="w-5 h-5 text-yellow-500" />
                   </div>
-                )
-              })}
+                  <h2 className="font-bold text-base">Weekly Rankings</h2>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Resets in</span>
+                <span className="font-mono font-medium text-primary">{formatTimeRemaining(getTimeUntilReset())}</span>
+              </div>
+            </div>
 
-              {event.participants.length === 0 && (
+            {/* Leaderboard Content */}
+            <div className="p-3">
+              {event.participants.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8 text-sm">
                   No participants yet
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-[55vh] overflow-y-auto pr-1">
+                  {event.participants.map((participant, index) => {
+                    const displayName = participant.player?.name || participant.tempName || 'Unknown'
+                    const isRealPlayer = !!participant.player
+                    const currentUserPlayerId = user ? userProfiles[user.id] : null
+                    const isSelf = !!(participant.playerId && currentUserPlayerId && participant.playerId === currentUserPlayerId)
+                    const isTop3 = index < 3
+
+                    return (
+                      <div
+                        key={participant.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
+                          isTop3
+                            ? 'bg-gradient-to-r from-accent/80 to-accent/40 border border-border/50'
+                            : 'hover:bg-accent/50'
+                        }`}
+                      >
+                        {/* Rank Badge */}
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-sm ${
+                          index === 0 ? 'bg-yellow-500 text-yellow-950' :
+                          index === 1 ? 'bg-gray-300 text-gray-700' :
+                          index === 2 ? 'bg-amber-600 text-amber-950' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {index + 1}
+                        </div>
+
+                        {/* Player Info */}
+                        <div className="flex-1 min-w-0">
+                          {isRealPlayer ? (
+                            <Link
+                              to={`/player/${participant.player!.slug}`}
+                              className="text-sm font-medium hover:text-primary hover:underline truncate block"
+                            >
+                              {displayName}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-medium truncate block">{displayName}</span>
+                          )}
+                        </div>
+
+                        {/* Score */}
+                        <span className={`text-sm font-bold tabular-nums ${
+                          participant.auraScore > 0 ? 'text-green-500' :
+                          participant.auraScore < 0 ? 'text-red-500' :
+                          'text-muted-foreground'
+                        }`}>
+                          {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(0)}
+                        </span>
+
+                        {/* Vote Buttons */}
+                        <VoteButtons
+                          score={0}
+                          onVote={(dir) => handleVote(participant.id, dir)}
+                          upDisabled={credits.upvotesRemaining <= 0}
+                          downDisabled={credits.downvotesRemaining <= 0}
+                          size="sm"
+                          layout="horizontal"
+                          hideButtons={isSelf}
+                          hideScore
+                          className="w-[32px]"
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
           </div>
+        </aside>
 
-          {/* Sub-Events */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Sub-Events</h2>
+        {/* Center: Sub-Events (Main Focus) */}
+        <div className="max-w-3xl mx-auto">
+            {/* Mobile Leaderboard */}
+            <div className="lg:hidden mb-6 rounded-lg border bg-card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4 text-yellow-500" />
+                  <h2 className="text-sm font-semibold">Weekly Leaderboard</h2>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span className="font-mono text-primary">{formatTimeRemaining(getTimeUntilReset())}</span>
+                </div>
+              </div>
+              {event.participants.length === 0 ? (
+                <div className="text-center text-muted-foreground py-2 text-xs">No participants</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {event.participants.slice(0, 5).map((participant, index) => (
+                    <div key={participant.id} className="flex items-center gap-1 text-xs bg-accent/50 rounded px-2 py-1">
+                      <span className={index === 0 ? 'text-yellow-500' : index === 1 ? 'text-gray-400' : index === 2 ? 'text-amber-600' : 'text-muted-foreground'}>
+                        #{index + 1}
+                      </span>
+                      <span className="truncate max-w-[80px]">{participant.player?.name || participant.tempName}</span>
+                      <span className={participant.auraScore > 0 ? 'text-green-500' : participant.auraScore < 0 ? 'text-red-500' : ''}>
+                        {participant.auraScore > 0 ? '+' : ''}{participant.auraScore.toFixed(0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Sub-Events Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Sub-Events</h2>
               {canCreateSubEvent && (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setShowCreateSubEvent(!showCreateSubEvent)}
+                  onClick={() => setShowCreateSubEvent(true)}
                   className="flex items-center gap-1"
                 >
                   <Plus className="w-4 h-4" />
@@ -1387,212 +1542,193 @@ export function EventPage() {
               )}
             </div>
 
-            {/* Create Sub-Event Form */}
-            {showCreateSubEvent && canCreateSubEvent && (
-              <div className="mb-4 p-4 border rounded-lg bg-card space-y-3">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Sub Event Name</label>
-                  <Input
-                    value={newSubEventName}
-                    onChange={(e) => setNewSubEventName(e.target.value)}
-                    placeholder="Enter sub event name"
-                  />
-                </div>
-
-                {/* Players */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-sm font-medium">Select Players</label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={addAllParticipants}
-                      className="h-6 text-xs"
-                    >
-                      Add All
-                    </Button>
-                  </div>
-                  <div className="relative mb-2">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      value={participantSearch}
-                      onChange={(e) => setParticipantSearch(e.target.value)}
-                      placeholder="Search players..."
-                      className="pl-8 h-8 text-sm"
-                    />
-                  </div>
-                  <div className="border rounded-lg divide-y max-h-32 overflow-y-auto">
-                    {filteredParticipants.map(p => {
-                      const isSelected = selectedParticipantIds.includes(p.id)
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => toggleParticipantSelection(p.id)}
-                          className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-accent ${
-                            isSelected ? 'bg-primary/5' : ''
-                          }`}
-                        >
-                          <span className="text-sm truncate">{p.player?.name || p.tempName}</span>
-                          {isSelected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {selectedParticipantIds.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {selectedParticipantIds.length} selected
-                    </p>
-                  )}
-                </div>
-
-                {/* Image */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Image (optional)</label>
-                  <MediaUpload
-                    value={newSubEventImage}
-                    onChange={setNewSubEventImage}
-                    compact
-                  />
-                </div>
-
-                {subEventError && (
-                  <p className="text-sm text-red-500">{subEventError}</p>
-                )}
-
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setShowCreateSubEvent(false)
-                      setNewSubEventName('')
-                      setNewSubEventImage('')
-                      setSelectedParticipantIds([])
-                      setParticipantSearch('')
-                      setSubEventError('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleCreateSubEvent}
-                    disabled={!newSubEventName.trim() || selectedParticipantIds.length === 0 || creatingSubEvent}
-                  >
-                    {creatingSubEvent ? 'Creating...' : 'Create'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Sub-Events Search and Sort */}
+            {/* Search and Sort - Centered */}
             {subEvents.length > 0 && (
-              <div className="flex gap-2 mb-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center justify-center gap-2 mb-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     value={subEventSearch}
                     onChange={(e) => setSubEventSearch(e.target.value)}
                     placeholder="Search sub-events..."
-                    className="pl-8 h-8 text-sm"
+                    className="pl-10 h-10 w-64"
                   />
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() => setSubEventSort(subEventSort === 'newest' ? 'oldest' : 'newest')}
-                  className="h-8 text-xs"
+                  className="h-10"
                 >
                   {subEventSort === 'newest' ? 'Newest' : 'Oldest'}
                 </Button>
               </div>
             )}
 
-            {/* Sub-Events List */}
-            <div className="columns-1 sm:columns-2 gap-3">
-              {subEvents
-                .filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase()))
-                .sort((a, b) => {
-                  const dateA = new Date(a.createdAt).getTime()
-                  const dateB = new Date(b.createdAt).getTime()
-                  return subEventSort === 'newest' ? dateB - dateA : dateA - dateB
-                })
-                .map(subEvent => (
-                <div
-                  key={subEvent.id}
-                  className="mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] cursor-pointer"
-                  onClick={() => navigate(`/events/${slug}/sub/${subEvent.id}`)}
-                >
-                  {subEvent.imageUrl && (
-                    <div className="relative w-full">
-                      {isVideoUrl(subEvent.imageUrl) ? (
-                        <>
-                          <video
-                            src={subEvent.imageUrl}
-                            className="w-full h-auto object-cover"
-                            muted
-                            playsInline
-                            preload="metadata"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                            <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
-                              <Play className="w-6 h-6 text-white ml-1" fill="white" />
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <img
-                          src={subEvent.imageUrl}
-                          alt={subEvent.name}
-                          className="w-full h-auto object-cover"
-                        />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between p-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-sm line-clamp-2">{subEvent.name}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(subEvent.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {isOwner && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setConfirmDialog({ open: true, subEventId: subEvent.id })
-                        }}
-                        className="h-7 px-2 text-muted-foreground hover:text-destructive flex-shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            {subEvents.length === 0 && (
+            {/* Sub-Events Grid */}
+            {subEvents.length === 0 ? (
               <div className="text-center text-muted-foreground py-8 text-sm">
                 No sub-events yet
                 {canCreateSubEvent && <span className="block mt-1">Click "Add" to create one</span>}
               </div>
-            )}
-
-            {subEvents.length > 0 && subEvents.filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase())).length === 0 && (
+            ) : subEvents.filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase())).length === 0 ? (
               <div className="text-center text-muted-foreground py-4 text-sm">
                 No sub-events match your search
               </div>
+            ) : (
+              <div className="flex flex-wrap justify-center gap-4">
+                {subEvents
+                  .filter(se => !subEventSearch || se.name.toLowerCase().includes(subEventSearch.toLowerCase()))
+                  .sort((a, b) => {
+                    const dateA = new Date(a.createdAt).getTime()
+                    const dateB = new Date(b.createdAt).getTime()
+                    return subEventSort === 'newest' ? dateB - dateA : dateA - dateB
+                  })
+                  .map(subEvent => (
+                  <div
+                    key={subEvent.id}
+                    className="w-full sm:w-[calc(50%-0.5rem)] md:w-[calc(33.333%-0.75rem)] max-w-[280px] rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] cursor-pointer"
+                    onClick={() => navigate(`/community/${slug}/sub/${subEvent.id}`)}
+                  >
+                    {subEvent.imageUrl && (
+                      <div className="relative w-full">
+                        {isVideoUrl(subEvent.imageUrl) ? (
+                          <>
+                            <video src={subEvent.imageUrl} className="w-full h-auto object-cover" muted playsInline preload="metadata" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                              <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                                <Play className="w-6 h-6 text-white ml-1" fill="white" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <img src={subEvent.imageUrl} alt={subEvent.name} className="w-full h-auto object-cover" />
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between p-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-sm line-clamp-2">{subEvent.name}</h3>
+                        <p className="text-xs text-muted-foreground">{new Date(subEvent.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      {isOwner && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmDialog({ open: true, subEventId: subEvent.id })
+                          }}
+                          className="h-7 px-2 text-muted-foreground hover:text-destructive flex-shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
         </div>
       </div>
+
+      {/* Create Sub-Event Modal */}
+      {showCreateSubEvent && canCreateSubEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-card border rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-card">
+              <h2 className="text-lg font-semibold">Create Sub-Event</h2>
+              <button
+                onClick={() => {
+                  setShowCreateSubEvent(false)
+                  setNewSubEventName('')
+                  setNewSubEventDescription('')
+                  setNewSubEventImage('')
+                  setSelectedParticipantIds([])
+                  setParticipantSearch('')
+                  setSubEventError('')
+                }}
+                className="p-1 rounded hover:bg-accent"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <Input
+                  value={newSubEventName}
+                  onChange={(e) => setNewSubEventName(e.target.value)}
+                  placeholder="Enter sub-event name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description (optional)</label>
+                <textarea
+                  value={newSubEventDescription}
+                  onChange={(e) => setNewSubEventDescription(e.target.value)}
+                  placeholder="Add a description..."
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm min-h-[60px] resize-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Select Players</label>
+                  <Button type="button" size="sm" variant="ghost" onClick={addAllParticipants} className="h-6 text-xs">
+                    Add All
+                  </Button>
+                </div>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={participantSearch}
+                    onChange={(e) => setParticipantSearch(e.target.value)}
+                    placeholder="Search players..."
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+                <div className="border rounded-lg divide-y max-h-32 overflow-y-auto">
+                  {filteredParticipants.map(p => {
+                    const isSelected = selectedParticipantIds.includes(p.id)
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => toggleParticipantSelection(p.id)}
+                        className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-accent ${isSelected ? 'bg-primary/5' : ''}`}
+                      >
+                        <span className="text-sm truncate">{p.player?.name || p.tempName}</span>
+                        {isSelected && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
+                      </div>
+                    )
+                  })}
+                </div>
+                {selectedParticipantIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedParticipantIds.length} selected</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Image (optional)</label>
+                <MediaUpload value={newSubEventImage} onChange={setNewSubEventImage} compact />
+              </div>
+
+              {subEventError && <p className="text-sm text-red-500">{subEventError}</p>}
+
+              <Button
+                type="button"
+                onClick={handleCreateSubEvent}
+                disabled={!newSubEventName.trim() || selectedParticipantIds.length === 0 || creatingSubEvent}
+                className="w-full"
+              >
+                {creatingSubEvent ? 'Creating...' : 'Create Sub-Event'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

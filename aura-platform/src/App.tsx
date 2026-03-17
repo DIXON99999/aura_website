@@ -80,12 +80,24 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          {/* Community (formerly Custom Leaderboards/Events) */}
+          <Route path="/community" element={<EventsPage />} />
+          <Route path="/community/:slug" element={<EventPage />} />
+          <Route path="/community/:slug/sub/:subEventId" element={<EventPage />} />
+          <Route path="/community/:slug/edit" element={<EditEventPage />} />
+          <Route path="/create-event" element={<CreateEventPage />} />
+          <Route path="/my-events" element={<MyEventsPage />} />
+          {/* Legacy routes - redirect to new paths */}
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/:slug" element={<EventPage />} />
           <Route path="/events/:slug/sub/:subEventId" element={<EventPage />} />
           <Route path="/events/:slug/edit" element={<EditEventPage />} />
-          <Route path="/create-event" element={<CreateEventPage />} />
-          <Route path="/my-events" element={<MyEventsPage />} />
+          {/* Posts (formerly Aura Farms) */}
+          <Route path="/posts" element={<AuraFarmsPage />} />
+          <Route path="/posts/:slug" element={<AuraFarmPage />} />
+          <Route path="/create-post" element={<CreateAuraFarmPage />} />
+          <Route path="/my-posts" element={<MyAuraFarmsPage />} />
+          {/* Legacy routes */}
           <Route path="/aura-farms" element={<AuraFarmsPage />} />
           <Route path="/aura-farms/:slug" element={<AuraFarmPage />} />
           <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
