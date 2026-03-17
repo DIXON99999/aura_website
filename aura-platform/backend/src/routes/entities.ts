@@ -36,9 +36,20 @@ function toApiEntity(row: Record<string, unknown>, type: string) {
   if ('region_id' in row) result.regionId = row.region_id
   if ('is_user_profile' in row) result.isUserProfile = Boolean(row.is_user_profile)
   if ('visitor_id' in row) result.visitorId = row.visitor_id
+  if ('bio' in row) result.bio = row.bio
 
   return result
 }
+
+// Ensure bio column exists in players table
+async function ensureBioColumn() {
+  try {
+    await pool.query('ALTER TABLE players ADD COLUMN IF NOT EXISTS bio TEXT')
+  } catch (err) {
+    // Column may already exist
+  }
+}
+ensureBioColumn().catch(console.error)
 
 app.get('/countries', async (c) => {
   const result = await pool.query('SELECT * FROM countries ORDER BY aura_score DESC')
@@ -233,6 +244,8 @@ app.patch('/players/:id', async (c) => {
   if (body.regionId !== undefined) { updates.push(`region_id = $${paramIndex++}`); params.push(body.regionId) }
   if (body.gameIds !== undefined) { updates.push(`game_ids = $${paramIndex++}`); params.push(JSON.stringify(body.gameIds)) }
   if (body.associatedEntityIds !== undefined) { updates.push(`associated_entity_ids = $${paramIndex++}`); params.push(JSON.stringify(body.associatedEntityIds)) }
+  if (body.imageUrl !== undefined) { updates.push(`image_url = $${paramIndex++}`); params.push(body.imageUrl || null) }
+  if (body.bio !== undefined) { updates.push(`bio = $${paramIndex++}`); params.push(body.bio || null) }
 
   if (updates.length > 0) {
     params.push(id)

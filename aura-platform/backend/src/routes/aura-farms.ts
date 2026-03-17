@@ -356,7 +356,7 @@ app.post('/', async (c) => {
         sourceUrl: `/aura-farms/${slug}`,
         fromUserId: session.user_id,
         fromUsername: creatorUsername,
-        content: `Created an Aura Farm about you: "${title.trim()}"`,
+        content: `"${title.trim()}"`,
       })
     }
   }

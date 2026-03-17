@@ -162,6 +162,7 @@ function apiEntityToStoreEntity(e: Entity): import('@/types').Entity {
         associatedEntityIds: e.associatedEntityIds,
         isUserProfile: e.isUserProfile,
         visitorId: e.visitorId,
+        bio: e.bio,
       } as Player
     default:
       throw new Error(`Unknown entity type: ${e.type}`)

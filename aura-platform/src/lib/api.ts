@@ -645,6 +645,7 @@ interface Entity {
   associatedEntityIds?: string[]
   isUserProfile?: boolean
   visitorId?: string
+  bio?: string
 }
 
 interface Vote {
