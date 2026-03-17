@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { VoteButtons } from '@/components/ui/vote-buttons'
-import { Search, ChevronDown, Play } from 'lucide-react'
+import { Search, ChevronDown, Play, LayoutList } from 'lucide-react'
 import { useAuraStore, useAuthStore, hasPerkEquipped } from '@/stores'
 
 // Helper to check if URL is a video
@@ -150,7 +150,41 @@ export function AuraFarmsPage() {
                 to={`/posts/${farm.slug || farm.id}`}
                 className="block mb-3 break-inside-avoid rounded-lg border bg-card hover:bg-accent/50 transition-all duration-200 overflow-hidden hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
               >
-                {farm.imageUrl && (
+                {farm.tierListData ? (
+                  // Tier List Preview Card
+                  <div className="p-3 bg-gradient-to-br from-red-500/20 via-yellow-500/20 to-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <LayoutList className="w-5 h-5 text-primary" />
+                      <span className="text-xs font-medium text-primary">Tier List</span>
+                    </div>
+                    <div className="space-y-1">
+                      {farm.tierListData.tiers.slice(0, 4).map((tier) => (
+                        <div key={tier.id} className="flex items-center gap-1">
+                          <div className={`w-6 h-4 rounded text-[8px] font-bold text-white flex items-center justify-center ${tier.color}`}>
+                            {tier.label}
+                          </div>
+                          <div className="flex-1 h-4 bg-muted/50 rounded flex items-center gap-0.5 px-1 overflow-hidden">
+                            {tier.entities.slice(0, 5).map((e) => (
+                              <div key={e.id} className="w-3 h-3 rounded-sm bg-card border border-border overflow-hidden flex-shrink-0">
+                                {e.imageUrl ? (
+                                  <img src={e.imageUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[5px] flex items-center justify-center h-full">{e.name[0]}</span>
+                                )}
+                              </div>
+                            ))}
+                            {tier.entities.length > 5 && (
+                              <span className="text-[8px] text-muted-foreground">+{tier.entities.length - 5}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {farm.tierListData.tiers.length > 4 && (
+                        <p className="text-[9px] text-muted-foreground text-center">+{farm.tierListData.tiers.length - 4} more tiers</p>
+                      )}
+                    </div>
+                  </div>
+                ) : farm.imageUrl && (
                   <div className="relative w-full">
                     {isVideoUrl(farm.imageUrl) ? (
                       <>

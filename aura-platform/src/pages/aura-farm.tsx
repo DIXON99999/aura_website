@@ -11,6 +11,8 @@ import { MentionInput } from '@/components/ui/mention-input'
 import { MediaUpload } from '@/components/ui/media-upload'
 import { Trash2, ArrowLeft, ExternalLink, Edit2, Save, X, MessageSquare, Image, Link as LinkIcon } from 'lucide-react'
 import { useAuthStore, useAuraStore, hasPerkEquipped } from '@/stores'
+import { EntityTypes } from '@/types'
+import type { Country } from '@/types'
 
 // Helper to convert name to slug
 function nameToSlug(name: string): string {
@@ -38,6 +40,54 @@ function formatRelativeTime(date: Date): string {
   if (hours < 24) return `${hours}h ago`
   if (days < 7) return `${days}d ago`
   return new Date(date).toLocaleDateString()
+}
+
+// Tier List Display Component
+function TierListDisplay({ tierListData }: { tierListData: AuraFarm['tierListData'] }) {
+  if (!tierListData?.tiers) return null
+
+  return (
+    <div className="space-y-1.5 mt-4">
+      {tierListData.tiers.map((tier) => (
+        <div key={tier.id} className="flex border rounded overflow-hidden">
+          {/* Tier label */}
+          <div className={`w-14 flex-shrink-0 flex items-center justify-center ${tier.color}`}>
+            <span className="text-white text-lg font-bold">{tier.label}</span>
+          </div>
+          {/* Entities */}
+          <div className="flex-1 min-h-[72px] bg-muted/30 p-1.5 flex flex-wrap gap-1.5 items-start content-start">
+            {tier.entities.map((entity) => (
+              <Link
+                key={entity.id}
+                to={`/${entity.type}/${entity.slug}`}
+                className="relative w-[60px] h-[60px] rounded bg-card border border-border flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+              >
+                {entity.imageUrl ? (
+                  <img
+                    src={entity.imageUrl}
+                    alt={entity.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {entity.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-black/80 px-1 py-0.5">
+                  <p className="text-[8px] text-white truncate text-center font-medium">{entity.name}</p>
+                </div>
+              </Link>
+            ))}
+            {tier.entities.length === 0 && (
+              <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground/50">
+                Empty
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // Comment Component with replies - Modern Reddit style
@@ -658,41 +708,43 @@ export function AuraFarmPage() {
           )}
 
           <div className="p-6">
-            {/* Entity card with voting */}
-            <div className="flex items-center gap-4">
-              <VoteButtons
-                score={farm.auraScore}
-                onVote={handleVote}
-                upDisabled={credits.upvotesRemaining <= 0}
-                downDisabled={credits.downvotesRemaining <= 0}
-                size="md"
-                layout="vertical"
-              />
+            {/* Entity card with voting - only for non-tier-list posts */}
+            {!farm.tierListData && (
+              <div className="flex items-center gap-4">
+                <VoteButtons
+                  score={farm.auraScore}
+                  onVote={handleVote}
+                  upDisabled={credits.upvotesRemaining <= 0}
+                  downDisabled={credits.downvotesRemaining <= 0}
+                  size="md"
+                  layout="vertical"
+                />
 
-              {farm.entity && (
-                <Link
-                  to={`/${farm.entityType}/${farm.entity.slug}`}
-                  className="flex-1 flex items-center gap-3 p-3 rounded-lg border bg-accent/30 hover:bg-accent/50 transition-colors"
-                >
-                  {farm.entity.imageUrl && (
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                      <img
-                        src={farm.entity.imageUrl}
-                        alt={farm.entity.name}
-                        className="w-full h-full object-cover"
-                      />
+                {farm.entity && (
+                  <Link
+                    to={`/${farm.entityType}/${farm.entity.slug}`}
+                    className="flex-1 flex items-center gap-3 p-3 rounded-lg border bg-accent/30 hover:bg-accent/50 transition-colors"
+                  >
+                    {farm.entity.imageUrl && (
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                        <img
+                          src={farm.entity.imageUrl}
+                          alt={farm.entity.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium">{farm.entity.name}</div>
+                      <div className={`text-sm ${farm.entity.auraScore > 0 ? 'text-green-500' : farm.entity.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        {farm.entity.auraScore > 0 ? '+' : ''}{farm.entity.auraScore.toFixed(0)} aura
+                      </div>
                     </div>
-                  )}
-                  <div className="flex-1">
-                    <div className="font-medium">{farm.entity.name}</div>
-                    <div className={`text-sm ${farm.entity.auraScore > 0 ? 'text-green-500' : farm.entity.auraScore < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                      {farm.entity.auraScore > 0 ? '+' : ''}{farm.entity.auraScore.toFixed(0)} aura
-                    </div>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                </Link>
-              )}
-            </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                  </Link>
+                )}
+              </div>
+            )}
 
             {/* Title */}
             <div className="mt-6">
@@ -727,6 +779,24 @@ export function AuraFarmPage() {
                 )
               )}
             </div>
+
+            {/* Tier List Display */}
+            {farm.tierListData && (
+              <>
+                <TierListDisplay tierListData={farm.tierListData} />
+                {/* Voting for tier lists */}
+                <div className="flex items-center justify-center gap-4 mt-6 p-4 rounded-lg bg-accent/30">
+                  <VoteButtons
+                    score={farm.auraScore}
+                    onVote={handleVote}
+                    upDisabled={credits.upvotesRemaining <= 0}
+                    downDisabled={credits.downvotesRemaining <= 0}
+                    size="lg"
+                    layout="horizontal"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Edit actions */}
             {editing && (

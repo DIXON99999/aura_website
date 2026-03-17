@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PlayerFilter, type PlayerFilters } from '@/components/leaderboard'
 import { useAuraStore, useAuthStore } from '@/stores'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { EntityTypes } from '@/types'
 import type { Entity, Country, Player, OrganisationGame } from '@/types'
@@ -57,10 +58,12 @@ const TABS: { type: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { type: 'meta', label: 'Meta', icon: Swords },
 ]
 
-function EntityCard({ entity, onRemove, onClick }: {
+function EntityCard({ entity, onRemove, onClick, onDragStart, onDragEnd }: {
   entity: Entity
   onRemove?: () => void
   onClick?: () => void
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }) {
   // Size slightly smaller than tier row height to fit with padding
   const sizeClasses = 'w-[72px] h-[72px]'
@@ -105,7 +108,11 @@ function EntityCard({ entity, onRemove, onClick }: {
         if (!onClick) {
           e.dataTransfer.setData('entityId', entity.id)
           e.dataTransfer.setData('entityType', entity.type)
+          onDragStart?.()
         }
+      }}
+      onDragEnd={() => {
+        onDragEnd?.()
       }}
     >
       {renderImage()}
@@ -156,6 +163,10 @@ export function CreateTierListPage() {
   const editInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [dragOverTier, setDragOverTier] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ tierId: string; index: number } | null>(null)
+  const [draggingEntityId, setDraggingEntityId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   // All entities memoized
   const allEntities = useMemo<Entity[]>(() => [
@@ -286,9 +297,13 @@ export function CreateTierListPage() {
     ))
   }
 
-  const handleDrop = (tierId: string, e: React.DragEvent) => {
+  const handleDrop = (tierId: string, e: React.DragEvent, insertIndex?: number) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOverTier(null)
+    setDropTarget(null)
+    setDraggingEntityId(null)
+
     const entityId = e.dataTransfer.getData('entityId')
     if (!entityId) return
 
@@ -297,23 +312,48 @@ export function CreateTierListPage() {
 
     // Remove from pool
     setPool(prev => prev.filter(ent => ent.id !== entityId))
-    // Remove from all tiers
-    setTiers(prev => prev.map(t => ({
-      ...t,
-      entities: t.entities.filter(ent => ent.id !== entityId)
-    })))
+    // Remove from all tiers (and track original position for correct index calculation)
+    let removedFromTier: string | null = null
+    let removedIndex = -1
+    setTiers(prev => prev.map(t => {
+      const idx = t.entities.findIndex(ent => ent.id === entityId)
+      if (idx !== -1) {
+        removedFromTier = t.id
+        removedIndex = idx
+      }
+      return {
+        ...t,
+        entities: t.entities.filter(ent => ent.id !== entityId)
+      }
+    }))
 
     // If dropping on pool, just remove from tier (entity goes back to pool)
     if (tierId === 'pool') {
       setPool(prev => [...prev, entity])
     } else {
-      // Add to the target tier
-      setTiers(prev => prev.map(t =>
-        t.id === tierId
-          ? { ...t, entities: [...t.entities, entity] }
-          : t
-      ))
+      // Add to the target tier at specific index
+      setTiers(prev => prev.map(t => {
+        if (t.id !== tierId) return t
+
+        const newEntities = [...t.entities]
+        let targetIndex = insertIndex ?? newEntities.length
+
+        // Adjust index if we removed from the same tier and before the target
+        if (removedFromTier === tierId && removedIndex < targetIndex) {
+          targetIndex = Math.max(0, targetIndex - 1)
+        }
+
+        newEntities.splice(targetIndex, 0, entity)
+        return { ...t, entities: newEntities }
+      }))
     }
+  }
+
+  const handleEntityDragOver = (tierId: string, index: number, e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDropTarget({ tierId, index })
+    setDragOverTier(tierId)
   }
 
   const addTier = () => {
@@ -374,6 +414,59 @@ export function CreateTierListPage() {
       const nextIndex = (currentIndex + 1) % TIER_COLORS.length
       return { ...t, color: TIER_COLORS[nextIndex] }
     }))
+  }
+
+  const saveTierList = async () => {
+    if (!title.trim()) {
+      setError('Please enter a title')
+      return
+    }
+
+    // Check if there are any entities in tiers
+    const hasEntities = tiers.some(t => t.entities.length > 0)
+    if (!hasEntities) {
+      setError('Please add at least one entity to a tier')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      const tierListData = {
+        tiers: tiers.map(t => ({
+          id: t.id,
+          label: t.label,
+          color: t.color,
+          entities: t.entities.map(e => {
+            // Handle different entity types for image URLs
+            let imageUrl = e.imageUrl || null
+            if (e.type === EntityTypes.COUNTRY) {
+              const country = e as Country
+              imageUrl = `https://flagcdn.com/w80/${country.flagCode.toLowerCase()}.png`
+            }
+            return {
+              id: e.id,
+              type: e.type,
+              name: e.name,
+              slug: e.slug,
+              imageUrl,
+            }
+          }),
+        })),
+      }
+
+      const result = await api.createAuraFarm({
+        title: title.trim(),
+        tierListData,
+      })
+
+      navigate(`/posts/${result.slug}`)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!user) {
@@ -498,6 +591,11 @@ export function CreateTierListPage() {
                     key={entity.id}
                     entity={entity}
                     onRemove={() => removeFromPool(entity.id)}
+                    onDragStart={() => setDraggingEntityId(entity.id)}
+                    onDragEnd={() => {
+                      setDraggingEntityId(null)
+                      setDropTarget(null)
+                    }}
                   />
                 ))
               )}
@@ -560,8 +658,14 @@ export function CreateTierListPage() {
                 e.preventDefault()
                 setDragOverTier(tier.id)
               }}
-              onDragLeave={() => setDragOverTier(null)}
-              onDrop={(e) => handleDrop(tier.id, e)}
+              onDragLeave={(e) => {
+                // Only clear if leaving the tier entirely
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverTier(null)
+                  setDropTarget(null)
+                }
+              }}
+              onDrop={(e) => handleDrop(tier.id, e, dropTarget?.tierId === tier.id ? dropTarget.index : undefined)}
             >
               {/* Tier label */}
               <div
@@ -599,13 +703,69 @@ export function CreateTierListPage() {
               </div>
 
               {/* Entities area */}
-              <div className="flex-1 min-h-[84px] bg-muted/30 p-1.5 flex flex-wrap gap-1.5 items-start content-start">
-                {tier.entities.map(entity => (
-                  <EntityCard
-                    key={entity.id}
-                    entity={entity}
-                    onRemove={() => removeEntityFromTier(tier.id, entity.id)}
-                  />
+              <div
+                className="flex-1 min-h-[84px] bg-muted/30 p-1.5 flex flex-wrap items-start content-start"
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  // Only set drop target at end if not over a specific entity
+                  if (e.target === e.currentTarget) {
+                    setDropTarget({ tierId: tier.id, index: tier.entities.length })
+                    setDragOverTier(tier.id)
+                  }
+                }}
+                onDrop={(e) => handleDrop(tier.id, e, dropTarget?.tierId === tier.id ? dropTarget.index : tier.entities.length)}
+              >
+                {tier.entities.map((entity, idx) => (
+                  <div key={entity.id} className="relative flex items-center">
+                    {/* Drop indicator before this entity */}
+                    <div
+                      className={cn(
+                        "absolute left-0 top-0 w-1 h-[72px] rounded-full transition-all duration-200 -translate-x-1/2 z-10",
+                        dropTarget?.tierId === tier.id && dropTarget?.index === idx && draggingEntityId !== entity.id
+                          ? "bg-primary w-1.5"
+                          : "bg-transparent"
+                      )}
+                    />
+                    <div
+                      className="relative"
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const midpoint = rect.left + rect.width / 2
+                        const insertIndex = e.clientX < midpoint ? idx : idx + 1
+                        setDropTarget({ tierId: tier.id, index: insertIndex })
+                        setDragOverTier(tier.id)
+                      }}
+                      onDrop={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const midpoint = rect.left + rect.width / 2
+                        const insertIndex = e.clientX < midpoint ? idx : idx + 1
+                        handleDrop(tier.id, e, insertIndex)
+                      }}
+                    >
+                      <EntityCard
+                        entity={entity}
+                        onRemove={() => removeEntityFromTier(tier.id, entity.id)}
+                        onDragStart={() => setDraggingEntityId(entity.id)}
+                        onDragEnd={() => {
+                          setDraggingEntityId(null)
+                          setDropTarget(null)
+                        }}
+                      />
+                    </div>
+                    {/* Drop indicator after last entity */}
+                    {idx === tier.entities.length - 1 && (
+                      <div
+                        className={cn(
+                          "absolute right-0 top-0 w-1 h-[72px] rounded-full transition-all duration-200 translate-x-1/2 z-10",
+                          dropTarget?.tierId === tier.id && dropTarget?.index === tier.entities.length && draggingEntityId !== entity.id
+                            ? "bg-primary w-1.5"
+                            : "bg-transparent"
+                        )}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
 
@@ -650,10 +810,15 @@ export function CreateTierListPage() {
             Add Row
           </button>
 
+          {/* Error message */}
+          {error && (
+            <p className="text-sm text-red-500 text-center">{error}</p>
+          )}
+
           {/* Save button */}
           <div className="flex justify-end pt-4">
-            <Button className="px-8">
-              Save Tier List
+            <Button className="px-8" onClick={saveTierList} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Tier List'}
             </Button>
           </div>
         </div>

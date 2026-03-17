@@ -39,6 +39,9 @@ async function initAuraFarmTables() {
   // Add tier_list_data column for tier list posts
   await pool.query(`ALTER TABLE aura_farms ADD COLUMN IF NOT EXISTS tier_list_data JSONB`)
 
+  // Allow NULL entity_id for tier lists
+  await pool.query(`ALTER TABLE aura_farms ALTER COLUMN entity_id DROP NOT NULL`)
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS aura_farm_comment_votes (
       id TEXT PRIMARY KEY,
@@ -195,6 +198,7 @@ app.get('/', async (c) => {
       imageUrl: farm.image_url,
       auraScore: farm.aura_score,
       createdAt: farm.created_at,
+      tierListData: (farm as any).tier_list_data || null,
       entity: entity ? {
         id: entity.id,
         name: entity.name,
@@ -247,6 +251,7 @@ app.get('/my', async (c) => {
       imageUrl: farm.image_url,
       auraScore: farm.aura_score,
       createdAt: farm.created_at,
+      tierListData: (farm as any).tier_list_data || null,
       entity: entity ? {
         id: entity.id,
         name: entity.name,
@@ -293,6 +298,7 @@ app.get('/:idOrSlug', async (c) => {
     imageUrl: farm.image_url,
     auraScore: farm.aura_score,
     createdAt: farm.created_at,
+    tierListData: (farm as any).tier_list_data || null,
     entity: entity ? {
       id: entity.id,
       name: entity.name,

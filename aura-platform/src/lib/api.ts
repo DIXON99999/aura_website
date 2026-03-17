@@ -359,7 +359,7 @@ export const api = {
   getAuraFarm: (id: string) =>
     fetchApi<AuraFarm>(`/aura-farms/${id}`),
 
-  createAuraFarm: (data: { title: string; description?: string; entityId: string; entityType: string; imageUrl?: string }) =>
+  createAuraFarm: (data: { title: string; description?: string; entityId?: string; entityType?: string; imageUrl?: string; tierListData?: TierListData }) =>
     fetchApi<AuraFarm>('/aura-farms', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -748,19 +748,35 @@ interface SubEventWithParticipants extends SubEvent {
   comments: SubEventComment[]
 }
 
-// Aura Farms
+// Aura Farms / Tier Lists
+export interface TierListData {
+  tiers: {
+    id: string
+    label: string
+    color: string
+    entities: {
+      id: string
+      type: string
+      name: string
+      slug: string
+      imageUrl?: string | null
+    }[]
+  }[]
+}
+
 interface AuraFarm {
   id: string
   title: string
   slug: string | null
   description: string | null
-  entityId: string
+  entityId: string | null
   entityType: string
   ownerId: string
   ownerName: string | null
   imageUrl: string | null
   auraScore: number
   createdAt: Date
+  tierListData: TierListData | null
   entity: {
     id: string
     name: string
@@ -811,4 +827,4 @@ interface Notification {
   createdAt: Date
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification }
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, TierListData, Suggestion, Notification }
