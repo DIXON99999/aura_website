@@ -18,6 +18,7 @@ import {
   X,
   Menu,
   LayoutList,
+  Gamepad2,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
 import { api } from '@/lib/api'
@@ -28,6 +29,7 @@ import { InventoryBar } from '@/components/ui/inventory-bar'
 
 const navItems = [
   { to: '/', label: 'Database', icon: Database },
+  { to: '/play', label: 'Play', icon: Gamepad2 },
   { to: '/community', label: 'Community', icon: Users },
   { to: '/posts', label: 'Posts', icon: MessageSquare },
 ]

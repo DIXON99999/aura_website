@@ -25,6 +25,7 @@ import {
   CreateAuraFarmPage,
   MyAuraFarmsPage,
   CreateTierListPage,
+  PlayPage,
 } from '@/pages'
 
 function App() {
@@ -114,6 +115,8 @@ function AppRoutes() {
         <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
         {/* Tier Lists */}
         <Route path="/create-tier-list" element={<CreateTierListPage />} />
+        {/* Play (Cookie Clicker) */}
+        <Route path="/play" element={<PlayPage />} />
         <Route path="/:entityType/:slug" element={<EntityPage />} />
       </Routes>
     </div>

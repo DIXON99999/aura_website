@@ -437,6 +437,13 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Play (Cookie Clicker)
+  playClick: (data: { entityId: string; entityType: string; clicks?: number }) =>
+    fetchApi<{ auraScore: number; added: number }>('/play/click', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Notifications
   getNotifications: (userId: string, params?: { limit?: number; unreadOnly?: boolean }) => {
     const query = new URLSearchParams()

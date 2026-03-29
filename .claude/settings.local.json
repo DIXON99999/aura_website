@@ -18,7 +18,9 @@
       "Bash(find /d/2026_projects/aura_websitev3/aura-platform -path \"*/node_modules\" -prune -o -type f -name \"*.ts\" -o -name \"*.tsx\" | xargs grep -l \"custom.*leaderboard\" | head -20)",
       "Bash(find /d/2026_projects/aura_websitev3/aura-platform/backend -path \"*/node_modules\" -prune -o -type f -name \"*.ts\" -print | xargs grep -l \"leaderboard\" 2>/dev/null | head -30)",
       "Bash(find /d/2026_projects/aura_websitev3/aura-platform/src -type f -name \"*.ts\" -o -name \"*.tsx\" | xargs grep -l \"addPlayerToLeaderboard\\\\|createSubEvent\\\\|custom.*leaderboard\" 2>/dev/null)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(find D:/2026_projects/aura_websitev3/aura-platform/backend -name *.ts -path */routes/*)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|css\\)$\")"
     ]
   }
 }

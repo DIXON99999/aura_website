@@ -121,6 +121,26 @@
   animation: float-up 0.8s ease-out forwards;
 }
 
+/* Play page - flame flies up */
+@keyframes flame-rise {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-40px) scale(1.1) rotate(-10deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-90px) scale(0.6) rotate(15deg);
+  }
+}
+
+.animate-flame-rise {
+  animation: flame-rise 1s ease-out forwards;
+}
+
 /* Light mode scrollbar */
 @media (prefers-color-scheme: light) {
   * {
