@@ -111,11 +111,10 @@ export function getLobby(id: string): LobbyInfo | null {
   return lobby ? buildLobbyInfo(lobby) : null
 }
 
-export function joinLobby(lobbyId: string, userId: string, playerName: string, team: number, profileImg?: string): { success: boolean; error?: string } {
+export function joinLobby(lobbyId: string, userId: string, playerName: string, team: number, profileImg?: string, entityId?: string, entityType?: string, auraScore?: number): { success: boolean; error?: string } {
   const lobby = lobbies.get(lobbyId)
   if (!lobby) return { success: false, error: 'Lobby not found' }
   if (lobby.info.state === 'finished') return { success: false, error: 'Lobby has ended' }
-  if (lobby.info.players.length >= lobby.info.maxPlayers) return { success: false, error: 'Lobby is full' }
   // Clamp team to valid range
   if (lobby.info.mode === 'battle') {
     team = Math.max(0, Math.min(team, lobby.info.teamCount - 1))
@@ -126,19 +125,22 @@ export function joinLobby(lobbyId: string, userId: string, playerName: string, t
     // Rejoin: update team if changed
     existing.team = team
     existing.profileImg = profileImg
+    existing.entityId = entityId
+    existing.entityType = entityType
+    existing.auraScore = auraScore
     lobby.lastRealUserActivity = Date.now()
     return { success: true }
   }
 
   if (lobby.info.players.length >= lobby.info.maxPlayers) return { success: false, error: 'Lobby is full' }
 
-  const player: LobbyPlayer = { id: userId, name: playerName, team, profileImg, ready: false }
+  const player: LobbyPlayer = { id: userId, name: playerName, team, profileImg, entityId, entityType, auraScore, ready: false }
   lobby.info.players.push(player)
   lobby.lastRealUserActivity = Date.now()
 
   // If game is already running, add the player to the game instance
   if (lobby.info.state === 'playing' && lobby.game) {
-    lobby.game.addPlayer(userId, playerName, team, profileImg)
+    lobby.game.addPlayer(userId, playerName, team, profileImg, entityId, entityType, auraScore)
   }
 
   return { success: true }
@@ -199,19 +201,27 @@ export function startGame(lobbyId: string): { success: boolean; error?: string }
 
   // Add all players
   for (const p of lobby.info.players) {
-    game.addPlayer(p.id, p.name, p.team, p.profileImg)
+    game.addPlayer(p.id, p.name, p.team, p.profileImg, p.entityId, p.entityType, p.auraScore)
   }
 
   // Game event handlers
-  game.onKill = (event: KillEvent) => {
+  game.onKill = async (event: KillEvent) => {
     if (lobby.info.mode === 'ffa') {
-      // Find killer and victim tanks
       const killer = game.gs.tanks.find(t => t.id === event.killerTankId)
       const victim = game.gs.tanks.find(t => t.id === event.victimTankId)
+
       // +20 aura for player killer
-      if (killer?.playerId) {
-        // We'd need to look up the player's entity to apply aura
-        // For now, tracked client-side
+      if (killer?.playerId && killer.entityId && killer.entityType) {
+        killer.auraScore += 20
+        await applyAuraChange(killer.entityId, killer.entityType, 20)
+        broadcastToLobby(lobby, { type: 'aura_change', entityId: killer.entityId, entityType: killer.entityType, delta: 20 })
+      }
+
+      // -10 aura for player victim
+      if (victim?.playerId && victim.entityId && victim.entityType) {
+        victim.auraScore = Math.max(0, victim.auraScore - 10)
+        await applyAuraChange(victim.entityId, victim.entityType, -10)
+        broadcastToLobby(lobby, { type: 'aura_change', entityId: victim.entityId, entityType: victim.entityType, delta: -10 })
       }
     }
   }

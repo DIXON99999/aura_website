@@ -38,6 +38,9 @@ export interface Tank {
   aiTgtX: number; aiTgtY: number; aiTimer: number; aiShoot: number
   team: number
   playerId?: string // real user ID if player-controlled
+  entityId?: string // linked entity ID for aura changes (e.g. player profile id)
+  entityType?: string // entity type for aura changes
+  auraScore: number // current aura score
   isPersonalBot?: boolean // deployed personal bot with enhanced stats
 }
 
@@ -106,8 +109,10 @@ export interface SnapshotTank {
   team: number; recoils: number[]
   stats: number[]; statPts: number
   xp: number; xpNext: number
+  auraScore: number
   profileImg?: string
   playerId?: string
+  entityId?: string
   isPersonalBot?: boolean
 }
 
@@ -142,6 +147,9 @@ export interface LobbyPlayer {
   name: string
   team: number
   profileImg?: string
+  entityId?: string
+  entityType?: string
+  auraScore?: number
   ready: boolean
 }
 

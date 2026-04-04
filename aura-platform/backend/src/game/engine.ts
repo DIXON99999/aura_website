@@ -172,6 +172,7 @@ export function mkTank(x: number, y: number, name: string, isPlayer: boolean, co
     fill: c.f, ol: c.o, flash: 0, reloads: [0], alive: true, name,
     isPlayer, recoils: [0], bodyDmg: 3, regenTimer: 0,
     aiTgtX: x, aiTgtY: y, aiTimer: 0, aiShoot: 0, team,
+    auraScore: 0,
   }
 }
 
@@ -596,7 +597,7 @@ export class GameInstance {
     }
   }
 
-  addPlayer(playerId: string, name: string, team: number, profileImg?: string): number {
+  addPlayer(playerId: string, name: string, team: number, profileImg?: string, entityId?: string, entityType?: string, auraScore?: number): number {
     const color = this.gs.mode === 'battle' ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
     let spawnX = rand(200, WORLD - 200), spawnY = rand(200, WORLD - 200)
 
@@ -625,6 +626,9 @@ export class GameInstance {
 
     const tank = mkTank(spawnX, spawnY, name, true, color, team)
     tank.playerId = playerId
+    tank.entityId = entityId
+    tank.entityType = entityType
+    tank.auraScore = auraScore ?? 0
     this.gs.tanks.push(tank)
     this.playerInputs.set(playerId, { tankId: tank.id, input: { keys: [], mouseX: 0, mouseY: 0, mouseDown: false, viewW: 1200, viewH: 800 }, autoFire: false })
     return tank.id
@@ -702,11 +706,16 @@ export class GameInstance {
     const info = this.playerInputs.get(playerId)
     if (!info) return null
 
-    // Remove old dead tank
-    this.gs.tanks = this.gs.tanks.filter(t => t.id !== info.tankId)
-
+    // Save old tank info before removing
     const oldTank = this.gs.tanks.find(t => t.id === info.tankId)
     const team = oldTank?.team ?? -1
+    const name = oldTank?.name || 'Player'
+    const entityId = oldTank?.entityId
+    const entityType = oldTank?.entityType
+    const auraScore = oldTank?.auraScore ?? 0
+
+    // Remove old dead tank
+    this.gs.tanks = this.gs.tanks.filter(t => t.id !== info.tankId)
 
     let spawnX = rand(200, WORLD - 200), spawnY = rand(200, WORLD - 200)
     if (this.gs.mode === 'battle') {
@@ -717,9 +726,11 @@ export class GameInstance {
     }
 
     const color = this.gs.mode === 'battle' ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
-    const name = oldTank?.name || 'Player'
     const tank = mkTank(spawnX, spawnY, name, true, color, team)
     tank.playerId = playerId
+    tank.entityId = entityId
+    tank.entityType = entityType
+    tank.auraScore = auraScore
     this.gs.tanks.push(tank)
     info.tankId = tank.id
     return tank.id
@@ -858,7 +869,9 @@ export class GameInstance {
         team: t.team, recoils: [...t.recoils],
         stats: [...t.stats], statPts: t.statPts,
         xp: t.xp, xpNext: t.xpNext,
+        auraScore: t.auraScore,
         playerId: t.playerId,
+        entityId: t.entityId,
         isPersonalBot: t.isPersonalBot,
       })),
       shapes: this.gs.shapes.map(s => ({

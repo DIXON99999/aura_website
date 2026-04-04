@@ -39,6 +39,15 @@ async function getUserProfileImg(user: { id: string; playerId?: string }): Promi
   return undefined
 }
 
+// Helper to get user's player entity info (for aura tracking)
+async function getUserEntityInfo(user: { id: string; playerId?: string }): Promise<{ entityId?: string; entityType?: string; auraScore?: number }> {
+  if (user.playerId) {
+    const res = await pool.query('SELECT id, aura_score FROM players WHERE id = $1', [user.playerId])
+    if (res.rows[0]) return { entityId: (res.rows[0] as any).id, entityType: 'player', auraScore: Number((res.rows[0] as any).aura_score) || 0 }
+  }
+  return {}
+}
+
 // ============================================================================
 // LOBBY CRUD
 // ============================================================================
@@ -89,7 +98,8 @@ app.post('/:id/join', async (c) => {
 
   const displayName = await getUserDisplayName(user)
   const profileImg = await getUserProfileImg(user)
-  const result = joinLobby(c.req.param('id'), user.id, displayName, team || 0, profileImg)
+  const entityInfo = await getUserEntityInfo(user)
+  const result = joinLobby(c.req.param('id'), user.id, displayName, team || 0, profileImg, entityInfo.entityId, entityInfo.entityType, entityInfo.auraScore)
 
   if (!result.success) return c.json({ error: result.error }, 400)
   return c.json({ success: true })

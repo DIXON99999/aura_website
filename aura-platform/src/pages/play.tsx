@@ -18,7 +18,8 @@ interface SnapshotTank {
   team: number; recoils: number[]
   stats: number[]; statPts: number
   xp: number; xpNext: number
-  profileImg?: string; playerId?: string; isPersonalBot?: boolean
+  auraScore: number
+  profileImg?: string; playerId?: string; entityId?: string; isPersonalBot?: boolean
 }
 interface SnapshotShape { id: number; x: number; y: number; radius: number; rot: number; sides: number; fill: string; ol: string; hp: number; maxHp: number; flash: number; type: string }
 interface SnapshotBullet { id: number; x: number; y: number; radius: number; fill: string; ol: string }
@@ -197,11 +198,17 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank) {
   }
   ctx.restore()
 
-  // Name + bot badge
+  // Name + aura score
   const label = t.isPersonalBot ? `★ ${t.name}` : t.name
   ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
   ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = t.isPersonalBot ? '#FFD700' : '#FFF'
   ctx.strokeText(label, t.x, t.y - r - 8); ctx.fillText(label, t.x, t.y - r - 8)
+  if (t.isPlayer && t.auraScore > 0) {
+    const auraLabel = `🔥 ${formatCompact(t.auraScore)}`
+    ctx.font = 'bold 11px sans-serif'
+    ctx.fillStyle = '#FFA500'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3
+    ctx.strokeText(auraLabel, t.x, t.y - r - 22); ctx.fillText(auraLabel, t.x, t.y - r - 22)
+  }
 
   if (t.hp < t.maxHp) {
     const ratio = clamp(t.hp / t.maxHp, 0, 1), bw = r * 2.2
@@ -551,6 +558,7 @@ export function PlayPage() {
   const animRef = useRef(0)
   const keysRef = useRef(new Set<string>())
   const mouseRef = useRef({ x: 0, y: 0, down: false })
+  const auraFloatsRef = useRef<{ x: number; y: number; text: string; color: string; life: number }[]>([])
 
   const user = useAuthStore(s => s.user)
   const players = useAuraStore(s => s.players)
@@ -722,6 +730,21 @@ export function PlayPage() {
           setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode })
           setPage('playing')
           break
+        case 'aura_change': {
+          const snap = snapshotRef.current
+          if (snap) {
+            const tank = snap.tanks.find(tk => tk.playerId && tk.entityId === msg.entityId)
+            if (tank) {
+              auraFloatsRef.current.push({
+                x: tank.x, y: tank.y - tank.radius - 35,
+                text: msg.delta > 0 ? `+${msg.delta} Aura` : `${msg.delta} Aura`,
+                color: msg.delta > 0 ? '#00FF88' : '#FF4444',
+                life: 1.5,
+              })
+            }
+          }
+          break
+        }
         case 'game_over':
           setUi(prev => ({ ...prev, battleOver: true, winningTeam: msg.winningTeam }))
           break
@@ -801,6 +824,26 @@ export function PlayPage() {
 
           const rect = container.getBoundingClientRect()
           renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height)
+
+          // Draw floating aura texts (in world space)
+          const me = snap.tanks.find(tk => tk.id === myTankIdRef.current)
+          const camX = me?.x ?? WORLD / 2, camY = me?.y ?? WORLD / 2
+          const camZoom = me ? (1 - (me.level - 1) * 0.004) / (TC[me.classId]?.fov || 1) : 1
+          const floats = auraFloatsRef.current
+          for (let i = floats.length - 1; i >= 0; i--) {
+            const f = floats[i]
+            f.life -= dt
+            f.y -= 40 * dt // drift up
+            if (f.life <= 0) { floats.splice(i, 1); continue }
+            const alpha = Math.min(1, f.life / 0.5)
+            const sx = (f.x - camX) * camZoom + rect.width / 2
+            const sy = (f.y - camY) * camZoom + rect.height / 2
+            ctx.globalAlpha = alpha
+            ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'
+            ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = f.color
+            ctx.strokeText(f.text, sx, sy); ctx.fillText(f.text, sx, sy)
+            ctx.globalAlpha = 1
+          }
 
           // Sync UI periodically
           syncTimer += dt
