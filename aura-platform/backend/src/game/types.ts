@@ -5,12 +5,14 @@ export interface V2 { x: number; y: number }
 export interface BarrelDef {
   angle: number; width: number; length: number
   widthEnd?: number; offset?: number
-  reloadMul?: number; bulletSizeMul?: number; bulletSpeedMul?: number; bulletDamageMul?: number
+  reloadMul?: number; bulletSizeMul?: number; bulletSpeedMul?: number; bulletDamageMul?: number; bulletPenMul?: number
 }
 
 export interface TankClass {
   id: string; name: string; tier: number; barrels: BarrelDef[]
   upgradesFrom?: string[]; fov?: number; recoil?: number
+  speedMul?: number; hpMul?: number; regenMul?: number
+  ability?: 'wall' | 'stealth' | 'scope'
 }
 
 export interface Shape {
@@ -37,11 +39,16 @@ export interface Tank {
   regenTimer: number
   aiTgtX: number; aiTgtY: number; aiTimer: number; aiShoot: number
   team: number
+  profileImg?: string // profile image URL
   playerId?: string // real user ID if player-controlled
   entityId?: string // linked entity ID for aura changes (e.g. player profile id)
   entityType?: string // entity type for aura changes
   auraScore: number // current aura score
   isPersonalBot?: boolean // deployed personal bot with enhanced stats
+  invisible: number // >0 means invisible, counts down
+  idleTime: number // time spent not moving
+  reloadBoost: number // >0 means reload boost active, counts down
+  invulnerable: number // >0 means invulnerable to bullets, counts down
 }
 
 export interface TeamBase {
@@ -52,6 +59,15 @@ export interface TeamBase {
   entityName: string; entityId: string; entityType: string
   entityImg?: string // URL, not HTMLImageElement on server
   destroyed: boolean
+}
+
+export interface Wall {
+  id: number; x: number; y: number
+  width: number; height: number; angle: number
+  hp: number; maxHp: number; flash: number
+  owner: number; team: number
+  fill: string; ol: string
+  age: number; maxAge: number
 }
 
 export interface Particle {
@@ -65,6 +81,7 @@ export interface GameState {
   tanks: Tank[]
   shapes: Shape[]
   bullets: Bullet[]
+  walls: Wall[]
   particles: Particle[]
   bases: TeamBase[]
   mode: GameMode
@@ -90,6 +107,7 @@ export interface GameSnapshot {
   tanks: SnapshotTank[]
   shapes: SnapshotShape[]
   bullets: SnapshotBullet[]
+  walls: SnapshotWall[]
   particles: SnapshotParticle[]
   bases: SnapshotBase[]
   mode: GameMode
@@ -114,6 +132,9 @@ export interface SnapshotTank {
   playerId?: string
   entityId?: string
   isPersonalBot?: boolean
+  invisible: number
+  reloadBoost: number
+  invulnerable: number
 }
 
 export interface SnapshotShape {
@@ -124,6 +145,13 @@ export interface SnapshotShape {
 
 export interface SnapshotBullet {
   id: number; x: number; y: number; radius: number
+  fill: string; ol: string
+}
+
+export interface SnapshotWall {
+  id: number; x: number; y: number
+  width: number; height: number; angle: number
+  hp: number; maxHp: number; flash: number
   fill: string; ol: string
 }
 
@@ -183,10 +211,13 @@ export type ClientMessage =
   | { type: 'select_class'; classId: string }
   | { type: 'toggle_autofire' }
   | { type: 'respawn' }
+  | { type: 'set_level'; delta: number }
+  | { type: 'place_wall'; x: number; y: number }
+  | { type: 'activate_stealth' }
 
 // WS messages server → client
 export type ServerMessage =
-  | { type: 'snapshot'; data: GameSnapshot; you: number } // you = your tank id
+  | { type: 'snapshot'; data: GameSnapshot; you: number; abilityCooldown?: number } // you = your tank id
   | { type: 'lobby_update'; lobby: LobbyInfo }
   | { type: 'game_start' }
   | { type: 'game_over'; winningTeam: number }

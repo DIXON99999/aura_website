@@ -251,8 +251,10 @@ export function startGame(lobbyId: string): { success: boolean; error?: string }
     if (!lobby.game) return
     const snapshot = lobby.game.buildSnapshot()
     for (const [playerId, conn] of lobby.connections) {
-      const tankId = lobby.game.playerInputs.get(playerId)?.tankId ?? -1
-      sendTo(conn.ws, { type: 'snapshot', data: snapshot, you: tankId })
+      const pInfo = lobby.game.playerInputs.get(playerId)
+      const tankId = pInfo?.tankId ?? -1
+      const abilityCooldown = pInfo?.abilityCooldown ?? 0
+      sendTo(conn.ws, { type: 'snapshot', data: snapshot, you: tankId, abilityCooldown })
     }
   }, 1000 / 45)
 
@@ -339,6 +341,15 @@ export function handleWebSocketMessage(ws: any, lobbyId: string, userId: string,
       break
     case 'toggle_autofire':
       lobby.game.toggleAutofire(userId)
+      break
+    case 'set_level':
+      lobby.game.adjustPlayerLevel(userId, msg.delta || 0)
+      break
+    case 'place_wall':
+      lobby.game.placeWall(userId, msg.x, msg.y)
+      break
+    case 'activate_stealth':
+      lobby.game.activateStealth(userId)
       break
     case 'respawn': {
       lobby.game.respawnPlayer(userId)

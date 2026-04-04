@@ -22,7 +22,8 @@
       "Bash(find D:/2026_projects/aura_websitev3/aura-platform/backend -name *.ts -path */routes/*)",
       "Bash(grep -E \"\\\\.\\(tsx|ts|css\\)$\")",
       "Bash(wc:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(npx shadcn@latest add progress tooltip --yes)"
     ]
   }
 }

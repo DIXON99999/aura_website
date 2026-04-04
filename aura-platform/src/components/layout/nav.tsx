@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
   User,
@@ -52,6 +52,7 @@ function getVisitorId(): string {
 
 export function Nav() {
   const user = useAuthStore((s) => s.user)
+  const location = useLocation()
   const signOut = useAuthStore((s) => s.signOut)
   const credits = useAuraStore((s) => s.credits)
   const loadCredits = useAuraStore((s) => s.loadCredits)
@@ -459,8 +460,8 @@ export function Nav() {
         </div>
       </div>
 
-      {/* Floating Suggest Button - bottom right */}
-      {createPortal(
+      {/* Floating Suggest Button - bottom right (hidden on play page) */}
+      {location.pathname !== '/play' && createPortal(
         <button
           onClick={() => setSuggestModalOpen(true)}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-yellow-500 text-black font-medium shadow-lg transition-all hover:bg-yellow-400 hover:scale-105"

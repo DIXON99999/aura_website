@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAuthStore, useAuraStore } from '@/stores'
-import { Swords, Shield, ChevronRight, Search, X, Users, Trophy, Plus, ArrowLeft, Play, Bot, Loader2, Crown } from 'lucide-react'
+import { Swords, Shield, ChevronRight, ChevronUp, Search, X, Users, Trophy, Plus, ArrowLeft, Play, Bot, Loader2, Crown } from 'lucide-react'
 
 // ============================================================================
 // TYPES (mirrors server types for rendering)
@@ -20,15 +20,17 @@ interface SnapshotTank {
   xp: number; xpNext: number
   auraScore: number
   profileImg?: string; playerId?: string; entityId?: string; isPersonalBot?: boolean
+  invisible: number; reloadBoost: number; invulnerable: number
 }
 interface SnapshotShape { id: number; x: number; y: number; radius: number; rot: number; sides: number; fill: string; ol: string; hp: number; maxHp: number; flash: number; type: string }
 interface SnapshotBullet { id: number; x: number; y: number; radius: number; fill: string; ol: string }
+interface SnapshotWall { id: number; x: number; y: number; width: number; height: number; angle: number; hp: number; maxHp: number; flash: number; fill: string; ol: string }
 interface SnapshotParticle { x: number; y: number; r: number; fill: string; alpha: number }
 interface SnapshotBase { id: number; x: number; y: number; hp: number; maxHp: number; radius: number; rot: number; team: number; flash: number; entityName: string; entityId: string; entityType: string; entityImg?: string; destroyed: boolean }
 
 interface GameSnapshot {
   tanks: SnapshotTank[]; shapes: SnapshotShape[]; bullets: SnapshotBullet[]
-  particles: SnapshotParticle[]; bases: SnapshotBase[]
+  walls: SnapshotWall[]; particles: SnapshotParticle[]; bases: SnapshotBase[]
   mode: GameMode; teamCount: number; battleOver: boolean; winningTeam: number
   baseDestroyedMsg: string; baseDestroyedTimer: number
 }
@@ -52,7 +54,7 @@ interface BarrelDef {
   widthEnd?: number; offset?: number
   reloadMul?: number; bulletSizeMul?: number; bulletSpeedMul?: number; bulletDamageMul?: number
 }
-interface TankClass { id: string; name: string; tier: number; barrels: BarrelDef[]; upgradesFrom?: string[]; fov?: number; recoil?: number }
+interface TankClass { id: string; name: string; tier: number; barrels: BarrelDef[]; upgradesFrom?: string[]; fov?: number; recoil?: number; ability?: 'wall' | 'stealth' | 'scope' }
 
 // ============================================================================
 // CONSTANTS
@@ -83,24 +85,22 @@ const STAT_COLORS = ['#F5B0CE', '#C980E3', '#9B6DCC', '#6B8DE3', '#66CCE0', '#E8
 const STAT_NAMES = ['Health Regen', 'Max Health', 'Body Damage', 'Bullet Speed', 'Bullet Penetration', 'Bullet Damage', 'Reload', 'Movement Speed']
 
 const TC: Record<string, TankClass> = {
-  basic: { id: 'basic', name: 'Tank', tier: 0, barrels: [{ angle: 0, width: 0.84, length: 2.4 }] },
-  twin: { id: 'twin', name: 'Twin', tier: 1, upgradesFrom: ['basic'], recoil: 0.7, barrels: [{ angle: 0, width: 0.6, length: 2.4, offset: 0.5 }, { angle: 0, width: 0.6, length: 2.4, offset: -0.5 }] },
-  sniper: { id: 'sniper', name: 'Sniper', tier: 1, upgradesFrom: ['basic'], fov: 1.25, barrels: [{ angle: 0, width: 0.65, length: 3.2, bulletSpeedMul: 1.5, reloadMul: 1.6, bulletDamageMul: 1.4 }] },
-  machineGun: { id: 'machineGun', name: 'Machine Gun', tier: 1, upgradesFrom: ['basic'], barrels: [{ angle: 0, width: 0.6, length: 2.4, widthEnd: 1.1, reloadMul: 0.55, bulletDamageMul: 0.65 }] },
-  flankGuard: { id: 'flankGuard', name: 'Flank Guard', tier: 1, upgradesFrom: ['basic'], barrels: [{ angle: 0, width: 0.84, length: 2.4 }, { angle: Math.PI, width: 0.65, length: 2.0 }] },
-  tripleShot: { id: 'tripleShot', name: 'Triple Shot', tier: 2, upgradesFrom: ['twin'], barrels: [{ angle: -0.45, width: 0.65, length: 2.2 }, { angle: 0, width: 0.65, length: 2.5 }, { angle: 0.45, width: 0.65, length: 2.2 }] },
-  quadTank: { id: 'quadTank', name: 'Quad Tank', tier: 2, upgradesFrom: ['twin', 'flankGuard'], barrels: [{ angle: 0, width: 0.72, length: 2.2 }, { angle: Math.PI / 2, width: 0.72, length: 2.2 }, { angle: Math.PI, width: 0.72, length: 2.2 }, { angle: -Math.PI / 2, width: 0.72, length: 2.2 }] },
-  assassin: { id: 'assassin', name: 'Assassin', tier: 2, upgradesFrom: ['sniper'], fov: 1.45, barrels: [{ angle: 0, width: 0.6, length: 3.8, bulletSpeedMul: 1.8, reloadMul: 2.0, bulletDamageMul: 1.7 }] },
-  destroyer: { id: 'destroyer', name: 'Destroyer', tier: 2, upgradesFrom: ['machineGun'], recoil: 2.5, barrels: [{ angle: 0, width: 1.1, length: 2.4, reloadMul: 3.0, bulletDamageMul: 3.0, bulletSizeMul: 2.0, bulletSpeedMul: 0.8 }] },
-  sprayer: { id: 'sprayer', name: 'Sprayer', tier: 2, upgradesFrom: ['machineGun'], barrels: [{ angle: 0, width: 0.72, length: 2.2, reloadMul: 0.5, bulletDamageMul: 0.6 }, { angle: 0, width: 0.42, length: 2.8, reloadMul: 0.5, bulletDamageMul: 0.4, bulletSizeMul: 0.7 }] },
-  triAngle: { id: 'triAngle', name: 'Tri-Angle', tier: 2, upgradesFrom: ['flankGuard'], recoil: 0.4, barrels: [{ angle: 0, width: 0.84, length: 2.4 }, { angle: 2.6, width: 0.55, length: 1.9 }, { angle: -2.6, width: 0.55, length: 1.9 }] },
-  octoTank: { id: 'octoTank', name: 'Octo Tank', tier: 3, upgradesFrom: ['quadTank'], barrels: Array.from({ length: 8 }, (_, i) => ({ angle: (i * Math.PI * 2) / 8, width: 0.65, length: 2.1, reloadMul: 0.8, bulletDamageMul: 0.6 })) },
-  pentaShot: { id: 'pentaShot', name: 'Penta Shot', tier: 3, upgradesFrom: ['tripleShot'], barrels: [{ angle: -0.7, width: 0.55, length: 2.0 }, { angle: -0.35, width: 0.55, length: 2.3 }, { angle: 0, width: 0.55, length: 2.5 }, { angle: 0.35, width: 0.55, length: 2.3 }, { angle: 0.7, width: 0.55, length: 2.0 }] },
-  annihilator: { id: 'annihilator', name: 'Annihilator', tier: 3, upgradesFrom: ['destroyer'], recoil: 3.5, barrels: [{ angle: 0, width: 1.3, length: 2.6, reloadMul: 4.0, bulletDamageMul: 5.0, bulletSizeMul: 2.5, bulletSpeedMul: 0.7 }] },
-  booster: { id: 'booster', name: 'Booster', tier: 3, upgradesFrom: ['triAngle'], recoil: 0.3, barrels: [{ angle: 0, width: 0.72, length: 2.4 }, { angle: 2.4, width: 0.48, length: 1.8 }, { angle: Math.PI, width: 0.48, length: 1.8, offset: 0.42 }, { angle: Math.PI, width: 0.48, length: 1.8, offset: -0.42 }, { angle: -2.4, width: 0.48, length: 1.8 }] },
+  basic: { id: 'basic', name: 'Tank', tier: 0, barrels: [{ angle: 0, width: 0.84, length: 1.8 }] },
+  sniper: { id: 'sniper', name: 'Sniper', tier: 1, upgradesFrom: ['basic'], fov: 1.3, barrels: [{ angle: 0, width: 0.5, length: 3.6, bulletSpeedMul: 1.8, reloadMul: 2.2, bulletDamageMul: 1.8, bulletSizeMul: 0.85 }] },
+  rifle: { id: 'rifle', name: 'Rifle', tier: 1, upgradesFrom: ['basic'], fov: 1.15, ability: 'wall', barrels: [{ angle: 0, width: 0.7, length: 2.2, bulletSpeedMul: 1.3, reloadMul: 0.75, bulletDamageMul: 1.2 }] },
+  assassin: { id: 'assassin', name: 'Assassin', tier: 1, upgradesFrom: ['basic'], fov: 1.1, ability: 'stealth', barrels: [{ angle: 0, width: 0.4, length: 1.2, bulletSpeedMul: 0.9, reloadMul: 1.3, bulletDamageMul: 0.85, bulletSizeMul: 0.7 }] },
+  phantom: { id: 'phantom', name: 'Phantom', tier: 2, upgradesFrom: ['assassin'], fov: 1.15, ability: 'stealth', barrels: [{ angle: 0, width: 0.45, length: 1.4, bulletSpeedMul: 1.1, reloadMul: 1.4, bulletDamageMul: 1.0, bulletSizeMul: 0.75 }] },
+  superRifle: { id: 'superRifle', name: 'Super Rifle', tier: 2, upgradesFrom: ['rifle'], fov: 1.2, ability: 'wall', barrels: [{ angle: 0, width: 0.75, length: 2.6, bulletSpeedMul: 1.6, reloadMul: 0.55, bulletDamageMul: 1.5, bulletPenMul: 1.5 }] },
+  scopeSniper: { id: 'scopeSniper', name: 'Scope', tier: 2, upgradesFrom: ['sniper'], fov: 1.6, ability: 'scope', barrels: [
+    { angle: 0, width: 0.9, length: 1.8, reloadMul: 999999 }, // scope piece (visual only, draws first/behind)
+    { angle: 0, width: 0.45, length: 4.5, bulletSpeedMul: 2.4, reloadMul: 2.8, bulletDamageMul: 2.4, bulletPenMul: 2.0, bulletSizeMul: 0.8 },
+  ] },
 }
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
+function fillRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill()
+}
 function getUpgrades(classId: string) { return Object.values(TC).filter(c => c.upgradesFrom?.includes(classId)) }
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, '') + 'm'
@@ -141,15 +141,32 @@ function drawShape(ctx: CanvasRenderingContext2D, s: SnapshotShape) {
   ctx.strokeStyle = s.ol; ctx.lineWidth = OL; ctx.lineJoin = 'round'; ctx.stroke()
   ctx.restore()
   if (s.hp < s.maxHp) {
-    const ratio = clamp(s.hp / s.maxHp, 0, 1), bw = s.radius * 1.8
-    ctx.fillStyle = '#333'; ctx.fillRect(s.x - bw / 2, s.y + s.radius + 6, bw, 5)
-    ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed; ctx.fillRect(s.x - bw / 2, s.y + s.radius + 6, bw * ratio, 5)
+    const ratio = clamp(s.hp / s.maxHp, 0, 1), bw = s.radius * 2, bh = 7, br = 3.5
+    ctx.fillStyle = '#333'; fillRoundRect(ctx, s.x - bw / 2, s.y + s.radius + 6, bw, bh, br)
+    ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed; fillRoundRect(ctx, s.x - bw / 2, s.y + s.radius + 6, bw * ratio, bh, br)
   }
 }
 
 function drawBullet(ctx: CanvasRenderingContext2D, b: SnapshotBullet) {
   ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2)
   ctx.fillStyle = b.fill; ctx.fill(); ctx.strokeStyle = b.ol; ctx.lineWidth = OL * 0.7; ctx.stroke()
+}
+
+function drawWall(ctx: CanvasRenderingContext2D, w: SnapshotWall) {
+  ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(w.angle)
+  const hw = w.width / 2, hh = w.height / 2, r = 3
+  ctx.beginPath(); ctx.roundRect(-hw, -hh, w.width, w.height, r); ctx.closePath()
+  ctx.fillStyle = w.flash > 0 ? '#FFFFFF' : w.fill; ctx.fill()
+  ctx.strokeStyle = w.ol; ctx.lineWidth = OL; ctx.lineJoin = 'round'; ctx.stroke()
+  ctx.restore()
+  if (w.hp < w.maxHp) {
+    const ratio = clamp(w.hp / w.maxHp, 0, 1), bw = w.width * 0.8
+    ctx.save(); ctx.translate(w.x, w.y)
+    fillRoundRect(ctx, -bw / 2, w.height / 2 + 4, bw, 5, 2.5)
+    ctx.fillStyle = '#333'; fillRoundRect(ctx, -bw / 2, w.height / 2 + 4, bw, 5, 2.5)
+    ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed; fillRoundRect(ctx, -bw / 2, w.height / 2 + 4, bw * ratio, 5, 2.5)
+    ctx.restore()
+  }
 }
 
 function drawBarrel(ctx: CanvasRenderingContext2D, b: BarrelDef, r: number, recoil: number) {
@@ -175,14 +192,34 @@ function getCachedImg(url: string): HTMLImageElement | null {
   return img.complete ? img : null
 }
 
-function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank) {
+function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, myTeam: number) {
   if (!t.alive) return
+  // Invisibility: hide enemies, semi-transparent for self/teammates
+  if (t.invisible > 0) {
+    if (t.id === myId) {
+      ctx.globalAlpha = 0.35
+    } else if (myTeam >= 0 && t.team === myTeam) {
+      ctx.globalAlpha = 0.35
+    } else {
+      return // completely hidden to enemies
+    }
+  }
   const r = t.radius
   const tc = TC[t.classId] || TC.basic
 
   ctx.save(); ctx.translate(t.x, t.y)
   ctx.save(); ctx.rotate(t.angle)
   for (let i = 0; i < tc.barrels.length; i++) drawBarrel(ctx, tc.barrels[i], r, t.recoils[i] || 0)
+  // Super Rifle: decorative lines across barrel
+  if (t.classId === 'superRifle') {
+    const b = tc.barrels[0], w = r * b.width, l = r * b.length
+    const lineCount = 4
+    ctx.strokeStyle = BARREL_OL; ctx.lineWidth = 1.5
+    for (let j = 1; j <= lineCount; j++) {
+      const px = l * (j / (lineCount + 1))
+      ctx.beginPath(); ctx.moveTo(px, -w / 2 - 1); ctx.lineTo(px, w / 2 + 1); ctx.stroke()
+    }
+  }
   ctx.restore()
 
   const profileImg = t.profileImg ? getCachedImg(t.profileImg) : null
@@ -198,24 +235,45 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank) {
   }
   ctx.restore()
 
-  // Name + aura score
-  const label = t.isPersonalBot ? `★ ${t.name}` : t.name
-  ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
-  ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = t.isPersonalBot ? '#FFD700' : '#FFF'
-  ctx.strokeText(label, t.x, t.y - r - 8); ctx.fillText(label, t.x, t.y - r - 8)
-  if (t.isPlayer && t.auraScore > 0) {
-    const auraLabel = `🔥 ${formatCompact(t.auraScore)}`
-    ctx.font = 'bold 11px sans-serif'
-    ctx.fillStyle = '#FFA500'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3
-    ctx.strokeText(auraLabel, t.x, t.y - r - 22); ctx.fillText(auraLabel, t.x, t.y - r - 22)
-  }
+  // Name + aura score (inline)
+  const baseName = t.isPersonalBot ? `★ ${t.name}` : t.name
+  const label = t.isPlayer && t.auraScore > 0 ? `${baseName}  🔥${formatCompact(t.auraScore)}` : baseName
+  ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
+  ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.fillStyle = t.isPersonalBot ? '#FFD700' : '#FFF'
+  ctx.strokeText(label, t.x, t.y - r - 10); ctx.fillText(label, t.x, t.y - r - 10)
 
   if (t.hp < t.maxHp) {
-    const ratio = clamp(t.hp / t.maxHp, 0, 1), bw = r * 2.2
-    ctx.fillStyle = '#333'; ctx.fillRect(t.x - bw / 2, t.y + r + 5, bw, 5)
+    const ratio = clamp(t.hp / t.maxHp, 0, 1), bw = r * 2.5, bh = 7, br = 3.5
+    ctx.fillStyle = '#333'; fillRoundRect(ctx, t.x - bw / 2, t.y + r + 6, bw, bh, br)
     ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed
-    ctx.fillRect(t.x - bw / 2, t.y + r + 5, bw * ratio, 5)
+    fillRoundRect(ctx, t.x - bw / 2, t.y + r + 6, bw * ratio, bh, br)
   }
+
+  // Reload boost: animated up-arrows
+  if (t.reloadBoost > 0) {
+    const time = performance.now() / 1000
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    for (let i = 0; i < 3; i++) {
+      const phase = (time * 1.5 + i * 0.33) % 1
+      const ax = t.x + (i - 1) * 18
+      const ay = t.y - r - 22 - phase * 20
+      ctx.globalAlpha = 1 - phase
+      ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5
+      ctx.strokeText('\u2191', ax, ay); ctx.fillText('\u2191', ax, ay)
+    }
+  }
+
+  // Invulnerable text
+  if (t.invulnerable > 0) {
+    const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150)
+    ctx.globalAlpha = pulse
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
+    ctx.fillStyle = '#A78BFA'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3
+    ctx.strokeText('INVULNERABLE', t.x, t.y - r - 26)
+    ctx.fillText('INVULNERABLE', t.x, t.y - r - 26)
+  }
+
+  ctx.globalAlpha = 1
 }
 
 function drawBase(ctx: CanvasRenderingContext2D, base: SnapshotBase) {
@@ -262,81 +320,52 @@ function drawBase(ctx: CanvasRenderingContext2D, base: SnapshotBase) {
   ctx.strokeText(base.entityName, base.x, base.y - base.radius - 12)
   ctx.fillText(base.entityName, base.x, base.y - base.radius - 12)
 
-  const ratio = clamp(base.hp / base.maxHp, 0, 1), bw = base.radius * 2
-  ctx.fillStyle = '#333'; ctx.fillRect(base.x - bw / 2, base.y + base.radius + 10, bw, 8)
+  const ratio = clamp(base.hp / base.maxHp, 0, 1), bw = base.radius * 2.2, bh = 10, br = 5
+  ctx.fillStyle = '#333'; fillRoundRect(ctx, base.x - bw / 2, base.y + base.radius + 10, bw, bh, br)
   ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed
-  ctx.fillRect(base.x - bw / 2, base.y + base.radius + 10, bw * ratio, 8)
+  fillRoundRect(ctx, base.x - bw / 2, base.y + base.radius + 10, bw * ratio, bh, br)
   ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#FFF'
   ctx.strokeText(`${Math.ceil(base.hp)} / ${base.maxHp}`, base.x, base.y + base.radius + 30)
   ctx.fillText(`${Math.ceil(base.hp)} / ${base.maxHp}`, base.x, base.y + base.radius + 30)
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, snap: GameSnapshot, me: SnapshotTank | undefined, cw: number, ch: number) {
-  if (!me) return
-
-  // XP Bar
-  const barW = Math.min(350, cw * 0.4), barH = 25
-  const bx = (cw - barW) / 2, by = ch - barH - 20
-  const xpRatio = me.xpNext > 0 ? clamp(me.xp / me.xpNext, 0, 1) : 0
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(bx, by, barW, barH)
-  ctx.fillStyle = C.xp; ctx.fillRect(bx, by, barW * xpRatio, barH)
-  ctx.strokeStyle = C.xpOl; ctx.lineWidth = 2; ctx.strokeRect(bx, by, barW, barH)
-  const cn = TC[me.classId]?.name || 'Tank'
-  ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#FFF'
-  ctx.strokeText(`Level ${me.level} ${cn}`, cw / 2, by + barH / 2)
-  ctx.fillText(`Level ${me.level} ${cn}`, cw / 2, by + barH / 2)
-  ctx.font = 'bold 15px sans-serif'
-  ctx.strokeText(`Score: ${me.score.toLocaleString()}`, cw / 2, by - 14)
-  ctx.fillText(`Score: ${me.score.toLocaleString()}`, cw / 2, by - 14)
-
-  // Leaderboard (FFA)
-  if (snap.mode === 'ffa') {
-    const allTanks = snap.tanks.filter(t => t.alive).sort((a, b) => b.score - a.score).slice(0, 10)
-    const topScore = allTanks[0]?.score || 1
-    const lw = 200, lx = cw - lw - 10, ly = 10, rowH = 22
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(lx, ly, lw, allTanks.length * rowH + 30)
-    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFF'
-    ctx.fillText('Leaderboard', lx + lw / 2, ly + 15)
-    ctx.font = '12px sans-serif'; ctx.textAlign = 'left'
-    for (let i = 0; i < allTanks.length; i++) {
-      const t = allTanks[i], ey = ly + 30 + i * rowH
-      const bW = (lw - 40) * Math.max(0.05, t.score / topScore)
-      ctx.fillStyle = t.fill; ctx.globalAlpha = t.playerId ? 0.5 : 0.25
-      ctx.fillRect(lx + 5, ey, bW, rowH - 4); ctx.globalAlpha = 1
-      ctx.fillStyle = '#FFF'
-      ctx.fillText(`${i + 1}. ${t.name}`, lx + 8, ey + rowH / 2 + 3)
-      ctx.textAlign = 'right'
-      ctx.fillText(t.score.toLocaleString(), lx + lw - 8, ey + rowH / 2 + 3)
-      ctx.textAlign = 'left'
+  // Minimap only — rest is HTML overlay
+  const sz = 200, mx = cw - sz - 15, my = ch - sz - 15, sc = sz / WORLD
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(mx, my, sz, sz)
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1; ctx.strokeRect(mx, my, sz, sz)
+  for (const t of snap.tanks) {
+    if (!t.alive) continue
+    const tx = mx + t.x * sc, ty = my + t.y * sc
+    if (me && t.id === me.id) {
+      // Draw directional arrow for player's tank
+      const r = 6
+      ctx.save(); ctx.translate(tx, ty); ctx.rotate(t.angle)
+      ctx.beginPath()
+      ctx.moveTo(r * 1.5, 0) // pointy tip
+      ctx.lineTo(-r, -r)
+      ctx.lineTo(-r * 0.4, 0)
+      ctx.lineTo(-r, r)
+      ctx.closePath()
+      ctx.fillStyle = t.fill; ctx.fill()
+      ctx.strokeStyle = t.ol; ctx.lineWidth = 1.5; ctx.stroke()
+      ctx.restore()
+    } else {
+      ctx.fillStyle = t.fill; ctx.beginPath()
+      ctx.arc(tx, ty, t.playerId ? 4 : 2.5, 0, Math.PI * 2); ctx.fill()
     }
   }
-
-  // Battle: team base status
-  if (snap.mode === 'battle') {
-    const lw = 220, lx = cw - lw - 10, ly = 10
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'
-    ctx.fillRect(lx, ly, lw, snap.bases.length * 45 + 35)
-    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFF'
-    ctx.fillText('Team Bases', lx + lw / 2, ly + 18)
-    for (let i = 0; i < snap.bases.length; i++) {
-      const base = snap.bases[i]
-      const tc = TEAM_COLORS[base.team]
-      const ey = ly + 30 + i * 45
-      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'left'
-      ctx.fillStyle = base.destroyed ? '#666' : tc.f
-      const teamLabel = base.team === me.team ? ' (You)' : ''
-      ctx.fillText(`${tc.name}: ${base.entityName}${teamLabel}`, lx + 8, ey + 12)
-      if (!base.destroyed) {
-        const ratio = clamp(base.hp / base.maxHp, 0, 1)
-        ctx.fillStyle = '#333'; ctx.fillRect(lx + 8, ey + 18, lw - 16, 8)
-        ctx.fillStyle = ratio > 0.3 ? C.hpGreen : C.hpRed
-        ctx.fillRect(lx + 8, ey + 18, (lw - 16) * ratio, 8)
-      } else {
-        ctx.font = '10px sans-serif'; ctx.fillStyle = '#F14E54'
-        ctx.fillText('DESTROYED', lx + 8, ey + 28)
-      }
+  for (const base of snap.bases) {
+    if (base.destroyed) continue
+    ctx.fillStyle = TEAM_COLORS[base.team]?.f || '#FFF'; ctx.globalAlpha = 0.6
+    ctx.beginPath()
+    const bx2 = mx + base.x * sc, by2 = my + base.y * sc
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI * 2) / 6 - Math.PI / 2
+      const px = bx2 + 6 * Math.cos(a), py = by2 + 6 * Math.sin(a)
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
     }
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1
   }
 
   // Base destroyed message
@@ -347,28 +376,6 @@ function drawHUD(ctx: CanvasRenderingContext2D, snap: GameSnapshot, me: Snapshot
     ctx.strokeText(snap.baseDestroyedMsg, cw / 2, ch * 0.25)
     ctx.fillText(snap.baseDestroyedMsg, cw / 2, ch * 0.25)
     ctx.globalAlpha = 1
-  }
-
-  // Minimap
-  const sz = 140, mx = cw - sz - 10, my = ch - sz - 60, sc = sz / WORLD
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(mx, my, sz, sz)
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.strokeRect(mx, my, sz, sz)
-  for (const t of snap.tanks) {
-    if (!t.alive) continue
-    ctx.fillStyle = t.fill; ctx.beginPath()
-    ctx.arc(mx + t.x * sc, my + t.y * sc, t.playerId ? 4 : 2.5, 0, Math.PI * 2); ctx.fill()
-  }
-  for (const base of snap.bases) {
-    if (base.destroyed) continue
-    ctx.fillStyle = TEAM_COLORS[base.team].f; ctx.globalAlpha = 0.6
-    ctx.beginPath()
-    const bx2 = mx + base.x * sc, by2 = my + base.y * sc
-    for (let i = 0; i < 6; i++) {
-      const a = (i * Math.PI * 2) / 6 - Math.PI / 2
-      const px = bx2 + 6 * Math.cos(a), py = by2 + 6 * Math.sin(a)
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-    }
-    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1
   }
 }
 
@@ -387,6 +394,7 @@ function lerpSnap(prev: GameSnapshot, curr: GameSnapshot, t: number): GameSnapsh
   const prevTankMap = new Map(prev.tanks.map(tk => [tk.id, tk]))
   const prevShapeMap = new Map(prev.shapes.map(s => [s.id, s]))
   const prevBulletMap = new Map(prev.bullets.map(b => [b.id, b]))
+  const prevWallMap = new Map((prev.walls || []).map(w => [w.id, w]))
   const prevBaseMap = new Map(prev.bases.map(b => [b.id, b]))
 
   return {
@@ -406,6 +414,11 @@ function lerpSnap(prev: GameSnapshot, curr: GameSnapshot, t: number): GameSnapsh
       if (!p) return b
       return { ...b, x: lerp(p.x, b.x), y: lerp(p.y, b.y) }
     }),
+    walls: (curr.walls || []).map(w => {
+      const p = prevWallMap.get(w.id)
+      if (!p) return w
+      return { ...w, x: lerp(p.x, w.x), y: lerp(p.y, w.y) }
+    }),
     bases: curr.bases.map(b => {
       const p = prevBaseMap.get(b.id)
       if (!p) return b
@@ -419,13 +432,19 @@ function lerpSnap(prev: GameSnapshot, curr: GameSnapshot, t: number): GameSnapsh
   }
 }
 
-function renderSnapshot(ctx: CanvasRenderingContext2D, snap: GameSnapshot, myTankId: number, cw: number, ch: number) {
+function renderSnapshot(ctx: CanvasRenderingContext2D, snap: GameSnapshot, myTankId: number, cw: number, ch: number, scopeOffset?: { dx: number; dy: number }) {
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, cw, ch)
 
   const me = snap.tanks.find(t => t.id === myTankId)
-  const camX = me?.x ?? WORLD / 2
-  const camY = me?.y ?? WORLD / 2
+  let camX = me?.x ?? WORLD / 2
+  let camY = me?.y ?? WORLD / 2
   const camZoom = me ? (1 - (me.level - 1) * 0.004) / (TC[me.classId]?.fov || 1) : 1
+
+  // Scope ability: offset camera toward cursor
+  if (scopeOffset && me) {
+    camX += scopeOffset.dx
+    camY += scopeOffset.dy
+  }
 
   ctx.save()
   ctx.translate(cw / 2, ch / 2)
@@ -438,8 +457,9 @@ function renderSnapshot(ctx: CanvasRenderingContext2D, snap: GameSnapshot, myTan
 
   for (const b of snap.bullets) drawBullet(ctx, b)
   for (const s of snap.shapes) drawShape(ctx, s)
+  for (const w of (snap.walls || [])) drawWall(ctx, w)
   for (const base of snap.bases) drawBase(ctx, base)
-  for (const t of snap.tanks) drawTank(ctx, t)
+  for (const t of snap.tanks) drawTank(ctx, t, myTankId, me?.team ?? -1)
   for (const p of snap.particles) {
     ctx.globalAlpha = p.alpha; ctx.fillStyle = p.fill
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill()
@@ -559,6 +579,7 @@ export function PlayPage() {
   const keysRef = useRef(new Set<string>())
   const mouseRef = useRef({ x: 0, y: 0, down: false })
   const auraFloatsRef = useRef<{ x: number; y: number; text: string; color: string; life: number }[]>([])
+  const abilityCooldownRef = useRef(0)
 
   const user = useAuthStore(s => s.user)
   const players = useAuraStore(s => s.players)
@@ -574,10 +595,20 @@ export function PlayPage() {
   // UI state synced from snapshots
   const [ui, setUi] = useState({
     stats: [0, 0, 0, 0, 0, 0, 0, 0], statPts: 0, level: 1, score: 0,
-    className: 'Tank', dead: false, showUpgrade: false,
+    className: 'Tank', classId: 'basic', dead: false, showUpgrade: false,
     availableUpgrades: [] as TankClass[], autoFire: false,
     battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode,
+    xp: 0, xpNext: 5, auraScore: 0, abilityCooldown: 0,
   })
+  const [placingWall, _setPlacingWall] = useState(false)
+  const placingWallRef = useRef(false)
+  const setPlacingWall = (v: boolean | ((prev: boolean) => boolean)) => {
+    _setPlacingWall(prev => {
+      const next = typeof v === 'function' ? v(prev) : v
+      placingWallRef.current = next
+      return next
+    })
+  }
 
   // ==================== API CALLS ====================
 
@@ -720,6 +751,7 @@ export function PlayPage() {
           snapshotRef.current = msg.data
           snapTimeRef.current = performance.now()
           myTankIdRef.current = msg.you
+          abilityCooldownRef.current = msg.abilityCooldown || 0
           // If we receive a snapshot while still in waiting-room, the game is already running (late join)
           setPage(prev => prev === 'waiting-room' ? 'playing' : prev)
           break
@@ -727,7 +759,7 @@ export function PlayPage() {
           setCurrentLobby(msg.lobby)
           break
         case 'game_start':
-          setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode })
+          setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', classId: 'basic', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode, xp: 0, xpNext: 5, auraScore: 0 })
           setPage('playing')
           break
         case 'aura_change': {
@@ -823,11 +855,29 @@ export function PlayPage() {
           const snap = prev ? lerpSnap(prev, currSnap, t) : currSnap
 
           const rect = container.getBoundingClientRect()
-          renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height)
+
+          // Scope ability: shift key offsets camera toward cursor
+          let scopeOffset: { dx: number; dy: number } | undefined
+          const meForScope = snap.tanks.find(tk => tk.id === myTankIdRef.current)
+          if (meForScope && keysRef.current.has('shift') && TC[meForScope.classId]?.ability === 'scope') {
+            const camZoomScope = (1 - (meForScope.level - 1) * 0.004) / (TC[meForScope.classId]?.fov || 1)
+            const mx = mouseRef.current.x - rect.width / 2
+            const my = mouseRef.current.y - rect.height / 2
+            // Offset camera toward cursor in world space, max ~600 units
+            const worldMx = mx / camZoomScope
+            const worldMy = my / camZoomScope
+            const dist = Math.hypot(worldMx, worldMy)
+            const maxOffset = 600
+            const scale = dist > 0 ? Math.min(maxOffset, dist) / dist : 0
+            scopeOffset = { dx: worldMx * scale, dy: worldMy * scale }
+          }
+
+          renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height, scopeOffset)
 
           // Draw floating aura texts (in world space)
           const me = snap.tanks.find(tk => tk.id === myTankIdRef.current)
-          const camX = me?.x ?? WORLD / 2, camY = me?.y ?? WORLD / 2
+          let camX = me?.x ?? WORLD / 2, camY = me?.y ?? WORLD / 2
+          if (scopeOffset) { camX += scopeOffset.dx; camY += scopeOffset.dy }
           const camZoom = me ? (1 - (me.level - 1) * 0.004) / (TC[me.classId]?.fov || 1) : 1
           const floats = auraFloatsRef.current
           for (let i = floats.length - 1; i >= 0; i--) {
@@ -845,6 +895,54 @@ export function PlayPage() {
             ctx.globalAlpha = 1
           }
 
+          // Wall placement preview
+          if (placingWallRef.current && me && TC[me.classId]?.ability === 'wall') {
+            const mx = mouseRef.current.x, my2 = mouseRef.current.y
+            const worldMX = camX + (mx - rect.width / 2) / camZoom
+            const worldMY = camY + (my2 - rect.height / 2) / camZoom
+            const dist = Math.sqrt((worldMX - me.x) ** 2 + (worldMY - me.y) ** 2)
+            const inRange = dist <= 250
+
+            // Draw range circle (screen space)
+            const rangeScreenR = 250 * camZoom
+            const meCenterX = rect.width / 2 + (me.x - camX) * camZoom
+            const meCenterY = rect.height / 2 + (me.y - camY) * camZoom
+            ctx.save()
+            ctx.beginPath(); ctx.arc(meCenterX, meCenterY, rangeScreenR, 0, Math.PI * 2)
+            ctx.fillStyle = inRange ? 'rgba(139,115,85,0.08)' : 'rgba(255,80,80,0.05)'
+            ctx.fill()
+            ctx.strokeStyle = inRange ? 'rgba(139,115,85,0.6)' : 'rgba(255,80,80,0.6)'
+            ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([])
+            ctx.restore()
+
+            // Draw wall preview (world space)
+            ctx.save()
+            ctx.translate(rect.width / 2, rect.height / 2)
+            ctx.scale(camZoom, camZoom)
+            ctx.translate(-camX, -camY)
+            if (inRange) {
+              ctx.save()
+              ctx.translate(worldMX, worldMY); ctx.rotate(me.angle + Math.PI / 2)
+              ctx.globalAlpha = 0.6
+              ctx.fillStyle = '#8B7355'
+              ctx.beginPath(); ctx.roundRect(-50, -6, 100, 12, 3); ctx.fill()
+              ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2; ctx.stroke()
+              ctx.globalAlpha = 1
+              ctx.restore()
+            } else {
+              // Show red ghost when out of range
+              ctx.save()
+              ctx.translate(worldMX, worldMY); ctx.rotate(me.angle + Math.PI / 2)
+              ctx.globalAlpha = 0.3
+              ctx.fillStyle = '#FF4444'
+              ctx.beginPath(); ctx.roundRect(-50, -6, 100, 12, 3); ctx.fill()
+              ctx.strokeStyle = '#FF0000'; ctx.lineWidth = 2; ctx.stroke()
+              ctx.globalAlpha = 1
+              ctx.restore()
+            }
+            ctx.restore()
+          }
+
           // Sync UI periodically
           syncTimer += dt
           if (syncTimer > 0.15) {
@@ -856,13 +954,14 @@ export function PlayPage() {
               const ups = qualifiedTier > currentTier ? getUpgrades(me.classId) : []
               setUi({
                 stats: [...me.stats], statPts: me.statPts, level: me.level, score: me.score,
-                className: TC[me.classId]?.name || 'Tank',
+                className: TC[me.classId]?.name || 'Tank', classId: me.classId,
                 dead: !me.alive,
                 showUpgrade: ups.length > 0 && me.alive,
                 availableUpgrades: ups,
                 autoFire: false,
                 battleOver: snap.battleOver, winningTeam: snap.winningTeam,
                 myTeam: me.team, mode: snap.mode,
+                xp: me.xp, xpNext: me.xpNext, auraScore: me.auraScore, abilityCooldown: abilityCooldownRef.current,
               })
             }
           }
@@ -888,6 +987,16 @@ export function PlayPage() {
       if (!ws || ws.readyState !== WebSocket.OPEN) return
       if (key === 'e') ws.send(JSON.stringify({ type: 'toggle_autofire' }))
       if (key >= '1' && key <= '8') ws.send(JSON.stringify({ type: 'upgrade_stat', index: parseInt(key) - 1 }))
+      if (key === ']') ws.send(JSON.stringify({ type: 'set_level', delta: 1 }))
+      if (key === '[') ws.send(JSON.stringify({ type: 'set_level', delta: -1 }))
+      if (key === 'q') {
+        const snap = snapshotRef.current
+        const me = snap?.tanks.find(t => t.id === myTankIdRef.current)
+        const tc = me ? TC[me.classId] : null
+        if (tc?.ability === 'wall') setPlacingWall(prev => !prev)
+        else if (tc?.ability === 'stealth') ws.send(JSON.stringify({ type: 'activate_stealth' }))
+      }
+      if (key === 'escape') setPlacingWall(false)
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) e.preventDefault()
     }
     const onKeyUp = (e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()) }
@@ -895,7 +1004,26 @@ export function PlayPage() {
       const rect = canvas.getBoundingClientRect()
       mouseRef.current.x = e.clientX - rect.left; mouseRef.current.y = e.clientY - rect.top
     }
-    const onMouseDown = (e: MouseEvent) => { if (e.button === 0) mouseRef.current.down = true }
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        // If placing wall, convert screen coords to world coords and send
+        const snap = snapshotRef.current
+        const me = snap?.tanks.find(t => t.id === myTankIdRef.current)
+        if (me && placingWallRef.current) {
+          const container = containerRef.current
+          if (container) {
+            const rect = container.getBoundingClientRect()
+            const camZoom = (1 - (me.level - 1) * 0.004) / (TC[me.classId]?.fov || 1)
+            const worldX = me.x + (e.clientX - rect.left - rect.width / 2) / camZoom
+            const worldY = me.y + (e.clientY - rect.top - rect.height / 2) / camZoom
+            wsRef.current?.send(JSON.stringify({ type: 'place_wall', x: worldX, y: worldY }))
+            setPlacingWall(false)
+          }
+        } else {
+          mouseRef.current.down = true
+        }
+      }
+    }
     const onMouseUp = (e: MouseEvent) => { if (e.button === 0) mouseRef.current.down = false }
     const onCtx = (e: Event) => e.preventDefault()
 
@@ -1198,41 +1326,110 @@ export function PlayPage() {
   }
 
   // ==================== PLAYING ====================
+
   return (
     <div ref={containerRef} className="relative w-full overflow-hidden" style={{ height: 'calc(100vh - 56px)' }}>
-      <canvas ref={canvasRef} className="block cursor-crosshair" />
+      <canvas ref={canvasRef} className="block" style={{ cursor: placingWall ? 'pointer' : 'crosshair' }} />
 
-      {/* Back to menu */}
+      {/* Leave button */}
       <button onClick={handleLeaveLobby}
-        className="absolute top-2 left-2 text-white/40 hover:text-white text-xs bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded-lg transition-colors"
+        className="absolute top-2 left-2 text-white/40 hover:text-white text-xs bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded transition-colors z-10"
         style={{ pointerEvents: 'auto' }}>Leave</button>
 
-      {/* Stat panel */}
-      <div className="absolute left-2 bottom-20 flex flex-col gap-1" style={{ userSelect: 'none', pointerEvents: 'auto' }}>
-        {ui.statPts > 0 && <div className="text-yellow-300 text-xs font-bold bg-black/50 px-2 py-1 rounded text-center mb-1">x{ui.statPts} Stat Points</div>}
-        {STAT_NAMES.map((name, i) => (
-          <div key={i} className="flex items-center gap-1">
-            <button onClick={() => sendWS({ type: 'upgrade_stat', index: i })}
-              disabled={ui.statPts <= 0 || ui.stats[i] >= STAT_MAX}
-              className="w-5 h-5 rounded text-white font-bold text-xs bg-black/40 hover:bg-black/60 disabled:opacity-20 disabled:cursor-default flex items-center justify-center shrink-0">+</button>
-            <div className="flex gap-0.5">
-              {Array.from({ length: STAT_MAX }, (_, j) => (
-                <div key={j} className="w-[14px] h-3 rounded-sm" style={{ backgroundColor: j < ui.stats[i] ? STAT_COLORS[i] : 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.15)' }} />
-              ))}
-            </div>
-            <span className="text-white text-[10px] font-medium ml-1" style={{ textShadow: '0 1px 2px #000' }}>{name}</span>
-          </div>
-        ))}
+      {/* Stat panel — diep.io style: bottom-left */}
+      <div className="absolute left-3 bottom-10" style={{ userSelect: 'none', pointerEvents: 'auto' }}>
+        <div className="flex flex-col gap-[3px]">
+          {STAT_NAMES.map((name, i) => {
+            const canUpgrade = ui.statPts > 0 && ui.stats[i] < STAT_MAX
+            return (
+              <div key={i} className="flex items-center gap-1.5 h-[26px]">
+                {/* Pill body */}
+                <div className="relative flex gap-[1px] h-full items-center bg-[#111] rounded-full px-[4px]">
+                  {Array.from({ length: STAT_MAX }, (_, j) => (
+                    <div key={j} style={{
+                      width: 28, height: 18,
+                      backgroundColor: j < ui.stats[i] ? STAT_COLORS[i] : '#333',
+                      borderRadius: j === 0 ? '9px 2px 2px 9px' : j === STAT_MAX - 1 ? '2px 9px 9px 2px' : 2,
+                    }} />
+                  ))}
+                  {/* Name overlay */}
+                  <span className="absolute inset-0 flex items-center justify-center text-white text-[10px] font-bold pointer-events-none" style={{ textShadow: '0 1px 2px #000, 0 0 4px #000' }}>{name}</span>
+                </div>
+                {/* Upgrade button — matching upvote style */}
+                <div className="relative shrink-0">
+                  {i === 0 && ui.statPts > 0 && (
+                    <span className="absolute -top-9 -right-4 rotate-12 text-2xl font-black" style={{ color: '#FFD700', textShadow: '0 1px 3px rgba(0,0,0,0.7)', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                      {ui.statPts}x
+                    </span>
+                  )}
+                  <button onClick={() => sendWS({ type: 'upgrade_stat', index: i })}
+                    disabled={!canUpgrade}
+                    className="w-[26px] h-[26px] rounded-full flex items-center justify-center transition-all duration-150 disabled:opacity-25 disabled:cursor-default hover:scale-110 active:scale-90"
+                    style={{ backgroundColor: canUpgrade ? '#4a4a4a' : '#333' }}>
+                    <ChevronUp className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Class upgrade */}
+      {/* Level pill + ability button — bottom, aligned with last stat row */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2" style={{ userSelect: 'none' }}>
+        {/* Ability button — for classes with abilities */}
+        {TC[ui.classId]?.ability && (() => {
+          const ability = TC[ui.classId]!.ability!
+          if (ability === 'scope') {
+            return (
+              <div className="w-[44px] h-[34px] rounded-lg border-2 border-white/20 bg-black/60 flex items-center justify-center shrink-0">
+                <span className="text-[9px] font-black text-white/70" style={{ textShadow: '0 1px 2px #000' }}>SHIFT</span>
+              </div>
+            )
+          }
+          const onCooldown = ui.abilityCooldown > 0
+          const maxCd = ability === 'wall' ? 3 : ui.classId === 'phantom' ? 9 : 10
+          const cdPct = onCooldown ? (ui.abilityCooldown / maxCd) * 100 : 0
+          const isActive = ability === 'wall' ? placingWall : (ui.abilityCooldown > 5)
+          const handleClick = () => {
+            if (onCooldown) return
+            if (ability === 'wall') setPlacingWall(prev => !prev)
+            else if (ability === 'stealth') wsRef.current?.send(JSON.stringify({ type: 'activate_stealth' }))
+          }
+          return (
+            <button onClick={handleClick}
+              disabled={onCooldown}
+              className={`relative w-[34px] h-[34px] rounded-lg border-2 flex items-center justify-center transition-all shrink-0 overflow-hidden ${isActive ? 'border-amber-400 bg-amber-500/30' : onCooldown ? 'border-white/10 bg-black/70 cursor-not-allowed' : 'border-white/20 bg-black/60 hover:border-white/40'}`}
+              style={{ pointerEvents: 'auto' }}>
+              {onCooldown && (
+                <div className="absolute bottom-0 left-0 right-0 bg-white/20 transition-all" style={{ height: `${cdPct}%` }} />
+              )}
+              <span className={`relative text-xs font-black ${onCooldown ? 'text-white/40' : 'text-white'}`} style={{ textShadow: '0 1px 2px #000' }}>
+                {onCooldown ? Math.ceil(ui.abilityCooldown) : 'Q'}
+              </span>
+            </button>
+          )
+        })()}
+        {/* Level pill */}
+        <div className="relative h-[26px] w-[320px] rounded-full overflow-hidden bg-[#111] border-2 border-black" style={{ pointerEvents: 'none' }}>
+          <div className="h-full rounded-full transition-all duration-200"
+            style={{ width: `${ui.xpNext > 0 ? (ui.xp / ui.xpNext) * 100 : 100}%`, backgroundColor: '#722F37' }} />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[11px] font-bold text-white" style={{ textShadow: '0 1px 2px #000' }}>
+              Lvl {ui.level} {ui.className}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Class upgrade — top left boxes */}
       {ui.showUpgrade && (
-        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 flex gap-3" style={{ pointerEvents: 'auto', userSelect: 'none' }}>
+        <div className="absolute top-10 left-3 flex flex-col gap-2" style={{ pointerEvents: 'auto', userSelect: 'none' }}>
           {ui.availableUpgrades.map(tc => (
             <button key={tc.id} onClick={() => sendWS({ type: 'select_class', classId: tc.id })}
-              className="w-[88px] h-[88px] bg-black/60 hover:bg-black/80 border border-white/30 hover:border-white/60 rounded-lg flex flex-col items-center justify-center text-white transition-all">
-              <TankPreview classId={tc.id} size={44} />
-              <span className="text-[10px] font-bold mt-1">{tc.name}</span>
+              className="flex items-center gap-2.5 bg-black/60 hover:bg-black/80 border border-white/20 hover:border-white/50 rounded-lg px-3 py-2 text-white transition-all">
+              <TankPreview classId={tc.id} size={36} />
+              <span className="text-xs font-bold">{tc.name}</span>
             </button>
           ))}
         </div>
@@ -1241,10 +1438,11 @@ export function PlayPage() {
       {/* Death screen */}
       {ui.dead && !ui.battleOver && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center" style={{ pointerEvents: 'auto' }}>
-          <div className="bg-gray-900/90 text-white rounded-xl p-8 text-center space-y-4 min-w-[300px]">
-            <h2 className="text-2xl font-bold">You were destroyed!</h2>
+          <div className="text-center space-y-4">
+            <h2 className="text-3xl font-black text-white" style={{ textShadow: '0 2px 4px #000' }}>You were destroyed!</h2>
+            <p className="text-white/60 text-sm">Score: {formatCompact(ui.score)}</p>
             <button onClick={() => sendWS({ type: 'respawn' })}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-lg transition-colors">Respawn</button>
+              className="px-8 py-2.5 bg-[#4A7AEC] hover:bg-[#5A8AFF] rounded text-white font-bold text-lg transition-colors">Respawn</button>
           </div>
         </div>
       )}
@@ -1252,23 +1450,16 @@ export function PlayPage() {
       {/* Battle over */}
       {ui.battleOver && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center" style={{ pointerEvents: 'auto' }}>
-          <div className="bg-gray-900/90 text-white rounded-xl p-8 text-center space-y-4 min-w-[340px]">
+          <div className="text-center space-y-4">
             {ui.winningTeam === ui.myTeam ? (
-              <><h2 className="text-3xl font-black text-green-400">VICTORY!</h2><p className="text-white/60">Your team's base survived!</p></>
+              <><h2 className="text-4xl font-black text-green-400" style={{ textShadow: '0 2px 4px #000' }}>VICTORY!</h2><p className="text-white/60">Your team's base survived!</p></>
             ) : (
-              <><h2 className="text-3xl font-black text-red-400">DEFEAT</h2><p className="text-white/60">{ui.winningTeam >= 0 ? `${TEAM_COLORS[ui.winningTeam].name} team wins!` : 'All bases destroyed!'}</p></>
+              <><h2 className="text-4xl font-black text-red-400" style={{ textShadow: '0 2px 4px #000' }}>DEFEAT</h2><p className="text-white/60">{ui.winningTeam >= 0 ? `${TEAM_COLORS[ui.winningTeam].name} team wins!` : 'All bases destroyed!'}</p></>
             )}
-            <div className="flex gap-3 justify-center">
-              <button onClick={handleLeaveLobby} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold transition-colors">Back to Menu</button>
-            </div>
+            <button onClick={handleLeaveLobby} className="px-8 py-2.5 bg-[#4A7AEC] hover:bg-[#5A8AFF] rounded text-white font-bold text-lg transition-colors">Back to Menu</button>
           </div>
         </div>
       )}
-
-      {/* Controls hint */}
-      <div className="absolute bottom-1 right-2 text-white/30 text-[10px]" style={{ pointerEvents: 'none' }}>
-        WASD move · Mouse aim · Click shoot · E auto-fire · 1-8 stats
-      </div>
     </div>
   )
 }
