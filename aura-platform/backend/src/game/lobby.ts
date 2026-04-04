@@ -236,7 +236,7 @@ export function startGame(lobbyId: string): { success: boolean; error?: string }
 
   game.start()
 
-  // Send snapshots at 20fps
+  // Send snapshots at 45fps
   lobby.snapshotInterval = setInterval(() => {
     if (!lobby.game) return
     const snapshot = lobby.game.buildSnapshot()
@@ -244,7 +244,7 @@ export function startGame(lobbyId: string): { success: boolean; error?: string }
       const tankId = lobby.game.playerInputs.get(playerId)?.tankId ?? -1
       sendTo(conn.ws, { type: 'snapshot', data: snapshot, you: tankId })
     }
-  }, 1000 / 20)
+  }, 1000 / 45)
 
   // Inactivity check
   lobby.lastRealUserActivity = Date.now()

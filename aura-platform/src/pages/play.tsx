@@ -365,7 +365,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, snap: GameSnapshot, me: Snapshot
   }
 }
 
-const SNAP_INTERVAL = 1000 / 20 // server sends at 20fps
+const SNAP_INTERVAL = 1000 / 45 // server sends at 45fps
 
 function lerpSnap(prev: GameSnapshot, curr: GameSnapshot, t: number): GameSnapshot {
   const lerp = (a: number, b: number) => a + (b - a) * t
@@ -763,7 +763,7 @@ export function PlayPage() {
           viewH: containerRef.current?.clientHeight || 800,
         },
       }))
-    }, 1000 / 20)
+    }, 1000 / 45)
     return () => clearInterval(interval)
   }, [page])
 
@@ -974,7 +974,7 @@ export function PlayPage() {
                                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-colors hover:brightness-110"
                                 style={{ backgroundColor: TEAM_COLORS[i]?.f + '40' }}>
                                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TEAM_COLORS[i]?.f }} />
-                                {TEAM_COLORS[i]?.name}
+                                {lobby.teams[i]?.entityName || TEAM_COLORS[i]?.name}
                               </button>
                             ))}
                             <button onClick={() => setJoinPickerLobbyId(null)} className="text-white/40 hover:text-white/60 text-xs text-center mt-0.5">Cancel</button>
