@@ -52,7 +52,7 @@ interface PersonalBot {
 interface BarrelDef {
   angle: number; width: number; length: number
   widthEnd?: number; offset?: number
-  reloadMul?: number; bulletSizeMul?: number; bulletSpeedMul?: number; bulletDamageMul?: number
+  reloadMul?: number; bulletSizeMul?: number; bulletSpeedMul?: number; bulletDamageMul?: number; bulletPenMul?: number
 }
 interface TankClass { id: string; name: string; tier: number; barrels: BarrelDef[]; upgradesFrom?: string[]; fov?: number; recoil?: number; ability?: 'wall' | 'stealth' | 'scope' }
 
@@ -759,7 +759,7 @@ export function PlayPage() {
           setCurrentLobby(msg.lobby)
           break
         case 'game_start':
-          setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', classId: 'basic', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode, xp: 0, xpNext: 5, auraScore: 0 })
+          setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', classId: 'basic', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode, xp: 0, xpNext: 5, auraScore: 0, abilityCooldown: 0 })
           setPage('playing')
           break
         case 'aura_change': {
