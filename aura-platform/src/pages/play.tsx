@@ -213,7 +213,7 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank) {
 
 function drawBase(ctx: CanvasRenderingContext2D, base: SnapshotBase) {
   if (base.destroyed) return
-  const tc = TEAM_COLORS[base.team]
+  const tc = TEAM_COLORS[base.team] || TEAM_COLORS[0]
   const sides = 6
 
   ctx.save(); ctx.translate(base.x, base.y); ctx.rotate(base.rot)
@@ -667,6 +667,7 @@ export function PlayPage() {
           setCurrentLobby(msg.lobby)
           break
         case 'game_start':
+          setUi({ stats: [0,0,0,0,0,0,0,0], statPts: 0, level: 1, score: 0, className: 'Tank', dead: false, showUpgrade: false, availableUpgrades: [], autoFire: false, battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode })
           setPage('playing')
           break
         case 'game_over':
@@ -675,6 +676,9 @@ export function PlayPage() {
       }
     }
 
+    ws.onerror = (e) => {
+      console.error('WebSocket error:', e)
+    }
     ws.onclose = () => {
       wsRef.current = null
     }
@@ -732,34 +736,38 @@ export function PlayPage() {
     let syncTimer = 0
     let lastTime = performance.now()
     const loop = (time: number) => {
-      const dt = (time - lastTime) / 1000
-      lastTime = time
-      const snap = snapshotRef.current
-      if (snap) {
-        const rect = container.getBoundingClientRect()
-        renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height)
+      try {
+        const dt = (time - lastTime) / 1000
+        lastTime = time
+        const snap = snapshotRef.current
+        if (snap) {
+          const rect = container.getBoundingClientRect()
+          renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height)
 
-        // Sync UI periodically
-        syncTimer += dt
-        if (syncTimer > 0.15) {
-          syncTimer = 0
-          const me = snap.tanks.find(t => t.id === myTankIdRef.current)
-          if (me) {
-            const currentTier = TC[me.classId]?.tier ?? 0
-            const qualifiedTier = me.level >= 45 ? 3 : me.level >= 30 ? 2 : me.level >= 15 ? 1 : 0
-            const ups = qualifiedTier > currentTier ? getUpgrades(me.classId) : []
-            setUi({
-              stats: [...me.stats], statPts: me.statPts, level: me.level, score: me.score,
-              className: TC[me.classId]?.name || 'Tank',
-              dead: !me.alive,
-              showUpgrade: ups.length > 0 && me.alive,
-              availableUpgrades: ups,
-              autoFire: false,
-              battleOver: snap.battleOver, winningTeam: snap.winningTeam,
-              myTeam: me.team, mode: snap.mode,
-            })
+          // Sync UI periodically
+          syncTimer += dt
+          if (syncTimer > 0.15) {
+            syncTimer = 0
+            const me = snap.tanks.find(t => t.id === myTankIdRef.current)
+            if (me) {
+              const currentTier = TC[me.classId]?.tier ?? 0
+              const qualifiedTier = me.level >= 45 ? 3 : me.level >= 30 ? 2 : me.level >= 15 ? 1 : 0
+              const ups = qualifiedTier > currentTier ? getUpgrades(me.classId) : []
+              setUi({
+                stats: [...me.stats], statPts: me.statPts, level: me.level, score: me.score,
+                className: TC[me.classId]?.name || 'Tank',
+                dead: !me.alive,
+                showUpgrade: ups.length > 0 && me.alive,
+                availableUpgrades: ups,
+                autoFire: false,
+                battleOver: snap.battleOver, winningTeam: snap.winningTeam,
+                myTeam: me.team, mode: snap.mode,
+              })
+            }
           }
         }
+      } catch (e) {
+        console.error('Render error:', e)
       }
       animRef.current = requestAnimationFrame(loop)
     }

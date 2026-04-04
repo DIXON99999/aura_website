@@ -729,7 +729,9 @@ export class GameInstance {
     this.fillBots()
     this.lastTick = Date.now()
     // 30 ticks per second
-    this.tickInterval = setInterval(() => this.tick(), 1000 / 30)
+    this.tickInterval = setInterval(() => {
+      try { this.tick() } catch (e) { console.error('Game tick error:', e) }
+    }, 1000 / 30)
   }
 
   stop() {
