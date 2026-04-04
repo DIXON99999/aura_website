@@ -26,7 +26,8 @@
       "Bash(npx shadcn@latest add progress tooltip --yes)",
       "Bash(ls D:/2026_projects/aura_websitev3/aura-platform/.do* D:/2026_projects/aura_websitev3/.do*)",
       "Bash(ls D:/2026_projects/aura_websitev3/aura-platform/Dockerfile*)",
-      "Bash(ls D:/2026_projects/aura_websitev3/aura-platform/backend/Dockerfile*)"
+      "Bash(ls D:/2026_projects/aura_websitev3/aura-platform/backend/Dockerfile*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ]
   }
 }

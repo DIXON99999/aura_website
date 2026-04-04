@@ -74,7 +74,7 @@ async function applyAuraChange(entityId: string, entityType: string, delta: numb
 
 export function createLobby(hostId: string, hostName: string, mode: GameMode, teamCount: number, teams: LobbyInfo['teams'], name: string): LobbyInfo {
   const id = generateId()
-  const maxPlayers = mode === 'battle' ? teamCount * 4 : 8
+  const maxPlayers = (mode === 'battle' || mode === 'dust2') ? teamCount * 4 : 8
 
   const info: LobbyInfo = {
     id, name, mode,

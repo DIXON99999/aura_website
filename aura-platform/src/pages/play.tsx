@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAuthStore, useAuraStore } from '@/stores'
-import { Swords, Shield, ChevronRight, ChevronUp, Search, X, Users, Trophy, Plus, ArrowLeft, Play, Bot, Loader2, Crown } from 'lucide-react'
+import { Swords, Shield, ChevronRight, ChevronUp, Search, X, Users, Trophy, Plus, ArrowLeft, Play, Bot, Loader2, Crown, Map as MapIcon } from 'lucide-react'
 
 // ============================================================================
 // TYPES (mirrors server types for rendering)
 // ============================================================================
 
-type GameMode = 'ffa' | 'battle'
+type GameMode = 'ffa' | 'battle' | 'dust2'
 type PageState = 'menu' | 'lobbies' | 'create-lobby' | 'waiting-room' | 'playing'
 
 interface SnapshotTank {
@@ -600,6 +600,8 @@ export function PlayPage() {
     battleOver: false, winningTeam: -1, myTeam: -1, mode: 'ffa' as GameMode,
     xp: 0, xpNext: 5, auraScore: 0, abilityCooldown: 0,
   })
+  const [autoRespawn, setAutoRespawn] = useState(false)
+  const autoRespawnRef = useRef(false)
   const [placingWall, _setPlacingWall] = useState(false)
   const placingWallRef = useRef(false)
   const setPlacingWall = (v: boolean | ((prev: boolean) => boolean)) => {
@@ -649,11 +651,12 @@ export function PlayPage() {
     if (!token) { setError('Please sign in'); return }
     setLoading(true); setError('')
     try {
-      const teams = createMode === 'battle' ? createTeams.slice(0, createTeamCount).map(t => t || { entityId: '', entityName: 'Team', entityType: 'player', auraScore: 0 }) : []
+      const isBattleLike = createMode === 'battle' || createMode === 'dust2'
+      const teams = isBattleLike ? createTeams.slice(0, createTeamCount).map(t => t || { entityId: '', entityName: 'Team', entityType: 'player', auraScore: 0 }) : []
       const res = await fetch(`${API_BASE}/lobbies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: createName || `${playerData?.name || 'Player'}'s Game`, mode: createMode, teamCount: createMode === 'battle' ? createTeamCount : 0, teams }),
+        body: JSON.stringify({ name: createName || `${playerData?.name || 'Player'}'s Game`, mode: createMode, teamCount: isBattleLike ? createTeamCount : 0, teams }),
       })
       const lobby = await res.json()
       if (lobby.error) throw new Error(lobby.error)
@@ -968,6 +971,11 @@ export function PlayPage() {
                 myTeam: me.team, mode: snap.mode,
                 xp: me.xp, xpNext: me.xpNext, auraScore: me.auraScore, abilityCooldown: abilityCooldownRef.current,
               })
+              // Auto-respawn
+              if (!me.alive && autoRespawnRef.current) {
+                const ws = wsRef.current
+                if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'respawn' }))
+              }
             }
           }
         }
@@ -1081,6 +1089,19 @@ export function PlayPage() {
               </div>
               <div className="flex items-center gap-1 text-red-400 font-semibold text-sm">Browse Lobbies <ChevronRight className="w-4 h-4" /></div>
             </button>
+            <button onClick={() => { setCreateMode('dust2'); setCreateTeamCount(2); setPage('lobbies'); fetchLobbies() }}
+              className="group relative bg-gradient-to-br from-yellow-600/20 to-amber-700/20 border border-yellow-500/30 rounded-2xl p-6 text-left hover:border-yellow-400/60 hover:from-yellow-600/30 hover:to-amber-700/30 transition-all duration-300 sm:col-span-2">
+              <div className="absolute top-4 right-4 w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <MapIcon className="w-6 h-6 text-yellow-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-1">Dust 2</h2>
+              <p className="text-white/50 text-sm mb-4">Classic CS map — 2 teams, walled arena</p>
+              <div className="space-y-2 mb-6">
+                <div className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-white/40" /><span className="text-white/60">2 teams — T vs CT</span></div>
+                <div className="flex items-center gap-2 text-sm"><MapIcon className="w-4 h-4 text-white/40" /><span className="text-white/60">Static walls, corridors & bombsites</span></div>
+              </div>
+              <div className="flex items-center gap-1 text-yellow-400 font-semibold text-sm">Browse Lobbies <ChevronRight className="w-4 h-4" /></div>
+            </button>
           </div>
         </div>
       </div>
@@ -1096,7 +1117,7 @@ export function PlayPage() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <button onClick={() => setPage('menu')} className="text-white/50 hover:text-white p-2"><ArrowLeft className="w-5 h-5" /></button>
-              <h1 className="text-2xl font-bold text-white">{createMode === 'ffa' ? 'FFA' : 'Battle'} Lobbies</h1>
+              <h1 className="text-2xl font-bold text-white">{createMode === 'ffa' ? 'FFA' : createMode === 'dust2' ? 'Dust 2' : 'Battle'} Lobbies</h1>
             </div>
             <button onClick={() => setPage('create-lobby')}
               className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white font-medium text-sm transition-colors">
@@ -1180,12 +1201,12 @@ export function PlayPage() {
 
   // ==================== CREATE LOBBY ====================
   if (page === 'create-lobby') {
-    const canStart = createMode === 'ffa' || createTeams.slice(0, createTeamCount).every(t => t)
+    const canStart = createMode === 'ffa' || (createMode === 'battle' || createMode === 'dust2') && createTeams.slice(0, createTeamCount).every(t => t)
     return (
       <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 p-6">
         <div className="max-w-lg mx-auto">
           <button onClick={() => setPage('lobbies')} className="text-white/50 hover:text-white text-sm mb-6 flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Back</button>
-          <h1 className="text-3xl font-bold text-white mb-6">Create {createMode === 'ffa' ? 'FFA' : 'Battle'} Lobby</h1>
+          <h1 className="text-3xl font-bold text-white mb-6">Create {createMode === 'ffa' ? 'FFA' : createMode === 'dust2' ? 'Dust 2' : 'Battle'} Lobby</h1>
 
           {error && <div className="bg-red-500/20 border border-red-500/40 rounded-lg px-4 py-2 text-red-300 text-sm mb-4">{error}</div>}
 
@@ -1195,8 +1216,9 @@ export function PlayPage() {
               className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2.5 text-white text-sm outline-none placeholder:text-white/30 focus:border-white/40" />
           </div>
 
-          {createMode === 'battle' && (
+          {(createMode === 'battle' || createMode === 'dust2') && (
             <>
+              {createMode !== 'dust2' && (
               <div className="mb-6">
                 <label className="text-white/60 text-sm font-medium mb-2 block">Number of Teams</label>
                 <div className="flex gap-2">
@@ -1208,6 +1230,7 @@ export function PlayPage() {
                   ))}
                 </div>
               </div>
+              )}
 
               <div className="space-y-4 mb-6">
                 {Array.from({ length: createTeamCount }, (_, i) => {
@@ -1448,6 +1471,12 @@ export function PlayPage() {
             <p className="text-white/60 text-sm">Score: {formatCompact(ui.score)}</p>
             <button onClick={() => sendWS({ type: 'respawn' })}
               className="px-8 py-2.5 bg-[#4A7AEC] hover:bg-[#5A8AFF] rounded text-white font-bold text-lg transition-colors">Respawn</button>
+            <div>
+              <button onClick={() => { const v = !autoRespawn; setAutoRespawn(v); autoRespawnRef.current = v; if (v) sendWS({ type: 'respawn' }) }}
+                className={`px-6 py-2 rounded text-white font-bold text-sm transition-colors ${autoRespawn ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'}`}>
+                Auto Respawn: {autoRespawn ? 'ON' : 'OFF'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -95,6 +95,104 @@ export function getBasePositions(teamCount: number): V2[] {
   return [{ x: 800, y: 800 }, { x: WORLD - 800, y: 800 }, { x: 800, y: WORLD - 800 }, { x: WORLD - 800, y: WORLD - 800 }]
 }
 
+// Dust2 map layout — 4000x4000 world, 2 teams (T=team0, CT=team1)
+// Simplified 2D top-down version of the classic CS map
+function getDust2Walls(): { x: number; y: number; w: number; h: number; angle: number }[] {
+  const W = WORLD // 4000
+  const walls: { x: number; y: number; w: number; h: number; angle: number }[] = []
+  const box = (x: number, y: number, w: number, h: number, angle = 0) => walls.push({ x, y, w, h, angle })
+
+  // (Outer boundary handled by world clamp — no walls needed)
+
+  // === T SPAWN AREA (bottom-left) ===
+  // T spawn enclosure top wall
+  box(500, 3200, 800, 40, 0)
+  // T spawn right wall (opening to T mid)
+  box(900, 3500, 40, 560, 0)
+
+  // === CT SPAWN AREA (top-right) ===
+  // CT spawn enclosure bottom wall
+  box(3500, 800, 800, 40, 0)
+  // CT spawn left wall
+  box(3100, 500, 40, 560, 0)
+
+  // === A SITE (top-left area) ===
+  // A site platform/box
+  box(800, 800, 200, 200, 0)
+  // A site back wall
+  box(600, 500, 40, 500, 0)
+  // A long corner wall
+  box(300, 1200, 500, 40, 0)
+
+  // === A LONG (left side, T spawn to A) ===
+  // Long doors left wall
+  box(200, 2200, 40, 600, 0)
+  // Long doors right wall
+  box(600, 2200, 40, 600, 0)
+  // Pit wall near A
+  box(400, 1600, 350, 40, 0)
+
+  // === MID (center of map) ===
+  // Mid left wall (separates mid from A long)
+  box(1000, 1800, 40, 800, 0)
+  // Mid right wall (separates mid from B tunnels)
+  box(2600, 2200, 40, 800, 0)
+  // Mid top connector wall
+  box(1800, 1200, 40, 400, 0)
+  // Mid boxes (cover in mid)
+  box(1600, 2000, 150, 150, 0)
+  box(2200, 1800, 150, 150, 0)
+  // Mid doors (xbox area)
+  box(1800, 1600, 300, 40, 0)
+
+  // === CATWALK / SHORT A ===
+  // Short A left wall
+  box(1200, 1000, 40, 500, 0)
+  // Short A right wall / connector
+  box(1600, 900, 40, 400, 0)
+  // Short A top wall
+  box(1400, 700, 440, 40, 0)
+
+  // === B SITE (bottom-right area) ===
+  // B site platform
+  box(3200, 3200, 200, 200, 0)
+  // B site back wall
+  box(3500, 3500, 40, 500, 0)
+  // B site upper wall
+  box(3000, 2800, 500, 40, 0)
+
+  // === B TUNNELS (bottom, T spawn to B) ===
+  // Upper tunnel wall
+  box(1800, 2800, 800, 40, 0)
+  // Lower tunnel wall
+  box(1800, 3200, 800, 40, 0)
+  // Tunnel entrance wall (from T side)
+  box(1400, 3000, 40, 440, 0)
+  // Tunnel exit toward B
+  box(2600, 3000, 40, 440, 0)
+
+  // === WINDOW / MID TO B ===
+  // Window room walls
+  box(2800, 2000, 40, 400, 0)
+  box(3000, 1800, 440, 40, 0)
+
+  // === EXTRA COVER ===
+  // Car at A long
+  box(400, 1900, 120, 60, 0)
+  // Barrels at B
+  box(3000, 3400, 80, 80, 0)
+  // Box at mid
+  box(2000, 2200, 100, 100, Math.PI / 6)
+
+  return walls
+}
+
+function getDust2BasePositions(): V2[] {
+  // Team 0 (T): bottom-left spawn
+  // Team 1 (CT): top-right spawn
+  return [{ x: 500, y: 3600 }, { x: 3500, y: 400 }]
+}
+
 // ============================================================================
 // FACTORIES
 // ============================================================================
@@ -244,7 +342,7 @@ function killTank(gs: GameState, t: Tank, killerName: string, events: { kills: K
 
 function checkCollisions(gs: GameState, events: { kills: KillEvent[], baseDestroys: BaseDestroyEvent[] }) {
   const allTanks = gs.tanks
-  const isBattle = gs.mode === 'battle'
+  const isBattle = gs.mode === 'battle' || gs.mode === 'dust2'
 
   // Bullets vs shapes
   for (let bi = gs.bullets.length - 1; bi >= 0; bi--) {
@@ -427,34 +525,65 @@ function checkCollisions(gs: GameState, events: { kills: KillEvent[], baseDestro
     }
   }
 
-  // Bullets vs walls
+  // Bullets vs walls — OBB vs circle collision
   for (let bi = gs.bullets.length - 1; bi >= 0; bi--) {
     const b = gs.bullets[bi]
     for (let wi = gs.walls.length - 1; wi >= 0; wi--) {
       const w = gs.walls[wi]
-      if (b.owner === w.owner) continue // don't hit own walls
-      const wallRadius = Math.max(w.width, w.height) * 0.5
-      if (vdist(b, w) < b.radius + wallRadius) {
+      if (b.owner === w.owner && w.owner !== -1) continue
+      const cos = Math.cos(-w.angle), sin = Math.sin(-w.angle)
+      const dx = b.x - w.x, dy = b.y - w.y
+      const lx = dx * cos - dy * sin, ly = dx * sin + dy * cos
+      const hw = w.width / 2, hh = w.height / 2
+      const cx = Math.max(-hw, Math.min(hw, lx)), cy = Math.max(-hh, Math.min(hh, ly))
+      const distX = lx - cx, distY = ly - cy
+      const dist = Math.sqrt(distX * distX + distY * distY)
+      if (dist < b.radius) {
         w.hp -= b.dmg; w.flash = 0.1
-        b.hp -= 1
         if (w.hp <= 0) { gs.walls.splice(wi, 1) }
-        if (b.hp <= 0) { gs.bullets.splice(bi, 1); break }
+        gs.bullets.splice(bi, 1); break
       }
     }
   }
 
-  // Tanks vs walls (push apart)
+  // Tanks vs walls (push apart) — OBB vs circle collision
   for (const t of allTanks) {
     if (!t.alive) continue
     const tr = tankR(t)
     for (const w of gs.walls) {
       if (w.owner === t.id) continue // don't collide with own walls
-      const wallRadius = Math.max(w.width, w.height) * 0.5
-      const d = vdist(t, w)
-      if (d < tr + wallRadius && d > 0) {
-        const overlap = tr + wallRadius - d
-        const nx = (t.x - w.x) / d, ny = (t.y - w.y) / d
-        t.x += nx * overlap; t.y += ny * overlap
+      // Transform tank position into wall's local space
+      const cos = Math.cos(-w.angle), sin = Math.sin(-w.angle)
+      const dx = t.x - w.x, dy = t.y - w.y
+      const lx = dx * cos - dy * sin
+      const ly = dx * sin + dy * cos
+      // Clamp to wall rectangle to find closest point
+      const hw = w.width / 2, hh = w.height / 2
+      const cx = Math.max(-hw, Math.min(hw, lx))
+      const cy = Math.max(-hh, Math.min(hh, ly))
+      const distX = lx - cx, distY = ly - cy
+      const dist = Math.sqrt(distX * distX + distY * distY)
+      if (dist < tr && dist > 0) {
+        // Push tank out along the closest-point normal (back to world space)
+        const nlx = distX / dist, nly = distY / dist
+        const overlap = tr - dist
+        const wnx = nlx * Math.cos(w.angle) - nly * Math.sin(w.angle)
+        const wny = nlx * Math.sin(w.angle) + nly * Math.cos(w.angle)
+        t.x += wnx * overlap; t.y += wny * overlap
+      } else if (dist === 0) {
+        // Tank center is exactly inside the wall — push out via shortest axis
+        const ox = hw - Math.abs(lx), oy = hh - Math.abs(ly)
+        if (ox < oy) {
+          const nlx = lx >= 0 ? 1 : -1, nly = 0
+          const wnx = nlx * Math.cos(w.angle) - nly * Math.sin(w.angle)
+          const wny = nlx * Math.sin(w.angle) + nly * Math.cos(w.angle)
+          t.x += wnx * (ox + tr); t.y += wny * (ox + tr)
+        } else {
+          const nlx = 0, nly = ly >= 0 ? 1 : -1
+          const wnx = nlx * Math.cos(w.angle) - nly * Math.sin(w.angle)
+          const wny = nlx * Math.sin(w.angle) + nly * Math.cos(w.angle)
+          t.x += wnx * (oy + tr); t.y += wny * (oy + tr)
+        }
       }
     }
   }
@@ -463,7 +592,7 @@ function checkCollisions(gs: GameState, events: { kills: KillEvent[], baseDestro
 function updateAI(gs: GameState, ai: Tank, dt: number) {
   if (!ai.alive) return
   ai.aiTimer -= dt
-  const isBattle = gs.mode === 'battle'
+  const isBattle = gs.mode === 'battle' || gs.mode === 'dust2'
 
   let target: V2 | null = null
   let targetDist = 800
@@ -568,25 +697,42 @@ export class GameInstance {
       baseDestroyedTimer: 0,
     }
 
-    // Spawn shapes
-    for (let i = 0; i < MAX_SHAPES; i++) this.gs.shapes.push(mkShape())
+    // Spawn shapes (fewer in dust2 — map is smaller / more cluttered with walls)
+    const shapeCount = config.mode === 'dust2' ? 60 : MAX_SHAPES
+    for (let i = 0; i < shapeCount; i++) this.gs.shapes.push(mkShape())
 
-    // Create bases for battle mode
-    if (config.mode === 'battle') {
-      const positions = getBasePositions(config.teamCount)
+    // Create bases for battle/dust2 mode
+    if (config.mode === 'battle' || config.mode === 'dust2') {
+      const positions = config.mode === 'dust2' ? getDust2BasePositions() : getBasePositions(config.teamCount)
       for (let t = 0; t < config.teamCount; t++) {
         const team = config.teams[t]
         const pos = positions[t]
         this.gs.bases.push(mkBase(t, pos.x, pos.y, team?.entityName || `Team ${t + 1}`, team?.entityId || '', team?.entityType || 'player', team?.entityImg))
       }
     }
+
+    // Dust2: add static map walls
+    if (config.mode === 'dust2') {
+      for (const w of getDust2Walls()) {
+        const wall: Wall = {
+          id: nid(), x: w.x, y: w.y,
+          width: w.w, height: w.h, angle: w.angle,
+          hp: 999999, maxHp: 999999, flash: 0,
+          owner: -1, team: -1,
+          fill: '#A08060', ol: '#705838',
+          age: 0, maxAge: 999999,
+        }
+        this.gs.walls.push(wall)
+      }
+    }
   }
 
   addPlayer(playerId: string, name: string, team: number, profileImg?: string, entityId?: string, entityType?: string, auraScore?: number): number {
-    const color = this.gs.mode === 'battle' ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
+    const isBattleLike = this.gs.mode === 'battle' || this.gs.mode === 'dust2'
+    const color = isBattleLike ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
     let spawnX = rand(200, WORLD - 200), spawnY = rand(200, WORLD - 200)
 
-    if (this.gs.mode === 'battle') {
+    if (isBattleLike) {
       const base = this.gs.bases.find(b => b.team === team && !b.destroyed)
       if (base) {
         spawnX = clamp(base.x + rand(-200, 200), 100, WORLD - 100)
@@ -635,7 +781,7 @@ export class GameInstance {
   }
 
   deployPersonalBot(name: string, team: number, entityImg?: string): number {
-    const color = this.gs.mode === 'battle' ? TEAM_COLORS[team] : AI_COLORS[Math.floor(Math.random() * AI_COLORS.length)]
+    const color = (this.gs.mode === 'battle' || this.gs.mode === 'dust2') ? TEAM_COLORS[team] : AI_COLORS[Math.floor(Math.random() * AI_COLORS.length)]
     const base = this.gs.bases.find(b => b.team === team && !b.destroyed)
     const sx = base ? clamp(base.x + rand(-300, 300), 100, WORLD - 100) : rand(100, WORLD - 100)
     const sy = base ? clamp(base.y + rand(-300, 300), 100, WORLD - 100) : rand(100, WORLD - 100)
@@ -657,7 +803,7 @@ export class GameInstance {
     const totalBots = this.gs.tanks.filter(t => !t.playerId && !t.isPersonalBot).length
     if (totalBots >= MAX_BOTS_PER_SERVER) return
 
-    if (this.gs.mode === 'battle') {
+    if (this.gs.mode === 'battle' || this.gs.mode === 'dust2') {
       for (let team = 0; team < this.config.teamCount; team++) {
         const base = this.gs.bases.find(b => b.team === team && !b.destroyed)
         if (!base) continue
@@ -700,25 +846,45 @@ export class GameInstance {
     const entityId = oldTank?.entityId
     const entityType = oldTank?.entityType
     const auraScore = oldTank?.auraScore ?? 0
+    const level = oldTank?.level ?? 1
+    const xp = oldTank?.xp ?? 0
+    const xpNext = oldTank?.xpNext ?? xpFor(2)
+    const score = oldTank?.score ?? 0
+    const stats = oldTank?.stats ? [...oldTank.stats] : [0,0,0,0,0,0,0,0]
+    const statPts = oldTank?.statPts ?? 0
+    const classId = oldTank?.classId ?? 'basic'
 
     // Remove old dead tank
     this.gs.tanks = this.gs.tanks.filter(t => t.id !== info.tankId)
 
     let spawnX = rand(200, WORLD - 200), spawnY = rand(200, WORLD - 200)
-    if (this.gs.mode === 'battle') {
+    const isBattleLike = this.gs.mode === 'battle' || this.gs.mode === 'dust2'
+    if (isBattleLike) {
       const base = this.gs.bases.find(b => b.team === team && !b.destroyed)
       if (!base) return null // can't respawn if base destroyed
       spawnX = clamp(base.x + rand(-200, 200), 100, WORLD - 100)
       spawnY = clamp(base.y + rand(-200, 200), 100, WORLD - 100)
     }
 
-    const color = this.gs.mode === 'battle' ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
+    const color = isBattleLike ? TEAM_COLORS[team] : { f: C.player, o: C.playerOl }
     const tank = mkTank(spawnX, spawnY, name, true, color, team)
     tank.playerId = playerId
     tank.profileImg = profileImg
     tank.entityId = entityId
     tank.entityType = entityType
     tank.auraScore = auraScore
+    tank.level = level
+    tank.xp = xp
+    tank.xpNext = xpNext
+    tank.score = score
+    tank.stats = stats
+    tank.statPts = statPts
+    tank.classId = classId
+    tank.maxHp = tankMaxHp(tank)
+    tank.hp = tank.maxHp
+    const tc = TC[classId] || TC.basic
+    tank.reloads = tc.barrels.map(() => 0)
+    tank.recoils = tc.barrels.map(() => 0)
     this.gs.tanks.push(tank)
     info.tankId = tank.id
     return tank.id
@@ -832,9 +998,27 @@ export class GameInstance {
     checkCollisions(this.gs, events)
 
     // Spawn shapes
-    while (this.gs.shapes.length < MAX_SHAPES) this.gs.shapes.push(mkShape())
+    const maxShapes = this.gs.mode === 'dust2' ? 60 : MAX_SHAPES
+    while (this.gs.shapes.length < maxShapes) this.gs.shapes.push(mkShape())
 
-    // Respawn dead bots
+    // Respawn dead bots in place (keep their level/stats)
+    for (const t of this.gs.tanks) {
+      if (!t.alive && !t.playerId && !t.isPersonalBot) {
+        t.alive = true
+        t.hp = tankMaxHp(t)
+        t.x = rand(200, WORLD - 200)
+        t.y = rand(200, WORLD - 200)
+        if (this.gs.mode === 'battle' || this.gs.mode === 'dust2') {
+          const base = this.gs.bases.find(b => b.team === t.team && !b.destroyed)
+          if (base) {
+            t.x = clamp(base.x + rand(-200, 200), 100, WORLD - 100)
+            t.y = clamp(base.y + rand(-200, 200), 100, WORLD - 100)
+          }
+        }
+        t.vx = 0; t.vy = 0; t.regenTimer = 0; t.invisible = 0; t.invulnerable = 0
+      }
+    }
+    // Remove dead player tanks once flash fades, fill missing bot slots
     this.gs.tanks = this.gs.tanks.filter(t => t.alive || t.playerId || t.flash > 0)
     this.fillBots()
 
@@ -971,11 +1155,14 @@ export class GameInstance {
     if (!tank || !tank.alive) return
     const tankTc = TC[tank.classId] || TC.basic
     if (tankTc.ability !== 'wall') return
-    // Must be within placement radius
+    // Clamp to max placement radius
     const maxRange = 250
     const dx = x - tank.x, dy = y - tank.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist > maxRange) return
+    if (dist > maxRange) {
+      x = tank.x + (dx / dist) * maxRange
+      y = tank.y + (dy / dist) * maxRange
+    }
     // Max 2 walls per player
     const ownWalls = this.gs.walls.filter(w => w.owner === tank.id)
     if (ownWalls.length >= 2) {

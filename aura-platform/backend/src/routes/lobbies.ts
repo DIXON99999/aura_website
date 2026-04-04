@@ -81,6 +81,9 @@ app.post('/', async (c) => {
   if (mode === 'battle' && (!teamCount || teamCount < 2 || teamCount > 4)) {
     return c.json({ error: 'Battle mode requires 2-4 teams' }, 400)
   }
+  if (mode === 'dust2' && teamCount !== 2) {
+    return c.json({ error: 'Dust2 mode requires exactly 2 teams' }, 400)
+  }
 
   const displayName = await getUserDisplayName(user)
   const lobby = createLobby(user.id, displayName, mode, teamCount || 0, teams || [], name)

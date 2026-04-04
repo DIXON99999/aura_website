@@ -75,7 +75,7 @@ export interface Particle {
   r: number; fill: string; alpha: number; life: number; maxLife: number
 }
 
-export type GameMode = 'ffa' | 'battle'
+export type GameMode = 'ffa' | 'battle' | 'dust2'
 
 export interface GameState {
   tanks: Tank[]
