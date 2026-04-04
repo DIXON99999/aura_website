@@ -108,7 +108,7 @@ function formatCompact(n: number): string {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/^http/, 'ws').replace(/\/api$/, '')
+const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/^http/, 'ws')
 
 function getSessionToken(): string | null {
   return localStorage.getItem('aura_session')

@@ -117,9 +117,10 @@ const server = Bun.serve({
   async fetch(req, server) {
     const url = new URL(req.url)
 
-    // WebSocket upgrade for /ws/lobby/:lobbyId?token=xxx
-    if (url.pathname.startsWith('/ws/lobby/')) {
-      const lobbyId = url.pathname.split('/')[3]
+    // WebSocket upgrade for /ws/lobby/:lobbyId or /api/ws/lobby/:lobbyId
+    if (url.pathname.startsWith('/ws/lobby/') || url.pathname.startsWith('/api/ws/lobby/')) {
+      const parts = url.pathname.split('/')
+      const lobbyId = url.pathname.startsWith('/api/') ? parts[4] : parts[3]
       const token = url.searchParams.get('token')
       if (!lobbyId || !token) {
         return new Response('Missing lobbyId or token', { status: 400 })
