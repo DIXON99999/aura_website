@@ -195,7 +195,7 @@ function getCachedImg(url: string): HTMLImageElement | null {
 function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, myTeam: number) {
   if (!t.alive) return
   // Invisibility: hide enemies, semi-transparent for self/teammates
-  if (t.invisible > 0) {
+  if ((t.invisible || 0) > 0) {
     if (t.id === myId) {
       ctx.globalAlpha = 0.35
     } else if (myTeam >= 0 && t.team === myTeam) {
@@ -250,7 +250,7 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, 
   }
 
   // Reload boost: animated up-arrows
-  if (t.reloadBoost > 0) {
+  if ((t.reloadBoost || 0) > 0) {
     const time = performance.now() / 1000
     ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     for (let i = 0; i < 3; i++) {
@@ -264,7 +264,7 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, 
   }
 
   // Invulnerable text
-  if (t.invulnerable > 0) {
+  if ((t.invulnerable || 0) > 0) {
     const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150)
     ctx.globalAlpha = pulse
     ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
@@ -459,7 +459,7 @@ function renderSnapshot(ctx: CanvasRenderingContext2D, snap: GameSnapshot, myTan
   for (const s of snap.shapes) drawShape(ctx, s)
   for (const w of (snap.walls || [])) drawWall(ctx, w)
   for (const base of snap.bases) drawBase(ctx, base)
-  for (const t of snap.tanks) drawTank(ctx, t, myTankId, me?.team ?? -1)
+  for (const t of snap.tanks) { ctx.save(); try { drawTank(ctx, t, myTankId, me?.team ?? -1) } catch (e) { console.warn('drawTank error:', e) } ctx.restore() }
   for (const p of snap.particles) {
     ctx.globalAlpha = p.alpha; ctx.fillStyle = p.fill
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill()
@@ -846,6 +846,11 @@ export function PlayPage() {
       try {
         const dt = (time - lastTime) / 1000
         lastTime = time
+        const dpr = window.devicePixelRatio || 1
+        // Reset canvas state each frame to recover from any prior errors
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.globalAlpha = 1
+        ctx.setLineDash([])
         const currSnap = snapshotRef.current
         if (currSnap) {
           // Interpolate between previous and current snapshot
