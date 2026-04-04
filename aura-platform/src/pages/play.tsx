@@ -365,6 +365,53 @@ function drawHUD(ctx: CanvasRenderingContext2D, snap: GameSnapshot, me: Snapshot
   }
 }
 
+const SNAP_INTERVAL = 1000 / 20 // server sends at 20fps
+
+function lerpSnap(prev: GameSnapshot, curr: GameSnapshot, t: number): GameSnapshot {
+  const lerp = (a: number, b: number) => a + (b - a) * t
+  // Lerp angle handling shortest path
+  const lerpAngle = (a: number, b: number) => {
+    let d = b - a
+    if (d > Math.PI) d -= Math.PI * 2
+    if (d < -Math.PI) d += Math.PI * 2
+    return a + d * t
+  }
+
+  const prevTankMap = new Map(prev.tanks.map(tk => [tk.id, tk]))
+  const prevShapeMap = new Map(prev.shapes.map(s => [s.id, s]))
+  const prevBulletMap = new Map(prev.bullets.map(b => [b.id, b]))
+  const prevBaseMap = new Map(prev.bases.map(b => [b.id, b]))
+
+  return {
+    ...curr,
+    tanks: curr.tanks.map(tk => {
+      const p = prevTankMap.get(tk.id)
+      if (!p) return tk
+      return { ...tk, x: lerp(p.x, tk.x), y: lerp(p.y, tk.y), angle: lerpAngle(p.angle, tk.angle) }
+    }),
+    shapes: curr.shapes.map(s => {
+      const p = prevShapeMap.get(s.id)
+      if (!p) return s
+      return { ...s, x: lerp(p.x, s.x), y: lerp(p.y, s.y), rot: lerpAngle(p.rot, s.rot) }
+    }),
+    bullets: curr.bullets.map(b => {
+      const p = prevBulletMap.get(b.id)
+      if (!p) return b
+      return { ...b, x: lerp(p.x, b.x), y: lerp(p.y, b.y) }
+    }),
+    bases: curr.bases.map(b => {
+      const p = prevBaseMap.get(b.id)
+      if (!p) return b
+      return { ...b, rot: lerpAngle(p.rot, b.rot) }
+    }),
+    particles: curr.particles.map((p, i) => {
+      const pp = prev.particles[i]
+      if (!pp) return p
+      return { ...p, x: lerp(pp.x, p.x), y: lerp(pp.y, p.y) }
+    }),
+  }
+}
+
 function renderSnapshot(ctx: CanvasRenderingContext2D, snap: GameSnapshot, myTankId: number, cw: number, ch: number) {
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, cw, ch)
 
@@ -491,12 +538,15 @@ export function PlayPage() {
   const [createTeamCount, setCreateTeamCount] = useState(2)
   const [createTeams, setCreateTeams] = useState<({ entityId: string; entityName: string; entityType: string; entityImg?: string; auraScore: number } | null)[]>([null, null, null, null])
   const [joinTeam, setJoinTeam] = useState(0)
+  const [joinPickerLobbyId, setJoinPickerLobbyId] = useState<string | null>(null)
 
   // Game state
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const snapshotRef = useRef<GameSnapshot | null>(null)
+  const prevSnapshotRef = useRef<GameSnapshot | null>(null)
+  const snapTimeRef = useRef(0)
   const myTankIdRef = useRef(-1)
   const animRef = useRef(0)
   const keysRef = useRef(new Set<string>())
@@ -658,7 +708,9 @@ export function PlayPage() {
       const msg = JSON.parse(event.data)
       switch (msg.type) {
         case 'snapshot':
+          prevSnapshotRef.current = snapshotRef.current
           snapshotRef.current = msg.data
+          snapTimeRef.current = performance.now()
           myTankIdRef.current = msg.you
           // If we receive a snapshot while still in waiting-room, the game is already running (late join)
           setPage(prev => prev === 'waiting-room' ? 'playing' : prev)
@@ -739,8 +791,14 @@ export function PlayPage() {
       try {
         const dt = (time - lastTime) / 1000
         lastTime = time
-        const snap = snapshotRef.current
-        if (snap) {
+        const currSnap = snapshotRef.current
+        if (currSnap) {
+          // Interpolate between previous and current snapshot
+          const elapsed = time - snapTimeRef.current
+          const t = Math.min(elapsed / SNAP_INTERVAL, 1)
+          const prev = prevSnapshotRef.current
+          const snap = prev ? lerpSnap(prev, currSnap, t) : currSnap
+
           const rect = container.getBoundingClientRect()
           renderSnapshot(ctx, snap, myTankIdRef.current, rect.width, rect.height)
 
@@ -748,7 +806,7 @@ export function PlayPage() {
           syncTimer += dt
           if (syncTimer > 0.15) {
             syncTimer = 0
-            const me = snap.tanks.find(t => t.id === myTankIdRef.current)
+            const me = currSnap.tanks.find(t => t.id === myTankIdRef.current)
             if (me) {
               const currentTier = TC[me.classId]?.tier ?? 0
               const qualifiedTier = me.level >= 45 ? 3 : me.level >= 30 ? 2 : me.level >= 15 ? 1 : 0
@@ -908,10 +966,31 @@ export function PlayPage() {
                       </div>
                     </div>
                     {(lobby.state === 'waiting' || lobby.state === 'playing') && (
-                      <button onClick={() => handleJoinLobby(lobby.id, 0)}
-                        className={`px-4 py-2 rounded-lg text-white font-medium text-sm transition-colors shrink-0 ${lobby.state === 'playing' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                        {lobby.state === 'playing' ? 'Join Game' : 'Join'}
-                      </button>
+                      lobby.mode === 'battle' ? (
+                        joinPickerLobbyId === lobby.id ? (
+                          <div className="flex flex-col gap-1 shrink-0">
+                            {Array.from({ length: lobby.teamCount }, (_, i) => (
+                              <button key={i} onClick={() => { setJoinPickerLobbyId(null); handleJoinLobby(lobby.id, i) }}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-colors hover:brightness-110"
+                                style={{ backgroundColor: TEAM_COLORS[i]?.f + '40' }}>
+                                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TEAM_COLORS[i]?.f }} />
+                                {TEAM_COLORS[i]?.name}
+                              </button>
+                            ))}
+                            <button onClick={() => setJoinPickerLobbyId(null)} className="text-white/40 hover:text-white/60 text-xs text-center mt-0.5">Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setJoinPickerLobbyId(lobby.id)}
+                            className={`px-4 py-2 rounded-lg text-white font-medium text-sm transition-colors shrink-0 ${lobby.state === 'playing' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                            {lobby.state === 'playing' ? 'Join Game' : 'Join'}
+                          </button>
+                        )
+                      ) : (
+                        <button onClick={() => handleJoinLobby(lobby.id, 0)}
+                          className={`px-4 py-2 rounded-lg text-white font-medium text-sm transition-colors shrink-0 ${lobby.state === 'playing' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                          {lobby.state === 'playing' ? 'Join Game' : 'Join'}
+                        </button>
+                      )
                     )}
                   </div>
                 </div>

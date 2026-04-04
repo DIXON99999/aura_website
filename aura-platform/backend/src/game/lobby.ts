@@ -116,12 +116,21 @@ export function joinLobby(lobbyId: string, userId: string, playerName: string, t
   if (!lobby) return { success: false, error: 'Lobby not found' }
   if (lobby.info.state === 'finished') return { success: false, error: 'Lobby has ended' }
   if (lobby.info.players.length >= lobby.info.maxPlayers) return { success: false, error: 'Lobby is full' }
-  if (lobby.info.players.find(p => p.id === userId)) return { success: false, error: 'Already in lobby' }
-
   // Clamp team to valid range
   if (lobby.info.mode === 'battle') {
     team = Math.max(0, Math.min(team, lobby.info.teamCount - 1))
   }
+
+  const existing = lobby.info.players.find(p => p.id === userId)
+  if (existing) {
+    // Rejoin: update team if changed
+    existing.team = team
+    existing.profileImg = profileImg
+    lobby.lastRealUserActivity = Date.now()
+    return { success: true }
+  }
+
+  if (lobby.info.players.length >= lobby.info.maxPlayers) return { success: false, error: 'Lobby is full' }
 
   const player: LobbyPlayer = { id: userId, name: playerName, team, profileImg, ready: false }
   lobby.info.players.push(player)
