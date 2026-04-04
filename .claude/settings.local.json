@@ -20,7 +20,9 @@
       "Bash(find /d/2026_projects/aura_websitev3/aura-platform/src -type f -name \"*.ts\" -o -name \"*.tsx\" | xargs grep -l \"addPlayerToLeaderboard\\\\|createSubEvent\\\\|custom.*leaderboard\" 2>/dev/null)",
       "Bash(cd:*)",
       "Bash(find D:/2026_projects/aura_websitev3/aura-platform/backend -name *.ts -path */routes/*)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts|css\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts|css\\)$\")",
+      "Bash(wc:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

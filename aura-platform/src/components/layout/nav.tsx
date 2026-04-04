@@ -19,6 +19,7 @@ import {
   Menu,
   LayoutList,
   Gamepad2,
+  Flame,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
 import { api } from '@/lib/api'
@@ -33,6 +34,12 @@ const navItems = [
   { to: '/community', label: 'Community', icon: Users },
   { to: '/posts', label: 'Posts', icon: MessageSquare },
 ]
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, '') + 'm'
+  if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, '') + 'k'
+  return Math.round(n).toString()
+}
 
 function getVisitorId(): string {
   let id = localStorage.getItem('aura_visitor_id')
@@ -245,6 +252,12 @@ export function Nav() {
                     >
                       <User className="w-4 h-4" />
                       Profile
+                      {userProfile && (
+                        <span className="ml-auto flex items-center gap-0.5 text-xs font-semibold text-green-500">
+                          <Flame className="w-3 h-3" />
+                          {formatCompact(userProfile.auraScore)}
+                        </span>
+                      )}
                     </Link>
                     <Link
                       to="/my-events"
@@ -367,6 +380,12 @@ export function Nav() {
                 >
                   <User className="w-5 h-5" />
                   <span className="text-sm font-medium hidden sm:inline">{displayName}</span>
+                  {userProfile && (
+                    <span className="flex items-center gap-0.5 text-xs font-semibold text-green-500 hidden sm:inline-flex">
+                      <Flame className="w-3 h-3" />
+                      {formatCompact(userProfile.auraScore)}
+                    </span>
+                  )}
                   <ChevronDown className="w-3 h-3" />
                 </button>
 

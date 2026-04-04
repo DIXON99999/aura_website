@@ -11,6 +11,9 @@ import suggestions from './routes/suggestions.js'
 import notifications from './routes/notifications.js'
 import admin from './routes/admin.js'
 import play from './routes/play.js'
+import lobbies from './routes/lobbies.js'
+import { handleWebSocketUpgrade, handleWebSocketMessage, handleWebSocketClose } from './game/lobby.js'
+import { pool } from './db/index.js'
 
 const app = new Hono()
 
@@ -45,10 +48,8 @@ app.get('/api', (c) => c.json({ status: 'ok', message: 'Aura API' }))
 // Diagnostic endpoint
 app.get('/api/debug/db', async (c) => {
   try {
-    const { pool } = await import('./db/index.js')
     const result = await pool.query('SELECT 1 as test')
     const dbUrl = process.env.DATABASE_URL || 'NOT SET'
-    // Mask the password
     const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
     return c.json({ status: 'connected', dbUrl: masked, result: result.rows })
   } catch (err: unknown) {
@@ -59,7 +60,6 @@ app.get('/api/debug/db', async (c) => {
 })
 app.get('/debug/db', async (c) => {
   try {
-    const { pool } = await import('./db/index.js')
     const result = await pool.query('SELECT 1 as test')
     const dbUrl = process.env.DATABASE_URL || 'NOT SET'
     const masked = dbUrl.replace(/:([^@]+)@/, ':****@')
@@ -92,11 +92,84 @@ app.route('/api/admin', admin)
 app.route('/admin', admin)
 app.route('/api/play', play)
 app.route('/play', play)
+app.route('/api/lobbies', lobbies)
+app.route('/lobbies', lobbies)
 
 const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)
 
-export default {
-  port,
-  fetch: app.fetch,
+// Helper to get userId from session token
+async function getUserIdFromToken(token: string): Promise<string | null> {
+  try {
+    const res = await pool.query(
+      'SELECT user_id FROM sessions WHERE id = $1 AND expires_at > NOW()',
+      [token]
+    )
+    return res.rows[0] ? (res.rows[0] as any).user_id : null
+  } catch {
+    return null
+  }
 }
+
+// Bun server with WebSocket support
+const server = Bun.serve({
+  port,
+  async fetch(req, server) {
+    const url = new URL(req.url)
+
+    // WebSocket upgrade for /ws/lobby/:lobbyId?token=xxx
+    if (url.pathname.startsWith('/ws/lobby/')) {
+      const lobbyId = url.pathname.split('/')[3]
+      const token = url.searchParams.get('token')
+      if (!lobbyId || !token) {
+        return new Response('Missing lobbyId or token', { status: 400 })
+      }
+      const userId = await getUserIdFromToken(token)
+      if (!userId) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+      const upgraded = server.upgrade(req, { data: { lobbyId, userId } } as any)
+      if (!upgraded) {
+        return new Response('WebSocket upgrade failed', { status: 500 })
+      }
+      return undefined as any
+    }
+
+    // Regular HTTP - delegate to Hono
+    return app.fetch(req, { ip: server.requestIP(req) })
+  },
+  websocket: {
+    open(ws) {
+      const data = (ws.data as unknown) as { lobbyId: string; userId: string }
+      if (data) {
+        handleWebSocketUpgrade(ws, data.lobbyId, data.userId)
+      }
+    },
+    message(ws, message) {
+      const data = (ws.data as unknown) as { lobbyId: string; userId: string }
+      if (!data) return
+      handleWebSocketMessage(ws, data.lobbyId, data.userId, String(message))
+    },
+    close(ws) {
+      const data = (ws.data as unknown) as { lobbyId: string; userId: string }
+      if (!data) return
+      handleWebSocketClose(data.lobbyId, data.userId)
+    },
+  },
+})
+
+console.log(`WebSocket server ready on ws://localhost:${port}/ws/lobby/:id`)
+
+// Initialize personal_bots table
+pool.query(`
+  CREATE TABLE IF NOT EXISTS personal_bots (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    entity_name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_img TEXT,
+    aura_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)
+  )
+`).catch(e => console.error('Failed to create personal_bots table:', e))
