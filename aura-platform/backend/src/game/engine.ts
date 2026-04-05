@@ -37,8 +37,8 @@ const AI_COLORS = [
   { f: '#FF6BFF', o: '#CC55CC' }, { f: '#FFB86B', o: '#CC9355' },
 ]
 
-const STAT_BASE = [0, 100, 3, 300, 5, 7, 400, 150]
-const STAT_GAIN = [4, 15, 3, 42, 2, 3, -40, 17]
+const STAT_BASE = [0, 250, 3, 300, 5, 7, 400, 150]
+const STAT_GAIN = [4, 150, 3, 42, 2, 3, -40, 17]
 
 const AI_NAMES = [
   'noscope360', 'xX_pro_Xx', 'AuraKing', 'ShapeSlayer', 'BulletStorm',
