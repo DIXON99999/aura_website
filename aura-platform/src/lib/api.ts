@@ -449,9 +449,15 @@ export const api = {
 
   canPostChat: () => fetchApi<{ canPost: boolean }>('/chat/can-post'),
 
-  postChatMessage: (data: { title?: string; content: string; imageUrl?: string }) =>
+  postChatMessage: (data: { title?: string; content: string; imageUrls?: string[]; playerIds?: string[] }) =>
     fetchApi<ChatMessage>('/chat', {
       method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateChatMessage: (id: string, data: { title?: string; content: string; imageUrls?: string[]; playerIds?: string[] }) =>
+    fetchApi<ChatMessage>(`/chat/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
@@ -861,8 +867,10 @@ interface ChatMessage {
   authorName: string
   title: string | null
   content: string
-  imageUrl: string | null
+  imageUrls: string[]
+  playerIds: string[]
   createdAt: string
+  updatedAt: string | null
 }
 
 export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification, ChatMessage }

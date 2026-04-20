@@ -13,7 +13,10 @@ interface DbChatMessage {
   title: string | null
   content: string
   image_url: string | null
+  image_urls: string[] | null
+  player_ids: string[] | null
   created_at: string
+  updated_at: string | null
 }
 
 async function initChatTable() {
@@ -25,10 +28,15 @@ async function initChatTable() {
       title TEXT,
       content TEXT NOT NULL,
       image_url TEXT,
+      image_urls JSONB,
+      updated_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     )
   `)
   await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS image_url TEXT`)
+  await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS image_urls JSONB`)
+  await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS player_ids JSONB`)
+  await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`)
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages (created_at DESC)`
   )
@@ -66,21 +74,45 @@ async function resolveAuthorName(userId: string, fallback: string): Promise<stri
   return user.email?.split('@')[0] || fallback
 }
 
-// Public: list all messages (newest first)
-app.get('/', async (c) => {
-  const result = await pool.query(
-    'SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 500'
-  )
-  const messages = result.rows.map((row: DbChatMessage) => ({
+function serialize(row: DbChatMessage) {
+  let imageUrls: string[] = []
+  if (Array.isArray(row.image_urls)) imageUrls = row.image_urls
+  else if (row.image_url) imageUrls = [row.image_url]
+  const playerIds = Array.isArray(row.player_ids) ? row.player_ids : []
+  return {
     id: row.id,
     userId: row.user_id,
     authorName: row.author_name,
     title: row.title,
     content: row.content,
-    imageUrl: row.image_url,
+    imageUrls,
+    playerIds,
     createdAt: row.created_at,
-  }))
-  return c.json(messages)
+    updatedAt: row.updated_at,
+  }
+}
+
+function sanitizeStringArray(input: unknown, max: number): string[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of input) {
+    if (typeof v !== 'string') continue
+    const trimmed = v.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+// Public: list all messages (newest first)
+app.get('/', async (c) => {
+  const result = await pool.query(
+    'SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 500'
+  )
+  return c.json(result.rows.map((row: DbChatMessage) => serialize(row)))
 })
 
 // Admin-only: post a message
@@ -93,9 +125,13 @@ app.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const title = typeof body.title === 'string' ? body.title.trim() : ''
   const content = typeof body.content === 'string' ? body.content.trim() : ''
-  const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : ''
+  let imageUrls = sanitizeStringArray(body.imageUrls, 20)
+  if (imageUrls.length === 0 && typeof body.imageUrl === 'string' && body.imageUrl.trim()) {
+    imageUrls = [body.imageUrl.trim()]
+  }
+  const playerIds = sanitizeStringArray(body.playerIds, 50)
 
-  if (!content && !imageUrl) return c.json({ error: 'Content or image required' }, 400)
+  if (!content && imageUrls.length === 0) return c.json({ error: 'Content or image required' }, 400)
   if (content.length > 5000) return c.json({ error: 'Content too long' }, 400)
   if (title.length > 200) return c.json({ error: 'Title too long' }, 400)
 
@@ -103,22 +139,45 @@ app.post('/', async (c) => {
   const id = randomUUID()
 
   await pool.query(
-    `INSERT INTO chat_messages (id, user_id, author_name, title, content, image_url, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-    [id, session.user_id, authorName, title || null, content, imageUrl || null]
+    `INSERT INTO chat_messages (id, user_id, author_name, title, content, image_urls, player_ids, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, NOW())`,
+    [id, session.user_id, authorName, title || null, content, JSON.stringify(imageUrls), JSON.stringify(playerIds)]
   )
 
   const inserted = await pool.query('SELECT * FROM chat_messages WHERE id = $1', [id])
-  const row = inserted.rows[0] as DbChatMessage
-  return c.json({
-    id: row.id,
-    userId: row.user_id,
-    authorName: row.author_name,
-    title: row.title,
-    content: row.content,
-    imageUrl: row.image_url,
-    createdAt: row.created_at,
-  })
+  return c.json(serialize(inserted.rows[0] as DbChatMessage))
+})
+
+// Admin-only: edit a message
+app.patch('/:id', async (c) => {
+  const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
+  const session = await getSession(sessionId)
+  if (!session) return c.json({ error: 'Unauthorized' }, 401)
+  if (session.email !== ADMIN_EMAIL) return c.json({ error: 'Forbidden' }, 403)
+
+  const { id } = c.req.param()
+  const existing = await pool.query('SELECT * FROM chat_messages WHERE id = $1', [id])
+  if (existing.rows.length === 0) return c.json({ error: 'Not found' }, 404)
+
+  const body = await c.req.json().catch(() => ({}))
+  const title = typeof body.title === 'string' ? body.title.trim() : ''
+  const content = typeof body.content === 'string' ? body.content.trim() : ''
+  const imageUrls = sanitizeStringArray(body.imageUrls, 20)
+  const playerIds = sanitizeStringArray(body.playerIds, 50)
+
+  if (!content && imageUrls.length === 0) return c.json({ error: 'Content or image required' }, 400)
+  if (content.length > 5000) return c.json({ error: 'Content too long' }, 400)
+  if (title.length > 200) return c.json({ error: 'Title too long' }, 400)
+
+  await pool.query(
+    `UPDATE chat_messages
+     SET title = $1, content = $2, image_urls = $3::jsonb, player_ids = $4::jsonb, image_url = NULL, updated_at = NOW()
+     WHERE id = $5`,
+    [title || null, content, JSON.stringify(imageUrls), JSON.stringify(playerIds), id]
+  )
+
+  const updated = await pool.query('SELECT * FROM chat_messages WHERE id = $1', [id])
+  return c.json(serialize(updated.rows[0] as DbChatMessage))
 })
 
 // Admin-only: delete a message
