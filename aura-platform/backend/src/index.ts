@@ -12,6 +12,7 @@ import notifications from './routes/notifications.js'
 import admin from './routes/admin.js'
 import play from './routes/play.js'
 import lobbies from './routes/lobbies.js'
+import chat from './routes/chat.js'
 import { handleWebSocketUpgrade, handleWebSocketMessage, handleWebSocketClose } from './game/lobby.js'
 import { pool } from './db/index.js'
 
@@ -94,6 +95,8 @@ app.route('/api/play', play)
 app.route('/play', play)
 app.route('/api/lobbies', lobbies)
 app.route('/lobbies', lobbies)
+app.route('/api/chat', chat)
+app.route('/chat', chat)
 
 const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)

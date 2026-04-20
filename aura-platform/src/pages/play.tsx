@@ -88,8 +88,8 @@ const TC: Record<string, TankClass> = {
   basic: { id: 'basic', name: 'Tank', tier: 0, barrels: [{ angle: 0, width: 0.84, length: 1.8 }] },
   sniper: { id: 'sniper', name: 'Sniper', tier: 1, upgradesFrom: ['basic'], fov: 1.3, barrels: [{ angle: 0, width: 0.5, length: 3.6, bulletSpeedMul: 1.8, reloadMul: 2.2, bulletDamageMul: 1.8, bulletSizeMul: 0.85 }] },
   rifle: { id: 'rifle', name: 'Rifle', tier: 1, upgradesFrom: ['basic'], fov: 1.15, ability: 'wall', barrels: [{ angle: 0, width: 0.7, length: 2.2, bulletSpeedMul: 1.3, reloadMul: 0.75, bulletDamageMul: 1.2 }] },
-  assassin: { id: 'assassin', name: 'Assassin', tier: 1, upgradesFrom: ['basic'], fov: 1.1, ability: 'stealth', barrels: [{ angle: 0, width: 0.4, length: 1.2, bulletSpeedMul: 0.9, reloadMul: 1.3, bulletDamageMul: 0.85, bulletSizeMul: 0.7 }] },
-  phantom: { id: 'phantom', name: 'Phantom', tier: 2, upgradesFrom: ['assassin'], fov: 1.15, ability: 'stealth', barrels: [{ angle: 0, width: 0.45, length: 1.4, bulletSpeedMul: 1.1, reloadMul: 1.4, bulletDamageMul: 1.0, bulletSizeMul: 0.75 }] },
+  assassin: { id: 'assassin', name: 'Assassin', tier: 1, upgradesFrom: ['basic'], fov: 1.1, ability: 'stealth', barrels: [{ angle: 0, width: 0.25, length: 1.2, bulletSpeedMul: 0.9, reloadMul: 1.3, bulletDamageMul: 0.85, bulletSizeMul: 0.7 }] },
+  phantom: { id: 'phantom', name: 'Phantom', tier: 2, upgradesFrom: ['assassin'], fov: 1.15, ability: 'stealth', barrels: [{ angle: 0, width: 0.3, length: 1.4, bulletSpeedMul: 1.1, reloadMul: 1.4, bulletDamageMul: 1.0, bulletSizeMul: 0.75 }] },
   superRifle: { id: 'superRifle', name: 'Super Rifle', tier: 2, upgradesFrom: ['rifle'], fov: 1.2, ability: 'wall', barrels: [{ angle: 0, width: 0.75, length: 2.6, bulletSpeedMul: 1.6, reloadMul: 0.55, bulletDamageMul: 1.5, bulletPenMul: 1.5 }] },
   scopeSniper: { id: 'scopeSniper', name: 'Scope', tier: 2, upgradesFrom: ['sniper'], fov: 1.6, ability: 'scope', barrels: [
     { angle: 0, width: 0.9, length: 1.8, reloadMul: 999999 }, // scope piece (visual only, draws first/behind)
@@ -198,10 +198,8 @@ function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, 
   if ((t.invisible || 0) > 0) {
     if (t.id === myId) {
       ctx.globalAlpha = 0.35
-    } else if (myTeam >= 0 && t.team === myTeam) {
-      ctx.globalAlpha = 0.35
     } else {
-      return // completely hidden to enemies
+      return // fully invisible to all other players
     }
   }
   const r = t.radius

@@ -13,12 +13,11 @@ import {
   ChevronDown as ChevronDownIcon,
   Database,
   MessageSquare,
-  Users,
+  MessageCircle,
   Lightbulb,
   X,
   Menu,
   LayoutList,
-  Gamepad2,
   Flame,
 } from 'lucide-react'
 import { useAuthStore, useAuraStore } from '@/stores'
@@ -30,8 +29,7 @@ import { InventoryBar } from '@/components/ui/inventory-bar'
 
 const navItems = [
   { to: '/', label: 'Database', icon: Database },
-  { to: '/play', label: 'Play', icon: Gamepad2 },
-  { to: '/community', label: 'Community', icon: Users },
+  { to: '/chat', label: 'Chat', icon: MessageCircle },
   { to: '/posts', label: 'Posts', icon: MessageSquare },
 ]
 

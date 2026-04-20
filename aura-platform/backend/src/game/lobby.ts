@@ -254,7 +254,16 @@ export function startGame(lobbyId: string): { success: boolean; error?: string }
       const pInfo = lobby.game.playerInputs.get(playerId)
       const tankId = pInfo?.tankId ?? -1
       const abilityCooldown = pInfo?.abilityCooldown ?? 0
-      sendTo(conn.ws, { type: 'snapshot', data: snapshot, you: tankId, abilityCooldown })
+      // Filter invisible tanks: only show to the invisible player themselves
+      const filtered = {
+        ...snapshot,
+        tanks: snapshot.tanks.filter(t => {
+          if ((t.invisible || 0) <= 0) return true
+          if (t.id === tankId) return true // always show yourself
+          return false // hide all other invisible tanks
+        }),
+      }
+      sendTo(conn.ws, { type: 'snapshot', data: filtered, you: tankId, abilityCooldown })
     }
   }, 1000 / 45)
 

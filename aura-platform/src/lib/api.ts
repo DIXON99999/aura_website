@@ -444,6 +444,22 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // Chat
+  getChatMessages: () => fetchApi<ChatMessage[]>('/chat'),
+
+  canPostChat: () => fetchApi<{ canPost: boolean }>('/chat/can-post'),
+
+  postChatMessage: (data: { title?: string; content: string; imageUrl?: string }) =>
+    fetchApi<ChatMessage>('/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteChatMessage: (id: string) =>
+    fetchApi<{ success: boolean }>(`/chat/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Notifications
   getNotifications: (userId: string, params?: { limit?: number; unreadOnly?: boolean }) => {
     const query = new URLSearchParams()
@@ -839,4 +855,14 @@ interface Notification {
   createdAt: Date
 }
 
-export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification }
+interface ChatMessage {
+  id: string
+  userId: string
+  authorName: string
+  title: string | null
+  content: string
+  imageUrl: string | null
+  createdAt: string
+}
+
+export type { Entity, Vote, User, AuthResponse, Event, EventParticipant, EventWithParticipants, SubEvent, SubEventParticipant, SubEventWithParticipants, SubEventComment, AuraFarm, AuraFarmComment, Suggestion, Notification, ChatMessage }

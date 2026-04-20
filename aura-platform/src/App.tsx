@@ -26,6 +26,7 @@ import {
   MyAuraFarmsPage,
   CreateTierListPage,
   PlayPage,
+  ChatPage,
 } from '@/pages'
 
 function App() {
@@ -117,6 +118,8 @@ function AppRoutes() {
         <Route path="/create-tier-list" element={<CreateTierListPage />} />
         {/* Play (Cookie Clicker) */}
         <Route path="/play" element={<PlayPage />} />
+        {/* Chat */}
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/:entityType/:slug" element={<EntityPage />} />
       </Routes>
     </div>

@@ -62,9 +62,9 @@ export const TC: Record<string, TankClass> = {
   rifle: { id: 'rifle', name: 'Rifle', tier: 1, upgradesFrom: ['basic'], fov: 1.15, speedMul: 1.15, hpMul: 1.15, ability: 'wall',
     barrels: [{ angle: 0, width: 0.7, length: 2.2, bulletSpeedMul: 1.3, reloadMul: 0.75, bulletDamageMul: 1.2, bulletPenMul: 1.2 }] },
   assassin: { id: 'assassin', name: 'Assassin', tier: 1, upgradesFrom: ['basic'], fov: 1.1, speedMul: 1.4, hpMul: 0.7, regenMul: 4, ability: 'stealth',
-    barrels: [{ angle: 0, width: 0.4, length: 1.2, bulletSpeedMul: 0.9, reloadMul: 1.6, bulletDamageMul: 0.85, bulletPenMul: 1.3, bulletSizeMul: 0.7 }] },
+    barrels: [{ angle: 0, width: 0.25, length: 1.2, bulletSpeedMul: 0.9, reloadMul: 1.6, bulletDamageMul: 0.85, bulletPenMul: 1.3, bulletSizeMul: 0.7 }] },
   phantom: { id: 'phantom', name: 'Phantom', tier: 2, upgradesFrom: ['assassin'], fov: 1.15, speedMul: 1.6, hpMul: 0.8, regenMul: 5, ability: 'stealth',
-    barrels: [{ angle: 0, width: 0.45, length: 1.4, bulletSpeedMul: 1.1, reloadMul: 1.4, bulletDamageMul: 1.0, bulletPenMul: 1.5, bulletSizeMul: 0.75 }] },
+    barrels: [{ angle: 0, width: 0.3, length: 1.4, bulletSpeedMul: 1.1, reloadMul: 1.4, bulletDamageMul: 1.0, bulletPenMul: 1.5, bulletSizeMul: 0.75 }] },
   superRifle: { id: 'superRifle', name: 'Super Rifle', tier: 2, upgradesFrom: ['rifle'], fov: 1.2, speedMul: 1.3, hpMul: 1.3, ability: 'wall',
     barrels: [{ angle: 0, width: 0.75, length: 2.6, bulletSpeedMul: 1.6, reloadMul: 0.55, bulletDamageMul: 1.5, bulletPenMul: 1.5 }] },
   scopeSniper: { id: 'scopeSniper', name: 'Scope', tier: 2, upgradesFrom: ['sniper'], fov: 1.6, ability: 'scope',
@@ -1196,9 +1196,9 @@ export class GameInstance {
     tank.invisible = 5
     if (tank.classId === 'phantom') {
       tank.invulnerable = 5
-      info.abilityCooldown = 9 // 5s duration + 4s cooldown after
+      info.abilityCooldown = 8 // 5s duration + 3s cooldown after
     } else {
-      info.abilityCooldown = 10 // 5s duration + 5s cooldown after
+      info.abilityCooldown = 8 // 5s duration + 3s cooldown after
     }
   }
 
