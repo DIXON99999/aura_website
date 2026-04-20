@@ -192,7 +192,7 @@ function getCachedImg(url: string): HTMLImageElement | null {
   return img.complete ? img : null
 }
 
-function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, myTeam: number) {
+function drawTank(ctx: CanvasRenderingContext2D, t: SnapshotTank, myId: number, _myTeam: number) {
   if (!t.alive) return
   // Invisibility: hide enemies, semi-transparent for self/teammates
   if ((t.invisible || 0) > 0) {
