@@ -1,109 +1,69 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Nav } from '@/components/layout'
-import { useSeedData } from '@/hooks'
-import { useInitialized, useAuthStore, useAuraStore } from '@/stores'
-import {
-  HomePage,
-  PlayersPage,
-  TeamsPage,
-  GamesPage,
-  RegionsPage,
-  PeripheralsPage,
-  GameMetaPage,
-  EntityPage,
-  ProfilePage,
-  SignInPage,
-  SignUpPage,
-  EventsPage,
-  EventPage,
-  CreateEventPage,
-  EditEventPage,
-  MyEventsPage,
-  AuraFarmsPage,
-  AuraFarmPage,
-  CreateAuraFarmPage,
-  MyAuraFarmsPage,
-} from '@/pages'
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import Upcoming from './predict/Upcoming'
+import Rankings from './predict/Rankings'
+import Accuracy from './predict/Accuracy'
+
+const tabs = [
+  { to: '/', label: 'Matches', end: true },
+  { to: '/rankings', label: 'Rankings', end: false },
+  { to: '/accuracy', label: 'Accuracy', end: false },
+]
 
 function App() {
-  useSeedData()
-  const initialized = useInitialized()
-  const error = useAuraStore((s) => s.error)
-  const fetchAllData = useAuraStore((s) => s.fetchAllData)
-  const checkSession = useAuthStore((s) => s.checkSession)
-  const user = useAuthStore((s) => s.user)
-  const loadUserProfile = useAuraStore((s) => s.loadUserProfile)
-  const userProfiles = useAuraStore((s) => s.userProfiles)
-
-  // Check session on mount
-  useEffect(() => {
-    checkSession()
-  }, [checkSession])
-
-  // Load user profile when user is available
-  useEffect(() => {
-    if (user && !userProfiles[user.id]) {
-      loadUserProfile(user.id)
-    }
-  }, [user, userProfiles, loadUserProfile])
-
-  if (!initialized) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        {error ? (
-          <div className="text-center space-y-4">
-            <div className="text-red-500">Failed to load: {error}</div>
-            <button onClick={() => fetchAllData()} className="px-4 py-2 bg-primary text-primary-foreground rounded-md">
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="text-muted-foreground">Loading...</div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-background">
-        <Nav />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/players" element={<PlayersPage />} />
-          <Route path="/teams" element={<TeamsPage />} />
-          <Route path="/games" element={<GamesPage />} />
-          <Route path="/regions" element={<RegionsPage />} />
-          <Route path="/peripherals" element={<PeripheralsPage />} />
-          <Route path="/game-meta" element={<GameMetaPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          {/* Community (formerly Custom Leaderboards/Events) */}
-          <Route path="/community" element={<EventsPage />} />
-          <Route path="/community/:slug" element={<EventPage />} />
-          <Route path="/community/:slug/sub/:subEventId" element={<EventPage />} />
-          <Route path="/community/:slug/edit" element={<EditEventPage />} />
-          <Route path="/create-event" element={<CreateEventPage />} />
-          <Route path="/my-events" element={<MyEventsPage />} />
-          {/* Legacy routes - redirect to new paths */}
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/events/:slug" element={<EventPage />} />
-          <Route path="/events/:slug/sub/:subEventId" element={<EventPage />} />
-          <Route path="/events/:slug/edit" element={<EditEventPage />} />
-          {/* Posts (formerly Aura Farms) */}
-          <Route path="/posts" element={<AuraFarmsPage />} />
-          <Route path="/posts/:slug" element={<AuraFarmPage />} />
-          <Route path="/create-post" element={<CreateAuraFarmPage />} />
-          <Route path="/my-posts" element={<MyAuraFarmsPage />} />
-          {/* Legacy routes */}
-          <Route path="/aura-farms" element={<AuraFarmsPage />} />
-          <Route path="/aura-farms/:slug" element={<AuraFarmPage />} />
-          <Route path="/create-aura-farm" element={<CreateAuraFarmPage />} />
-          <Route path="/my-aura-farms" element={<MyAuraFarmsPage />} />
-          <Route path="/:entityType/:slug" element={<EntityPage />} />
-        </Routes>
+      <div className="relative min-h-screen bg-[#0a0b0e] text-neutral-100 font-sans">
+        {/* ambient glow */}
+        <div
+          className="pointer-events-none fixed inset-0 -z-10"
+          style={{
+            background:
+              'radial-gradient(60rem 40rem at 50% -10%, rgba(16,185,129,0.10), transparent 60%),' +
+              'radial-gradient(50rem 40rem at 90% 10%, rgba(56,189,248,0.06), transparent 55%)',
+          }}
+        />
+        <header className="sticky top-0 z-20 border-b border-white/5 bg-[#0a0b0e]/80 backdrop-blur-md">
+          <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-7 w-7 place-items-center rounded-md bg-emerald-400/15 ring-1 ring-emerald-400/30">
+                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />
+              </span>
+              <span className="font-display text-lg font-bold tracking-tight">
+                CS<span className="text-emerald-400">Odds</span>
+              </span>
+            </div>
+            <nav className="flex gap-1 text-sm">
+              {tabs.map((t) => (
+                <NavLink
+                  key={t.to}
+                  to={t.to}
+                  end={t.end}
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                      isActive ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                    }`
+                  }
+                >
+                  {t.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-4xl px-4 py-7">
+          <Routes>
+            <Route path="/" element={<Upcoming />} />
+            <Route path="/rankings" element={<Rankings />} />
+            <Route path="/accuracy" element={<Accuracy />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+
+        <footer className="mx-auto max-w-4xl px-4 pb-10 pt-4 text-xs leading-relaxed text-neutral-600">
+          Win probabilities are statistical estimates from a map-level Elo model with head-to-head
+          adjustment — not betting advice. Match &amp; team data via PandaScore.
+        </footer>
       </div>
     </BrowserRouter>
   )

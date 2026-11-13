@@ -41,11 +41,10 @@ app.post('/signup', async (c) => {
 
   const userId = generateId()
   const now = new Date()
-  const nowIso = now.toISOString()
 
   await pool.query(
     'INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)',
-    [userId, normalizedEmail, passwordHash, nowIso]
+    [userId, normalizedEmail, passwordHash, now.getTime()]
   )
 
   const sessionId = generateId()
@@ -53,7 +52,7 @@ app.post('/signup', async (c) => {
 
   await pool.query(
     'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES ($1, $2, $3, $4)',
-    [sessionId, userId, expiresAt.toISOString(), nowIso]
+    [sessionId, userId, expiresAt.getTime(), now.getTime()]
   )
 
   return c.json({
@@ -97,7 +96,7 @@ app.post('/signin', async (c) => {
 
   await pool.query(
     'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES ($1, $2, $3, $4)',
-    [sessionId, user.id, expiresAt.toISOString(), now.toISOString()]
+    [sessionId, user.id, expiresAt.getTime(), now.getTime()]
   )
 
   return c.json({
@@ -138,7 +137,7 @@ app.get('/me', async (c) => {
 
   const session = sessionResult.rows[0] as DbSession
 
-  if (new Date(session.expires_at) < new Date()) {
+  if (Number(session.expires_at) < Date.now()) {
     await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId])
     return c.json({ error: 'Session expired' }, 401)
   }
@@ -207,7 +206,7 @@ app.patch('/link-player', async (c) => {
   }
 
   const session = sessionResult.rows[0] as DbSession
-  if (new Date(session.expires_at) < new Date()) {
+  if (Number(session.expires_at) < Date.now()) {
     return c.json({ error: 'Invalid session' }, 401)
   }
 

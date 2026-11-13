@@ -10,6 +10,8 @@ import auraFarms from './routes/aura-farms.js'
 import suggestions from './routes/suggestions.js'
 import notifications from './routes/notifications.js'
 import admin from './routes/admin.js'
+import predictions from './routes/predictions.js'
+import { startScheduler } from './predict/scheduler.js'
 
 const app = new Hono()
 
@@ -89,9 +91,14 @@ app.route('/api/notifications', notifications)
 app.route('/notifications', notifications)
 app.route('/api/admin', admin)
 app.route('/admin', admin)
+app.route('/api/predictions', predictions)
+app.route('/predictions', predictions)
 
 const port = parseInt(process.env.PORT || '3001')
 console.log(`Server running on http://localhost:${port}`)
+
+// Keep predictions fresh while the server runs (set SCHEDULER=0 to disable).
+startScheduler()
 
 export default {
   port,

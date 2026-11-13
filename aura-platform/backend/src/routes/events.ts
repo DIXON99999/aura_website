@@ -167,7 +167,7 @@ async function getUserIdFromSession(sessionId: string | undefined): Promise<stri
   const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
   if (result.rows.length === 0) return null
   const session = result.rows[0] as DbSession
-  if (new Date(session.expires_at) < new Date()) return null
+  if (Number(session.expires_at) < Date.now()) return null
   return session.user_id
 }
 

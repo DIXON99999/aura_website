@@ -14,8 +14,8 @@ async function verifyAdmin(c: any, next: () => Promise<void>) {
   }
 
   const sessionResult = await pool.query(
-    'SELECT s.*, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = $1 AND s.expires_at > NOW()',
-    [sessionId]
+    'SELECT s.*, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = $1 AND s.expires_at > $2',
+    [sessionId, Date.now()]
   )
 
   if (sessionResult.rows.length === 0) {

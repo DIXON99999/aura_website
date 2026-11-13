@@ -212,7 +212,7 @@ app.get('/my', async (c) => {
   }
 
   const sessionId = authHeader.slice(7)
-  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > NOW()', [sessionId])
+  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > $2', [sessionId, Date.now()])
   if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
@@ -307,7 +307,7 @@ app.post('/', async (c) => {
   }
 
   const sessionId = authHeader.slice(7)
-  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > NOW()', [sessionId])
+  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > $2', [sessionId, Date.now()])
   if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
@@ -364,7 +364,7 @@ app.patch('/:id', async (c) => {
   }
 
   const sessionId = authHeader.slice(7)
-  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > NOW()', [sessionId])
+  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > $2', [sessionId, Date.now()])
   if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
@@ -449,7 +449,7 @@ app.delete('/:id', async (c) => {
   }
 
   const sessionId = authHeader.slice(7)
-  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > NOW()', [sessionId])
+  const sessionResult = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > $2', [sessionId, Date.now()])
   if (sessionResult.rows.length === 0) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
