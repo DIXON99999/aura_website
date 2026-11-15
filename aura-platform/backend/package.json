@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "db:seed": "bun src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

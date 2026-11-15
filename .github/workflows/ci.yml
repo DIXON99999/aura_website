@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aura-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: aura-platform/package-lock.json
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install backend deps
+        working-directory: aura-platform/backend
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (frontend, tests, backend)
+        run: npm run typecheck
+
+      # Runs frontend + backend unit tests. No database or PandaScore token is
+      # needed — the tested logic is pure. Times are asserted in Melbourne time,
+      # which also exercises the runner's UTC timezone.
+      - name: Unit tests
+        run: bun test
+
+      - name: Production build
+        run: npx vite build

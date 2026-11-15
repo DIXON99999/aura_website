@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
+import { orientProbA } from '../predict/logic.js'
 
 const app = new Hono()
 
@@ -110,8 +111,7 @@ app.get('/history', async (c) => {
   return c.json(rows.map((r) => {
     // Prefer the live pre-match prediction (oriented to this row's team A);
     // fall back to the walk-forward replay pick computed during backfill.
-    const live = r.prob_a == null ? null
-      : String(r.p_team_a_id) === String(r.team_a_id) ? r.prob_a : 1 - r.prob_a
+    const live = orientProbA(r.prob_a, r.p_team_a_id, r.team_a_id)
     const probA: number | null = live ?? r.replay_prob_a ?? null
     const pickSource = live != null ? 'live' : r.replay_prob_a != null ? 'replay' : null
     const winnerA = String(r.winner_id) === String(r.team_a_id)

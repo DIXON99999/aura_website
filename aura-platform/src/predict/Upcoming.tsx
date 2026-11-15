@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { getUpcoming, getEvents, eventName, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
-import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, stageOf } from './ui'
+import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented } from './ui'
+import { stageOf } from './stage'
 
 import { dayAndClock as timeLabel, shortDate } from './time'
 import CalendarView from './Calendar'

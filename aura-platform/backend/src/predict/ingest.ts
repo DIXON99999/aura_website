@@ -10,75 +10,16 @@ import {
   upcoming, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
   type PSMatch, type PSTournament,
 } from './pandascore.js'
-import { applyMatch, predict, type Ratings } from './elo.js'
+import { applyMatch, type Ratings } from './elo.js'
+import {
+  pairKey, modelProb, isTier1, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
+} from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const MODEL = 'map-elo-h2h-v2'
-
-// Head-to-head blend: shrink the pair's historical match record toward 50% with
-// a prior, then mix it into the Elo probability — weighted up to 30% once two
-// teams have met ~6+ times. Captures matchup effects Elo's transitivity misses.
-const H2H_PRIOR = 4       // pseudo-meetings pulling toward 50/50
-const H2H_MAX_WEIGHT = 0.30
-const H2H_FULL_AT = 6     // meetings needed for full weight
-function h2hAdjust(eloProbA: number, aWins: number, bWins: number): number {
-  const n = aWins + bWins
-  if (n === 0) return eloProbA
-  const h2hA = (aWins + H2H_PRIOR * 0.5) / (n + H2H_PRIOR)
-  const weight = (Math.min(n, H2H_FULL_AT) / H2H_FULL_AT) * H2H_MAX_WEIGHT
-  return (1 - weight) * eloProbA + weight * h2hA
-}
-const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
-
-/** Full model: Elo match probability for opponents[0], with head-to-head blend. */
-function modelProb(r: Ratings, h2h: H2HMap, m: PSMatch): ReturnType<typeof predict> {
-  const p = predict(r, m)
-  if (!p) return null
-  const he = h2h.get(pairKey(p.teamA.id, p.teamB.id))
-  if (he) {
-    const aWins = p.teamA.id === he.loId ? he.loWins : he.hiWins
-    const bWins = p.teamA.id === he.loId ? he.hiWins : he.loWins
-    p.probA = h2hAdjust(p.probA, aWins, bWins)
-  }
-  return p
-}
 const BACKFILL_PAGES = Number(process.env.BACKFILL_PAGES || 180)
 const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 30)
-
-// Show a match only when at least one side is a recognizable org — popularity,
-// not tournament tier (a FaZe/BC.Game match counts even in a small event; two
-// no-names in a big event don't). Matched case-insensitively against team name;
-// short/ambiguous tags use word boundaries. Add orgs here to widen the net.
-const POPULAR_TEAMS: RegExp[] = [
-  /vitality/i, /mouz|mousesports/i, /natus vincere|\bnavi\b/i, /\bfaze\b/i, /\bg2\b/i,
-  /team spirit|\bspirit\b/i, /astralis/i, /furia/i, /\bliquid\b/i, /falcons/i,
-  /mongolz/i, /aurora/i, /heroic/i, /complexity/i, /virtus\.?\s?pro|\bvp\b/i,
-  /cloud9|\bc9\b/i, /\bbig\b/i, /\bence\b/i, /eternal fire/i, /\bpain\b|paingaming/i,
-  /3dmax/i, /gamerlegion/i, /\b9ine\b/i, /ninjas in pyjamas|\bnip\b/i, /fnatic/i,
-  /\bog\b/i, /\bmibr\b/i, /imperial/i, /\bsaw\b/i, /betboom/i, /bc[\s.]?game/i,
-  /passion ua/i, /monte/i, /apeks/i, /sangal/i, /tyloo/i, /lynn vision/i, /rare atom/i,
-  /flyquest/i, /wildcard/i, /nemiga/i, /\bb8\b/i, /fluxo/i, /legacy/i, /\bsharks\b/i,
-  /parivision/i, /betera/i, /amkal/i, /enterprise/i, /\bguild\b/i, /gentle mates|\bm0nesy\b/i,
-  /\bnrg\b/i, /\bgamerlegion\b/i, /\becstatic\b/i, /zero tenacity/i, /\bsaints\b/i,
-]
-// Reject academy/youth/former-roster variants even when the brand matches —
-// "Vitality Academy", "Spirit Academy Green", "Aurora Young Blood", "ex-ENCE".
-const NOT_MAIN_ROSTER = [/academy/i, /young blood/i, /\byouth\b/i, /junior/i, /^\s*ex-/i, /\bex-/i]
-function teamPopular(name: string | null | undefined): boolean {
-  if (!name) return false
-  if (NOT_MAIN_ROSTER.some((re) => re.test(name))) return false
-  return POPULAR_TEAMS.some((re) => re.test(name))
-}
-
-// Tier 1 = PandaScore tournament tier S or A (Majors, IEM, BLAST, top PGL...).
-// Tier-1 matches are always shown; lower tiers only when a popular org plays.
-const TIER1 = ['s', 'a']
-const isTier1 = (m: PSMatch) => TIER1.includes((m.tournament?.tier || '').toLowerCase())
-function shouldShow(m: PSMatch): boolean {
-  return isTier1(m) || (m.opponents || []).some((o) => teamPopular(o.opponent?.name))
-}
-const scoreOf = (m: PSMatch, teamId: number) => m.results?.find((r) => r.team_id === teamId)?.score ?? null
 
 /** Mark a prediction finished, grade it, and store the final score. */
 async function settleMatch(m: PSMatch): Promise<number> {
@@ -209,8 +150,6 @@ async function loadRatings(): Promise<Ratings> {
     })
   return r
 }
-
-type H2HMap = Map<string, { loId: number; hiId: number; loWins: number; hiWins: number }>
 
 async function loadH2H(): Promise<H2HMap> {
   const m: H2HMap = new Map()
@@ -433,13 +372,13 @@ async function predictUpcoming(r: Ratings) {
     written.push(m.id)
     n++
   }
-  // Drop future-dated upcoming rows that fell out of the feed (rescheduled or
-  // filtered out). Rows whose start time has passed are live — keep them so
-  // settleRecent can grade them once the result lands.
-  await pool.query(
-    `DELETE FROM predictions WHERE status='upcoming' AND scheduled_at > NOW() AND NOT (match_id = ANY($1::bigint[]))`,
-    [written]
-  )
+  // Drop future-dated upcoming rows that fell out of the feed; live rows stay
+  // so settleRecent can grade them (the rule lives in logic.staleUpcomingIds).
+  const stored = (await pool.query(
+    `SELECT match_id, scheduled_at FROM predictions WHERE status='upcoming'`
+  )).rows.map((r) => ({ matchId: Number(r.match_id), scheduledAt: r.scheduled_at }))
+  const stale = staleUpcomingIds(stored, written)
+  if (stale.length) await pool.query(`DELETE FROM predictions WHERE match_id = ANY($1::bigint[])`, [stale])
   console.log(`[predict] wrote ${n} upcoming predictions + ${tbd} TBD placeholders (skipped ${skipped} no-name matchups)`)
 
   // show the soonest 12
