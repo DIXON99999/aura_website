@@ -27,7 +27,21 @@ function h2hAdjust(eloProbA: number, aWins: number, bWins: number): number {
   return (1 - weight) * eloProbA + weight * h2hA
 }
 const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
+
+/** Full model: Elo match probability for opponents[0], with head-to-head blend. */
+function modelProb(r: Ratings, h2h: H2HMap, m: PSMatch): ReturnType<typeof predict> {
+  const p = predict(r, m)
+  if (!p) return null
+  const he = h2h.get(pairKey(p.teamA.id, p.teamB.id))
+  if (he) {
+    const aWins = p.teamA.id === he.loId ? he.loWins : he.hiWins
+    const bWins = p.teamA.id === he.loId ? he.hiWins : he.loWins
+    p.probA = h2hAdjust(p.probA, aWins, bWins)
+  }
+  return p
+}
 const BACKFILL_PAGES = Number(process.env.BACKFILL_PAGES || 180)
+const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 30)
 
 // Show a match only when at least one side is a recognizable org — popularity,
 // not tournament tier (a FaZe/BC.Game match counts even in a small event; two
@@ -52,6 +66,58 @@ function teamPopular(name: string | null | undefined): boolean {
   if (!name) return false
   if (NOT_MAIN_ROSTER.some((re) => re.test(name))) return false
   return POPULAR_TEAMS.some((re) => re.test(name))
+}
+
+// Tier 1 = PandaScore tournament tier S or A (Majors, IEM, BLAST, top PGL...).
+// Tier-1 matches are always shown; lower tiers only when a popular org plays.
+const TIER1 = ['s', 'a']
+const isTier1 = (m: PSMatch) => TIER1.includes((m.tournament?.tier || '').toLowerCase())
+function shouldShow(m: PSMatch): boolean {
+  return isTier1(m) || (m.opponents || []).some((o) => teamPopular(o.opponent?.name))
+}
+const scoreOf = (m: PSMatch, teamId: number) => m.results?.find((r) => r.team_id === teamId)?.score ?? null
+
+/** Mark a prediction finished, grade it, and store the final score. */
+async function settleMatch(m: PSMatch): Promise<number> {
+  if (!m.winner_id) return 0
+  const [r1, r2] = m.results || []
+  const res = await pool.query(
+    `UPDATE predictions SET status='finished', winner_id=$2,
+       correct = ( (prob_a >= 0.5) = (team_a_id = $2) ),
+       score_a = CASE WHEN team_a_id = $3::bigint THEN $4::int WHEN team_a_id = $5::bigint THEN $6::int END,
+       score_b = CASE WHEN team_b_id = $3::bigint THEN $4::int WHEN team_b_id = $5::bigint THEN $6::int END,
+       updated_at=NOW()
+     WHERE match_id=$1 AND (status <> 'finished' OR score_a IS NULL)`,
+    [m.id, m.winner_id, r1?.team_id ?? null, r1?.score ?? null, r2?.team_id ?? null, r2?.score ?? null]
+  )
+  return res.rowCount || 0
+}
+
+/** Store a finished match (predicted or not) for the history page. */
+async function recordResult(m: PSMatch, replayProbA?: number): Promise<boolean> {
+  if (m.status !== 'finished' || !m.winner_id || !shouldShow(m)) return false
+  const opp = (m.opponents || []).map((o) => o.opponent).filter((o) => o?.id)
+  if (opp.length !== 2) return false
+  const [a, b] = opp as { id: number; name?: string; image_url?: string }[]
+  await pool.query(
+    `INSERT INTO results (
+       match_id, name, finished_at, league, serie, tier, bo, forfeit,
+       team_a_id, team_a_name, team_a_logo, team_b_id, team_b_name, team_b_logo,
+       score_a, score_b, winner_id, replay_prob_a
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     ON CONFLICT (match_id) DO UPDATE SET
+       replay_prob_a=COALESCE(EXCLUDED.replay_prob_a, results.replay_prob_a),
+       finished_at=EXCLUDED.finished_at, tier=EXCLUDED.tier, forfeit=EXCLUDED.forfeit,
+       score_a=EXCLUDED.score_a, score_b=EXCLUDED.score_b, winner_id=EXCLUDED.winner_id,
+       team_a_logo=EXCLUDED.team_a_logo, team_b_logo=EXCLUDED.team_b_logo`,
+    [
+      m.id, m.name, m.end_at || m.begin_at || m.scheduled_at, m.league?.name || null,
+      m.serie?.full_name || null, m.tournament?.tier || null, m.number_of_games || null, !!m.forfeit,
+      a.id, a.name || null, a.image_url || null, b.id, b.name || null, b.image_url || null,
+      scoreOf(m, a.id), scoreOf(m, b.id), m.winner_id, replayProbA ?? null,
+    ]
+  )
+  return true
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
@@ -96,6 +162,27 @@ async function ensureTables() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS tier TEXT`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS serie TEXT`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_a INTEGER`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_b INTEGER`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS results (
+      match_id BIGINT PRIMARY KEY,
+      name TEXT,
+      finished_at TIMESTAMPTZ,
+      league TEXT,
+      serie TEXT,
+      tier TEXT,
+      bo INTEGER,
+      forfeit BOOLEAN NOT NULL DEFAULT FALSE,
+      team_a_id BIGINT, team_a_name TEXT, team_a_logo TEXT,
+      team_b_id BIGINT, team_b_name TEXT, team_b_logo TEXT,
+      score_a INTEGER, score_b INTEGER,
+      winner_id BIGINT
+    )`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS results_finished_at_idx ON results (finished_at DESC)`)
+  await pool.query(`ALTER TABLE results ADD COLUMN IF NOT EXISTS replay_prob_a DOUBLE PRECISION`)
 }
 
 async function loadRatings(): Promise<Ratings> {
@@ -177,7 +264,16 @@ async function backfill(): Promise<Ratings> {
   const r: Ratings = new Map()
   const h2h: H2HMap = new Map()
   const logos = new Map<number, string>()
+  // Walk-forward "replay" picks for the history page: the model's probability
+  // for each recent match computed from ratings + H2H *before* that match is
+  // applied — i.e. only information available pre-match.
+  const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000).toISOString()
+  const replay = new Map<number, number>() // match id -> P(opponents[0] wins)
   for (const m of all) {
+    if (m.winner_id && (m.scheduled_at || '') >= since && shouldShow(m)) {
+      const p = modelProb(r, h2h, m)
+      if (p) replay.set(m.id, p.probA)
+    }
     applyMatch(r, m)
     for (const o of m.opponents || []) if (o.opponent?.id && o.opponent.image_url) logos.set(o.opponent.id, o.opponent.image_url)
     // accumulate match-level head-to-head
@@ -199,19 +295,15 @@ async function backfill(): Promise<Ratings> {
   // persist logos for the rankings page
   for (const [id, url] of logos) await pool.query('UPDATE team_ratings SET logo=$2 WHERE team_id=$1', [id, url])
 
-  // settle any predictions whose result now appears in history
+  // settle any predictions whose result now appears in history, and record the
+  // last HISTORY_DAYS of finished matches for the history page
   let settled = 0
+  let recorded = 0
   for (const m of all) {
-    if (!m.winner_id) continue
-    const res = await pool.query(
-      `UPDATE predictions SET status='finished', winner_id=$2,
-         correct = ( (prob_a >= 0.5) = (team_a_id = $2) ), updated_at=NOW()
-       WHERE match_id=$1 AND status <> 'finished'`,
-      [m.id, m.winner_id]
-    )
-    settled += res.rowCount || 0
+    settled += await settleMatch(m)
+    if ((m.scheduled_at || '') >= since && (await recordResult(m, replay.get(m.id)))) recorded++
   }
-  console.log(`[backfill] ${r.size} teams rated, ${settled} predictions settled`)
+  console.log(`[backfill] ${r.size} teams rated, ${settled} predictions settled, ${recorded} results recorded`)
   return r
 }
 
@@ -223,35 +315,23 @@ function streamOf(m: PSMatch): string | null {
 async function predictUpcoming(r: Ratings) {
   const ms = await upcoming(100)
   const h2h = await loadH2H()
-  // Rebuild the upcoming set from scratch each run so it always reflects the
-  // current filter + schedule. Finished/settled rows (status <> 'upcoming') stay.
-  await pool.query(`DELETE FROM predictions WHERE status='upcoming'`)
   let n = 0
   let skipped = 0
+  const written: number[] = []
   for (const m of ms) {
-    const names = (m.opponents || []).map((o) => o.opponent?.name)
-    if (!names.some(teamPopular)) { skipped++; continue }
-    const p = predict(r, m)
+    if (!shouldShow(m)) { skipped++; continue }
+    const p = modelProb(r, h2h, m)
     if (!p) continue
-    // head-to-head adjustment for this specific pairing
-    const he = h2h.get(pairKey(p.teamA.id, p.teamB.id))
-    let probA = p.probA
-    if (he) {
-      const aWins = p.teamA.id === he.loId ? he.loWins : he.hiWins
-      const bWins = p.teamA.id === he.loId ? he.hiWins : he.loWins
-      probA = h2hAdjust(p.probA, aWins, bWins)
-    }
-    p.probA = probA
     const logoOf = (id: number) => (m.opponents || []).find((o) => o.opponent?.id === id)?.opponent?.image_url || null
     await pool.query(
       `INSERT INTO predictions (
          match_id, name, scheduled_at, league, bo,
          team_a_id, team_a_name, team_a_elo, team_a_games,
          team_b_id, team_b_name, team_b_elo, team_b_games,
-         prob_a, model_version, status, stream_url, team_a_logo, team_b_logo, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'upcoming',$16,$17,$18,NOW())
+         prob_a, model_version, status, stream_url, team_a_logo, team_b_logo, tier, serie, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'upcoming',$16,$17,$18,$19,$20,NOW())
        ON CONFLICT (match_id) DO UPDATE SET
-         scheduled_at=EXCLUDED.scheduled_at, bo=EXCLUDED.bo,
+         scheduled_at=EXCLUDED.scheduled_at, bo=EXCLUDED.bo, tier=EXCLUDED.tier, serie=EXCLUDED.serie,
          team_a_elo=EXCLUDED.team_a_elo, team_a_games=EXCLUDED.team_a_games,
          team_b_elo=EXCLUDED.team_b_elo, team_b_games=EXCLUDED.team_b_games,
          prob_a=EXCLUDED.prob_a, model_version=EXCLUDED.model_version,
@@ -262,11 +342,20 @@ async function predictUpcoming(r: Ratings) {
         m.id, m.name, m.scheduled_at, m.league?.name || null, p.bo,
         p.teamA.id, p.teamA.name, p.teamA.elo, p.teamA.games,
         p.teamB.id, p.teamB.name, p.teamB.elo, p.teamB.games,
-        p.probA, MODEL, streamOf(m), logoOf(p.teamA.id), logoOf(p.teamB.id),
+        p.probA, MODEL, streamOf(m), logoOf(p.teamA.id), logoOf(p.teamB.id), m.tournament?.tier || null,
+        m.serie?.full_name || null,
       ]
     )
+    written.push(m.id)
     n++
   }
+  // Drop future-dated upcoming rows that fell out of the feed (rescheduled or
+  // filtered out). Rows whose start time has passed are live — keep them so
+  // settleRecent can grade them once the result lands.
+  await pool.query(
+    `DELETE FROM predictions WHERE status='upcoming' AND scheduled_at > NOW() AND NOT (match_id = ANY($1::bigint[]))`,
+    [written]
+  )
   console.log(`[predict] wrote ${n} upcoming predictions (skipped ${skipped} no-name matchups)`)
 
   // show the soonest 12
@@ -291,14 +380,8 @@ export async function settleRecent(pages = 2): Promise<number> {
   for (let p = 1; p <= pages; p++) {
     const batch = await pastPage(p)
     for (const m of batch) {
-      if (!m.winner_id) continue
-      const res = await pool.query(
-        `UPDATE predictions SET status='finished', winner_id=$2,
-           correct = ( (prob_a >= 0.5) = (team_a_id = $2) ), updated_at=NOW()
-         WHERE match_id=$1 AND status <> 'finished'`,
-        [m.id, m.winner_id]
-      )
-      settled += res.rowCount || 0
+      settled += await settleMatch(m)
+      await recordResult(m)
     }
     if (batch.length < 100) break
     await sleep(1100)
@@ -345,7 +428,10 @@ export async function runRefresh(): Promise<void> {
   const r = await loadRatings()
   if (r.size === 0) return runBackfill()
   await predictUpcoming(r)
-  await settleRecent()
+  // first run with an empty history table: pull a deeper slice so the
+  // history page isn't empty until the next 12h backfill
+  const hasHistory = (await pool.query('SELECT 1 FROM results LIMIT 1')).rowCount
+  await settleRecent(hasHistory ? 2 : 15)
   await captureMaps()
 }
 

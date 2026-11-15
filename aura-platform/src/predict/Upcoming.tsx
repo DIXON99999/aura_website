@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getUpcoming, type Prediction } from './api'
-import { TeamLogo, Spinner, ErrorNote } from './ui'
+import { getUpcoming, eventName, type Prediction, type TierFilter } from './api'
+import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented } from './ui'
 
 const pct = (x: number) => Math.round(x * 100)
 
@@ -30,11 +30,12 @@ function MatchCard({ m }: { m: Prediction }) {
   )
 
   return (
-    <div className="group rounded-2xl border border-white/8 bg-white/[0.025] p-4 transition-colors hover:border-white/15 hover:bg-white/[0.045]">
-      <div className="mb-3.5 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-        <span className="truncate">{m.league || 'CS2'} · BO{m.bo}</span>
-        <span className="text-neutral-400">{timeLabel(m.scheduledAt)}</span>
-      </div>
+    <ThemedCard
+      league={m.league}
+      event={`${eventName(m.league, m.serie)} · BO${m.bo}`}
+      right={timeLabel(m.scheduledAt)}
+      bodyClassName="p-4"
+    >
 
       <div className="flex items-center gap-2">
         <Side team={m.teamA} prob={m.probA} fav={aFav} align="left" />
@@ -65,32 +66,65 @@ function MatchCard({ m }: { m: Prediction }) {
           )}
         </div>
       </div>
-    </div>
+    </ThemedCard>
   )
 }
 
+const FILTERS: { value: TierFilter; label: string }[] = [
+  { value: 'tier1', label: 'Tier 1' },
+  { value: 'other', label: 'Other' },
+]
+
+const COPY: Record<TierFilter, { sub: string; empty: string }> = {
+  tier1: {
+    sub: 'S & A-tier tournaments',
+    empty: "No tier 1 matches scheduled right now. Check back when a big event's on — predictions refresh automatically.",
+  },
+  other: {
+    sub: 'Lower-tier events featuring well-known teams',
+    empty: 'No other matches scheduled right now — predictions refresh automatically.',
+  },
+}
+
 export default function Upcoming() {
+  const [tier, setTier] = useState<TierFilter>('tier1')
   const [data, setData] = useState<Prediction[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
-  useEffect(() => { getUpcoming().then(setData).catch((e) => setErr(String(e))) }, [])
+  useEffect(() => {
+    setData(null)
+    getUpcoming(tier).then(setData).catch((e) => setErr(String(e)))
+  }, [tier])
 
   if (err) return <ErrorNote msg={err} />
-  if (!data) return <Spinner label="Loading predictions…" />
+  const copy = COPY[tier]
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-bold tracking-tight">Upcoming matches</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Top teams only · {data.length} match{data.length === 1 ? '' : 'es'} priced
-          {data[0] && <span className="text-neutral-600"> · model {data[0].model}</span>}
-        </p>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Upcoming matches</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {copy.sub}
+            {data && <> · {data.length} match{data.length === 1 ? '' : 'es'} priced</>}
+            {data?.[0] && <span className="text-neutral-600"> · model {data[0].model}</span>}
+          </p>
+        </div>
+        <Segmented options={FILTERS} value={tier} onChange={setTier} />
       </div>
-      {data.length === 0 ? (
+      {!data ? (
+        <Spinner label="Loading predictions…" />
+      ) : data.length === 0 ? (
         <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-8 text-center text-sm text-neutral-400">
-          No big matches scheduled right now. Check back when a tournament's live —
-          predictions refresh automatically.
+          {copy.empty}
+          {tier === 'tier1' && (
+            <button
+              onClick={() => setTier('other')}
+              className="mt-3 block w-full font-medium text-emerald-400 hover:text-emerald-300"
+            >
+              See other matches →
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">

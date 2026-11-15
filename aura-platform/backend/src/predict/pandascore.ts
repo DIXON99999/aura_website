@@ -20,6 +20,10 @@ export interface PSMatch {
   number_of_games?: number
   league?: { name?: string }
   serie?: { full_name?: string; tier?: string }
+  /** tier lives on the tournament (s/a/b/c/d); serie.tier is always null */
+  tournament?: { name?: string; tier?: string | null }
+  end_at?: string | null
+  results?: { team_id: number; score: number }[]
   opponents: PSOpponent[]
   games?: PSGame[]
   streams_list?: { raw_url?: string; main?: boolean }[]

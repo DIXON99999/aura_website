@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import Upcoming from './predict/Upcoming'
-import Rankings from './predict/Rankings'
+import History from './predict/History'
 import Accuracy from './predict/Accuracy'
 
 const tabs = [
   { to: '/', label: 'Matches', end: true },
-  { to: '/rankings', label: 'Rankings', end: false },
+  { to: '/history', label: 'History', end: false },
   { to: '/accuracy', label: 'Accuracy', end: false },
 ]
 
@@ -54,7 +54,7 @@ function App() {
         <main className="mx-auto max-w-4xl px-4 py-7">
           <Routes>
             <Route path="/" element={<Upcoming />} />
-            <Route path="/rankings" element={<Rankings />} />
+            <Route path="/history" element={<History />} />
             <Route path="/accuracy" element={<Accuracy />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -426,7 +426,7 @@ async function initTables() {
   ]
 
   const gameCs2Id = 'game-cs2'
-  const now = new Date().toISOString()
+  const now = Date.now()
   for (const w of cs2Weapons) {
     await pool.query(
       `INSERT INTO weapons (id, name, slug, game_id, aura_score, created_at) 
