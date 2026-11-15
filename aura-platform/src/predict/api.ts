@@ -1,10 +1,19 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
-export interface Team { id: string; name: string; elo: number; games: number; logo?: string | null }
+export interface Team { id: string; name: string; elo: number | null; games: number; logo?: string | null }
 export interface Prediction {
   matchId: string; name: string; scheduledAt: string; league: string | null; serie: string | null
   bo: number; tier: string | null; streamUrl: string | null; model: string; maps?: string[] | null
-  teamA: Team; teamB: Team; probA: number; probB: number
+  /** null while the team is still to be determined */
+  teamA: Team | null; teamB: Team | null
+  /** null until both teams are known */
+  probA: number | null; probB: number | null
+}
+export interface TourEvent {
+  id: string; league: string | null; serie: string | null; tier: string | null
+  region: string | null; prizepool: string | null; beginAt: string | null; endAt: string | null
+  live: boolean; stages: { name: string; beginAt: string | null; endAt: string | null }[]
+  teams: { name: string; logo: string | null }[]
 }
 export type TierFilter = 'tier1' | 'other'
 export interface HistoryTeam { id: string; name: string; logo: string | null; score: number | null }
@@ -37,5 +46,6 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const getUpcoming = (tier: TierFilter) => get<Prediction[]>(`/predictions/upcoming?tier=${tier}`)
+export const getEvents = () => get<TourEvent[]>('/predictions/events')
 export const getHistory = (tier?: TierFilter) => get<HistoryRow[]>(`/predictions/history${tier ? `?tier=${tier}` : ''}`)
 export const getAccuracy = () => get<Accuracy>('/predictions/accuracy')

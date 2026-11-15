@@ -64,6 +64,32 @@ export function pastPage(page: number, perPage = 100): Promise<PSMatch[]> {
   return get(`/csgo/matches/past?per_page=${perPage}&page=${page}&sort=-scheduled_at`)
 }
 
+export interface PSTournament {
+  id: number
+  name: string
+  begin_at: string | null
+  end_at: string | null
+  tier: string | null
+  region: string | null
+  prizepool: string | null
+  league?: { name?: string; image_url?: string | null }
+  serie_id: number
+  serie?: { full_name?: string }
+  teams?: { id: number; name: string; image_url?: string | null }[]
+  matches?: { id: number; status: string }[]
+}
+
+/** Tier S/A tournaments that are running or yet to start. */
+export function tier1Tournaments(kind: 'upcoming' | 'running'): Promise<PSTournament[]> {
+  return get(`/csgo/tournaments/${kind}?filter[tier]=s,a&per_page=100&sort=begin_at`)
+}
+
+/** Not-yet-played matches belonging to the given tournaments (soonest first). */
+export function upcomingForTournaments(ids: number[]): Promise<PSMatch[]> {
+  if (!ids.length) return Promise.resolve([])
+  return get(`/csgo/matches/upcoming?filter[tournament_id]=${ids.join(',')}&per_page=100&sort=scheduled_at`)
+}
+
 /** Full detail for one match (generic endpoint — the /csgo/ one is 403 on free tier).
  *  Near match time this is where games[].map (the played/veto maps) fills in. */
 export function matchDetail(id: number): Promise<any> {

@@ -36,10 +36,35 @@ app.get('/upcoming', async (c) => {
     streamUrl: r.stream_url,
     model: r.model_version,
     maps: r.maps || null,
-    teamA: { id: String(r.team_a_id), name: r.team_a_name, elo: Math.round(r.team_a_elo), games: r.team_a_games, logo: r.team_a_logo || null },
-    teamB: { id: String(r.team_b_id), name: r.team_b_name, elo: Math.round(r.team_b_elo), games: r.team_b_games, logo: r.team_b_logo || null },
-    probA: r.prob_a,
-    probB: 1 - r.prob_a,
+    // team is null while still to be determined; prob is null until both are known
+    teamA: teamOf(r, 'a'),
+    teamB: teamOf(r, 'b'),
+    probA: r.prob_a ?? null,
+    probB: r.prob_a == null ? null : 1 - r.prob_a,
+  })))
+})
+
+function teamOf(r: any, side: 'a' | 'b') {
+  const id = r[`team_${side}_id`]
+  if (id == null) return null
+  const elo = r[`team_${side}_elo`]
+  return {
+    id: String(id), name: r[`team_${side}_name`], logo: r[`team_${side}_logo`] || null,
+    elo: elo == null ? null : Math.round(elo), games: r[`team_${side}_games`] ?? 0,
+  }
+}
+
+// Running + upcoming tier-1 events (one per serie), soonest first.
+app.get('/events', async (c) => {
+  const rows = (await pool.query(
+    `SELECT * FROM tier1_events WHERE end_at IS NULL OR end_at > NOW() - INTERVAL '1 day'
+     ORDER BY live DESC, begin_at ASC NULLS LAST LIMIT 12`
+  ).catch(() => ({ rows: [] as any[] }))).rows // table appears after the first refresh
+  return c.json(rows.map((r) => ({
+    id: String(r.serie_id),
+    league: r.league, serie: r.serie, tier: r.tier, region: r.region, prizepool: r.prizepool,
+    beginAt: r.begin_at, endAt: r.end_at, live: r.live,
+    stages: r.stages || [], teams: r.teams || [],
   })))
 })
 

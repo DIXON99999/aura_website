@@ -6,7 +6,10 @@
 //   bun src/predict/ingest.ts                 # backfill + predict + settle
 //   bun src/predict/ingest.ts --predict-only  # skip the (slow) history backfill
 import pg from 'pg'
-import { paginate, upcoming, pastPage, matchDetail, type PSMatch } from './pandascore.js'
+import {
+  upcoming, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
+  type PSMatch, type PSTournament,
+} from './pandascore.js'
 import { applyMatch, predict, type Ratings } from './elo.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -183,6 +186,15 @@ async function ensureTables() {
     )`)
   await pool.query(`CREATE INDEX IF NOT EXISTS results_finished_at_idx ON results (finished_at DESC)`)
   await pool.query(`ALTER TABLE results ADD COLUMN IF NOT EXISTS replay_prob_a DOUBLE PRECISION`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tier1_events (
+      serie_id BIGINT PRIMARY KEY,
+      league TEXT, serie TEXT, tier TEXT, region TEXT, prizepool TEXT,
+      begin_at TIMESTAMPTZ, end_at TIMESTAMPTZ,
+      stages JSONB, teams JSONB,
+      live BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
 }
 
 async function loadRatings(): Promise<Ratings> {
@@ -312,17 +324,87 @@ function streamOf(m: PSMatch): string | null {
   return s?.raw_url || null
 }
 
+/** Refresh the tier-1 events list (running + upcoming S/A tournaments, grouped
+ *  by serie — a Major's stages become one event). Returns tournament ids whose
+ *  matches should be pulled even if they're beyond the generic upcoming page. */
+async function refreshEvents(): Promise<number[]> {
+  const running = await tier1Tournaments('running')
+  await sleep(1100)
+  const upcomingTs = await tier1Tournaments('upcoming')
+  const all = [...running, ...upcomingTs]
+  const bySerie = new Map<number, PSTournament[]>()
+  for (const t of all) bySerie.set(t.serie_id, [...(bySerie.get(t.serie_id) || []), t])
+
+  for (const [serieId, ts] of bySerie) {
+    ts.sort((a, b) => (a.begin_at || '').localeCompare(b.begin_at || ''))
+    const teams = new Map<number, { name: string; logo: string | null }>()
+    for (const t of ts) for (const tm of t.teams || []) teams.set(tm.id, { name: tm.name, logo: tm.image_url || null })
+    const first = ts[0]
+    const begin = ts.map((t) => t.begin_at).filter(Boolean).sort()[0] || null
+    const end = ts.map((t) => t.end_at).filter(Boolean).sort().at(-1) || null
+    await pool.query(
+      `INSERT INTO tier1_events (serie_id, league, serie, tier, region, prizepool, begin_at, end_at, stages, teams, live, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+       ON CONFLICT (serie_id) DO UPDATE SET league=EXCLUDED.league, serie=EXCLUDED.serie, tier=EXCLUDED.tier,
+         region=EXCLUDED.region, prizepool=EXCLUDED.prizepool, begin_at=EXCLUDED.begin_at, end_at=EXCLUDED.end_at,
+         stages=EXCLUDED.stages, teams=EXCLUDED.teams, live=EXCLUDED.live, updated_at=NOW()`,
+      [
+        serieId, first.league?.name || null, first.serie?.full_name || null, first.tier,
+        first.region, ts.map((t) => t.prizepool).find(Boolean) || null, begin, end,
+        JSON.stringify(ts.map((t) => ({ name: t.name, beginAt: t.begin_at, endAt: t.end_at }))),
+        JSON.stringify([...teams.values()]),
+        ts.some((t) => running.includes(t)),
+      ]
+    )
+  }
+  await pool.query(`DELETE FROM tier1_events WHERE NOT (serie_id = ANY($1::bigint[]))`, [[...bySerie.keys()]])
+  console.log(`[events] ${bySerie.size} tier-1 events (${running.length} running / ${upcomingTs.length} upcoming tournaments)`)
+  return all.map((t) => t.id)
+}
+
 async function predictUpcoming(r: Ratings) {
-  const ms = await upcoming(100)
+  // generic soonest-100 page + every scheduled match of a tier-1 tournament
+  // (big events are often further out than the generic page reaches)
+  const tier1Ids = await refreshEvents()
+  await sleep(1100)
+  const [generic, tier1] = [await upcoming(100), await upcomingForTournaments(tier1Ids)]
+  const ms = [...new Map([...generic, ...tier1].map((m) => [m.id, m])).values()]
   const h2h = await loadH2H()
   let n = 0
+  let tbd = 0
   let skipped = 0
   const written: number[] = []
   for (const m of ms) {
     if (!shouldShow(m)) { skipped++; continue }
-    const p = modelProb(r, h2h, m)
-    if (!p) continue
     const logoOf = (id: number) => (m.opponents || []).find((o) => o.opponent?.id === id)?.opponent?.image_url || null
+    const p = modelProb(r, h2h, m)
+    if (!p) {
+      // teams not decided yet — keep tier-1 placeholders ("TBD vs TBD")
+      if (!isTier1(m)) continue
+      const known = (m.opponents || []).map((o) => o.opponent).filter((o) => o?.id) as { id: number; name?: string; image_url?: string }[]
+      const [a, b] = known
+      await pool.query(
+        `INSERT INTO predictions (
+           match_id, name, scheduled_at, league, bo, team_a_id, team_a_name, team_a_logo,
+           team_b_id, team_b_name, team_b_logo, prob_a, model_version, status, stream_url, tier, serie, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULL,$12,'upcoming',$13,$14,$15,NOW())
+         ON CONFLICT (match_id) DO UPDATE SET
+           name=EXCLUDED.name, scheduled_at=EXCLUDED.scheduled_at, bo=EXCLUDED.bo,
+           team_a_id=EXCLUDED.team_a_id, team_a_name=EXCLUDED.team_a_name, team_a_logo=EXCLUDED.team_a_logo,
+           team_b_id=EXCLUDED.team_b_id, team_b_name=EXCLUDED.team_b_name, team_b_logo=EXCLUDED.team_b_logo,
+           team_a_elo=NULL, team_b_elo=NULL, prob_a=NULL, stream_url=EXCLUDED.stream_url, updated_at=NOW()
+         WHERE predictions.status <> 'finished'`,
+        [
+          m.id, m.name, m.scheduled_at, m.league?.name || null, m.number_of_games || 1,
+          a?.id ?? null, a?.name ?? null, a?.image_url ?? null,
+          b?.id ?? null, b?.name ?? null, b?.image_url ?? null,
+          MODEL, streamOf(m), m.tournament?.tier || null, m.serie?.full_name || null,
+        ]
+      )
+      written.push(m.id)
+      tbd++
+      continue
+    }
     await pool.query(
       `INSERT INTO predictions (
          match_id, name, scheduled_at, league, bo,
@@ -331,7 +413,9 @@ async function predictUpcoming(r: Ratings) {
          prob_a, model_version, status, stream_url, team_a_logo, team_b_logo, tier, serie, updated_at
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'upcoming',$16,$17,$18,$19,$20,NOW())
        ON CONFLICT (match_id) DO UPDATE SET
-         scheduled_at=EXCLUDED.scheduled_at, bo=EXCLUDED.bo, tier=EXCLUDED.tier, serie=EXCLUDED.serie,
+         name=EXCLUDED.name, scheduled_at=EXCLUDED.scheduled_at, bo=EXCLUDED.bo, tier=EXCLUDED.tier, serie=EXCLUDED.serie,
+         team_a_id=EXCLUDED.team_a_id, team_a_name=EXCLUDED.team_a_name,
+         team_b_id=EXCLUDED.team_b_id, team_b_name=EXCLUDED.team_b_name,
          team_a_elo=EXCLUDED.team_a_elo, team_a_games=EXCLUDED.team_a_games,
          team_b_elo=EXCLUDED.team_b_elo, team_b_games=EXCLUDED.team_b_games,
          prob_a=EXCLUDED.prob_a, model_version=EXCLUDED.model_version,
@@ -356,12 +440,12 @@ async function predictUpcoming(r: Ratings) {
     `DELETE FROM predictions WHERE status='upcoming' AND scheduled_at > NOW() AND NOT (match_id = ANY($1::bigint[]))`,
     [written]
   )
-  console.log(`[predict] wrote ${n} upcoming predictions (skipped ${skipped} no-name matchups)`)
+  console.log(`[predict] wrote ${n} upcoming predictions + ${tbd} TBD placeholders (skipped ${skipped} no-name matchups)`)
 
   // show the soonest 12
   const rows = (await pool.query(
     `SELECT scheduled_at, league, team_a_name, team_b_name, prob_a, bo, team_a_games, team_b_games
-     FROM predictions WHERE status='upcoming' ORDER BY scheduled_at ASC LIMIT 12`
+     FROM predictions WHERE status='upcoming' AND prob_a IS NOT NULL ORDER BY scheduled_at ASC LIMIT 12`
   )).rows
   console.log('\nNext matches:')
   for (const r of rows) {

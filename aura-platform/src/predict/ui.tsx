@@ -91,22 +91,67 @@ function OrgTab({ t }: { t: OrgTheme }) {
   )
 }
 
+// Playoff stage from a PandaScore match name ("Upper Bracket Semifinal 2: A vs B",
+// "Grand final: ...") — a medal ladder so the big games stand out.
+export interface Stage { label: string; level: 'qf' | 'sf' | 'gf'; bg: string }
+const STAGE_BG = { qf: '#c98a4b', sf: '#c3cad4', gf: '#ffc93c' }
+export function stageOf(matchName: string | null | undefined): Stage | null {
+  const r = (matchName || '').split(':')[0].toLowerCase()
+  const br = /upper bracket/.test(r) ? 'UB ' : /lower bracket/.test(r) ? 'LB ' : ''
+  let s: Omit<Stage, 'bg'> | null = null
+  if (/grand final/.test(r)) s = { label: 'Grand Final', level: 'gf' }
+  else if (/semi-?final/.test(r)) s = { label: `${br}Semifinal`, level: 'sf' }
+  else if (/quarter-?final/.test(r)) s = { label: `${br}Quarterfinal`, level: 'qf' }
+  else if (br && /\bfinal\b/.test(r)) s = { label: `${br}Final`, level: 'sf' }
+  else if (/^final\b/.test(r.trim())) s = { label: 'Grand Final', level: 'gf' }
+  return s && { ...s, bg: STAGE_BG[s.level] }
+}
+
+function StageBadge({ s }: { s: Stage }) {
+  return (
+    <span
+      className={`shrink-0 rounded px-1.5 py-[3px] text-[10px] font-extrabold leading-none tracking-wider text-black ${
+        s.level === 'gf' ? 'shadow-[0_0_10px_rgba(255,201,60,0.45)]' : ''
+      }`}
+      style={{ background: s.bg }}
+    >
+      {s.label}
+    </span>
+  )
+}
+
 /** Match card; organizer shown as a corner tab. `event` is the full event
- *  name; `right` sits at the header's right edge (time, tier badge...). */
-export function ThemedCard({ league, event, right, bodyClassName = '', children }: {
-  league: string | null; event: string; right?: ReactNode; bodyClassName?: string; children: ReactNode
+ *  name; `right` sits at the header's right edge (time, tier badge...);
+ *  `matchName` (if given) adds a QF / SF / Grand Final badge. */
+const TONE_BG = {
+  neutral: 'bg-white/[0.035] hover:bg-white/[0.055]',
+  good: 'bg-emerald-500/[0.13] hover:bg-emerald-500/[0.17]',
+  bad: 'bg-rose-500/[0.13] hover:bg-rose-500/[0.17]',
+}
+
+export function ThemedCard({ league, event, matchName, right, tone = 'neutral', bodyClassName = '', children }: {
+  league: string | null; event: string; matchName?: string | null; right?: ReactNode
+  /** tints the whole card — used on History for a correct / wrong pick */
+  tone?: keyof typeof TONE_BG
+  bodyClassName?: string; children: ReactNode
 }) {
   const t = orgTheme(league)
   const shown = t ? event.replace(t.prefix, '') : event
+  const stage = stageOf(matchName)
   return (
-    <div className="overflow-hidden rounded-2xl bg-white/[0.035] transition-colors hover:bg-white/[0.055]">
+    <div
+      className={`overflow-hidden rounded-2xl transition-colors ${TONE_BG[tone]} ${
+        stage?.level === 'gf' ? 'ring-1 ring-[#ffc93c]/70 shadow-[0_0_24px_-6px_rgba(255,201,60,0.35)]' : ''
+      }`}
+    >
       <div
         className="flex min-h-[32px] items-stretch justify-between gap-3 pr-4 text-[11px] font-semibold uppercase tracking-wide text-neutral-500"
-        title={event}
+        title={matchName ? `${event} — ${matchName}` : event}
       >
         <span className="flex min-w-0 items-stretch">
           {t && <OrgTab t={t} />}
-          <span className={`flex min-w-0 items-center ${t ? 'pl-2' : 'pl-4'}`}>
+          <span className={`flex min-w-0 items-center gap-2 ${t ? 'pl-2' : 'pl-4'}`}>
+            {stage && <StageBadge s={stage} />}
             <span className="truncate">{shown}</span>
           </span>
         </span>
@@ -141,8 +186,10 @@ export function TeamLogo({ name, logo, size = 44 }: { name: string; logo?: strin
   const show = logo && !broken
   return (
     <div
-      className="grid place-items-center overflow-hidden rounded-xl shrink-0 ring-1 ring-white/10"
-      style={{ width: size, height: size, background: show ? 'rgba(255,255,255,0.04)' : bg }}
+      // real logos sit unframed (no rounding/clipping, so wide marks like MOUZ
+      // aren't cut at the corners); only the monogram fallback gets a tile
+      className={`grid shrink-0 place-items-center ${show ? '' : 'overflow-hidden rounded-xl ring-1 ring-white/10'}`}
+      style={{ width: size, height: size, background: show ? 'transparent' : bg }}
       aria-hidden
     >
       {show ? (
@@ -150,7 +197,7 @@ export function TeamLogo({ name, logo, size = 44 }: { name: string; logo?: strin
           src={logo!}
           alt=""
           onError={() => setBroken(true)}
-          className="h-[78%] w-[78%] object-contain"
+          className="h-[90%] w-[90%] object-contain"
           loading="lazy"
         />
       ) : (
