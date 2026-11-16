@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { getUpcoming, getEvents, eventName, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
-import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink } from './ui'
+import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink, LiveBadge, MapPips } from './ui'
 import { stageOf } from './stage'
 
 import { dayAndClock as timeLabel, shortDate } from './time'
 import CalendarView from './Calendar'
+import { usePoll } from './usePoll'
 
 const pct = (x: number) => Math.round(x * 100)
 
@@ -23,13 +24,17 @@ function TbdLogo({ size = 44 }: { size?: number }) {
 }
 
 function MatchCard({ m }: { m: Prediction }) {
-  const priced = m.probA != null && m.probB != null && m.teamA && m.teamB
-  const aFav = priced && m.probA! >= m.probB!
+  const live = m.live
+  // while live, the big numbers are the odds re-priced from the map score
+  const probA = live?.probA ?? m.probA
+  const probB = probA == null ? null : 1 - probA
+  const priced = probA != null && probB != null && m.teamA && m.teamB
+  const aFav = priced && probA! >= probB!
   const cold = priced && Math.min(m.teamA!.games, m.teamB!.games) < 5
   // playoff rounds get a header badge; show other rounds ("Round 1") in the footer
   const round = stageOf(m.name) ? null : roundOf(m.name)
 
-  const Side = ({ team, prob, fav, align }: { team: Team | null; prob: number | null; fav: boolean; align: 'left' | 'right' }) => (
+  const Side = ({ team, prob, pre, fav, align }: { team: Team | null; prob: number | null; pre: number | null; fav: boolean; align: 'left' | 'right' }) => (
     <div className={`flex min-w-0 flex-1 items-center gap-3 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
       {team ? <TeamLogo name={team.name} logo={team.logo} /> : <TbdLogo />}
       <div className="min-w-0">
@@ -43,37 +48,52 @@ function MatchCard({ m }: { m: Prediction }) {
         ) : (
           <div className="font-display text-2xl font-bold text-neutral-700">–</div>
         )}
+        {live && pre != null && pct(pre) !== pct(prob ?? pre) && (
+          <div className="text-[10px] tabular-nums text-neutral-500">was {pct(pre)}%</div>
+        )}
       </div>
     </div>
   )
 
   return (
-    <CardLink to={`/match/${m.matchId}`} label={`${m.teamA?.name ?? "TBD"} vs ${m.teamB?.name ?? "TBD"}`}>
+    <CardLink to={`/match/${m.matchId}`} label={`${m.teamA?.name ?? "TBD"} vs ${m.teamB?.name ?? "TBD"}${live ? ' (live)' : ''}`}>
     <ThemedCard
       league={m.league}
       event={`${eventName(m.league, m.serie)} · BO${m.bo}`}
       matchName={m.name}
-      right={timeLabel(m.scheduledAt)}
+      right={live ? <LiveBadge /> : timeLabel(m.scheduledAt)}
       bodyClassName="p-4"
     >
       <div className="flex items-center gap-2">
-        <Side team={m.teamA} prob={m.probA} fav={!!aFav} align="left" />
-        <span className="font-display text-xs font-medium text-neutral-600">VS</span>
-        <Side team={m.teamB} prob={m.probB} fav={priced ? !aFav : false} align="right" />
+        <Side team={m.teamA} prob={probA} pre={m.probA} fav={!!aFav} align="left" />
+        {live ? (
+          <span className="shrink-0 font-display text-xl font-bold tabular-nums text-white">
+            {live.scoreA}<span className="mx-1 text-neutral-600">–</span>{live.scoreB}
+          </span>
+        ) : (
+          <span className="font-display text-xs font-medium text-neutral-600">VS</span>
+        )}
+        <Side team={m.teamB} prob={probB} pre={m.probB} fav={priced ? !aFav : false} align="right" />
       </div>
 
       {/* split probability bar (empty track until both teams are known) */}
       <div className="mt-3.5 flex h-2 w-full overflow-hidden rounded-full bg-neutral-800/80">
         {priced && <>
-          <div className="bg-emerald-500/90 transition-all" style={{ width: `${pct(m.probA!)}%` }} />
-          <div className="bg-sky-500/90 transition-all" style={{ width: `${pct(m.probB!)}%` }} />
+          <div className="bg-emerald-500/90 transition-all duration-700" style={{ width: `${pct(probA!)}%` }} />
+          <div className="bg-sky-500/90 transition-all duration-700" style={{ width: `${pct(probB!)}%` }} />
         </>}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
-        <span className="truncate font-display tabular-nums text-neutral-500">
-          {priced ? `Elo ${m.teamA!.elo} · ${m.teamB!.elo}` : 'Teams to be determined'}
-          {round && <span className="text-neutral-600"> · {round}</span>}
+        <span className="flex min-w-0 items-center gap-2 truncate font-display tabular-nums text-neutral-500">
+          {live ? (
+            <><MapPips maps={live.maps} bo={m.bo} /><span className="truncate">Odds update after each map</span></>
+          ) : (
+            <span className="truncate">
+              {priced ? `Elo ${m.teamA!.elo} · ${m.teamB!.elo}` : 'Teams to be determined'}
+              {round && <span className="text-neutral-600"> · {round}</span>}
+            </span>
+          )}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {m.maps?.length ? (
@@ -168,7 +188,9 @@ function loadView(): View {
 }
 
 export default function Upcoming() {
-  const [tier, setTier] = useState<TierFilter>('tier1')
+  // default Tier 1; ?tier=other opens the Other tab (shareable links)
+  const [tier, setTier] = useState<TierFilter>(() =>
+    new URLSearchParams(window.location.search).get('tier') === 'other' ? 'other' : 'tier1')
   const [view, setViewState] = useState<View>(loadView)
   const setView = (v: View) => {
     setViewState(v)
@@ -183,6 +205,8 @@ export default function Upcoming() {
     setData(null)
     getUpcoming(tier).then(setData).catch((e) => setErr(String(e)))
   }, [tier])
+  // while any match is live, refresh scores + odds every 30s (silently, no spinner)
+  usePoll(!!data?.some((m) => m.live), () => { getUpcoming(tier).then(setData).catch(() => {}) })
 
   if (err) return <ErrorNote msg={err} />
   const copy = COPY[tier]

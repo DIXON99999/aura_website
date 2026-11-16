@@ -7,13 +7,13 @@
 //   bun src/predict/ingest.ts --predict-only  # skip the (slow) history backfill
 import pg from 'pg'
 import {
-  upcoming, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
+  upcoming, running, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
   type PSMatch, type PSTournament,
 } from './pandascore.js'
 import { applyMatch, isLan, type Ratings } from './elo.js'
 import { CURRENT_MODEL } from './model.js'
 import {
-  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
+  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, liveStateFrom, liveProbA, type H2HMap,
 } from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -112,6 +112,12 @@ async function ensureTables() {
   await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS serie TEXT`)
   await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_a INTEGER`)
   await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_b INTEGER`)
+  // live state, written by pollLive every minute while a match is running
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS live_score_a INTEGER`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS live_score_b INTEGER`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS live_maps JSONB`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS live_prob_a DOUBLE PRECISION`)
+  await pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS live_updated_at TIMESTAMPTZ`)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS results (
       match_id BIGINT PRIMARY KEY,
@@ -397,7 +403,7 @@ async function predictUpcoming(r: Ratings) {
            team_a_id=EXCLUDED.team_a_id, team_a_name=EXCLUDED.team_a_name, team_a_logo=EXCLUDED.team_a_logo,
            team_b_id=EXCLUDED.team_b_id, team_b_name=EXCLUDED.team_b_name, team_b_logo=EXCLUDED.team_b_logo,
            team_a_elo=NULL, team_b_elo=NULL, prob_a=NULL, stream_url=EXCLUDED.stream_url, updated_at=NOW()
-         WHERE predictions.status <> 'finished'`,
+         WHERE predictions.status NOT IN ('finished', 'live')`,
         [
           m.id, m.name, m.scheduled_at, m.league?.name || null, m.number_of_games || 1,
           a?.id ?? null, a?.name ?? null, a?.image_url ?? null,
@@ -425,7 +431,7 @@ async function predictUpcoming(r: Ratings) {
          prob_a=EXCLUDED.prob_a, model_version=EXCLUDED.model_version,
          stream_url=EXCLUDED.stream_url, team_a_logo=EXCLUDED.team_a_logo,
          team_b_logo=EXCLUDED.team_b_logo, updated_at=NOW()
-       WHERE predictions.status <> 'finished'`,
+       WHERE predictions.status NOT IN ('finished', 'live')`,
       [
         m.id, m.name, m.scheduled_at, m.league?.name || null, p.bo,
         p.teamA.id, p.teamA.name, p.teamA.elo, p.teamA.games,
@@ -524,6 +530,51 @@ export async function runRefresh(): Promise<void> {
   const hasHistory = (await pool.query('SELECT 1 FROM results LIMIT 1')).rowCount
   await settleRecent(hasHistory ? 2 : 15)
   await captureMaps()
+}
+
+let tablesReady: Promise<void> | null = null
+/** live matches we've already tried to settle early (once each; the 30m refresh catches the rest) */
+const settleTried = new Set<number>()
+
+/** Every minute: mark predicted matches that are in progress as 'live' with
+ *  the map score and odds re-priced from that score; when a live match drops
+ *  out of the running feed, settle it straight away. Returns #live matches. */
+export async function pollLive(): Promise<number> {
+  tablesReady ??= ensureTables()
+  await tablesReady
+  const ms = await running()
+  const byId = new Map(ms.map((m) => [m.id, m]))
+  const rows = (await pool.query(
+    `SELECT match_id, team_a_id, prob_a, bo, status FROM predictions
+     WHERE match_id = ANY($1::bigint[])
+        OR (status = 'live' AND live_updated_at > NOW() - INTERVAL '6 hours')`,
+    [[...byId.keys()]]
+  )).rows
+  let live = 0
+  let ended = 0
+  for (const row of rows) {
+    const m = byId.get(Number(row.match_id))
+    if (!m) {
+      if (row.status === 'live' && !settleTried.has(Number(row.match_id))) { settleTried.add(Number(row.match_id)); ended++ }
+      continue
+    }
+    if (row.team_a_id == null || row.status === 'finished') continue // TBD placeholder / already settled
+    const s = liveStateFrom(m, row.team_a_id)
+    const bo = row.bo || m.number_of_games || 1
+    const prob = row.prob_a == null ? null : liveProbA(row.prob_a, bo, s.scoreA, s.scoreB)
+    await pool.query(
+      `UPDATE predictions SET status='live', live_score_a=$2, live_score_b=$3, live_maps=$4,
+         live_prob_a=$5, live_updated_at=NOW()
+       WHERE match_id=$1 AND status <> 'finished'`,
+      [row.match_id, s.scoreA, s.scoreB, JSON.stringify(s.maps), prob]
+    )
+    live++
+  }
+  if (ended) {
+    console.log(`[live] ${ended} match(es) ended — settling`)
+    await settleRecent(1)
+  }
+  return live
 }
 
 async function main() {

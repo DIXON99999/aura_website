@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getMatch, eventName, type MatchDetail as Detail, type TeamDetail, type RecentMatch } from './api'
-import { TeamLogo, Spinner, ThemedCard } from './ui'
+import { TeamLogo, Spinner, ThemedCard, LiveBadge, MapPips } from './ui'
+import { usePoll } from './usePoll'
 import { dayAndClock, shortDate } from './time'
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -26,10 +27,13 @@ const Panel = ({ children, className = '' }: { children: ReactNode; className?: 
 // ── Hero ─────────────────────────────────────────────────────────────────────
 function Hero({ d }: { d: Detail }) {
   const finished = d.status === 'finished'
+  const live = d.live
+  // while live, show the odds re-priced from the current map score
+  const shownProbA = live?.probA ?? d.probA
   const aWon = finished && d.winnerId != null && d.winnerId === d.teamA?.id
   const bWon = finished && d.winnerId != null && d.winnerId === d.teamB?.id
   const Side = ({ t, side }: { t: TeamDetail | null; side: 'a' | 'b' }) => {
-    const prob = d.probA == null ? null : side === 'a' ? d.probA : 1 - d.probA
+    const prob = shownProbA == null ? null : side === 'a' ? shownProbA : 1 - shownProbA
     const won = side === 'a' ? aWon : bWon
     const fav = prob != null && prob >= 0.5
     const big = finished ? d.score?.[side === 'a' ? 0 : 1] ?? '–' : prob != null ? pct(prob) : '–'
@@ -55,30 +59,42 @@ function Hero({ d }: { d: Detail }) {
       league={d.league}
       event={`${eventName(d.league, d.serie)}${d.bo ? ` · BO${d.bo}` : ''}`}
       matchName={d.name}
-      right={d.scheduledAt ? dayAndClock(d.scheduledAt) : null}
+      right={live ? <LiveBadge /> : d.scheduledAt ? dayAndClock(d.scheduledAt) : null}
       tone={d.correct == null ? 'neutral' : d.correct ? 'good' : 'bad'}
       bodyClassName="p-5"
     >
       <div className="flex items-start gap-3">
         <Side t={d.teamA} side="a" />
-        <div className="pt-7 font-display text-sm font-medium text-neutral-600">{finished ? 'FINAL' : 'VS'}</div>
+        {live ? (
+          <div className="flex flex-col items-center gap-2 pt-5">
+            <div className="font-display text-3xl font-bold tabular-nums text-white">
+              {live.scoreA}<span className="mx-1.5 text-neutral-600">–</span>{live.scoreB}
+            </div>
+            <MapPips maps={live.maps} bo={d.bo ?? live.maps.length} />
+            <div className="text-[10px] uppercase tracking-wider text-neutral-500">maps</div>
+          </div>
+        ) : (
+          <div className="pt-7 font-display text-sm font-medium text-neutral-600">{finished ? 'FINAL' : 'VS'}</div>
+        )}
         <Side t={d.teamB} side="b" />
       </div>
-      {d.probA != null && (
+      {shownProbA != null && (
         <div className="mt-5">
           <div className="flex h-2 w-full overflow-hidden rounded-full bg-neutral-800/80">
-            <div className="bg-emerald-500/90" style={{ width: `${d.probA * 100}%` }} />
-            <div className="bg-sky-500/90" style={{ width: `${(1 - d.probA) * 100}%` }} />
+            <div className="bg-emerald-500/90 transition-all duration-700" style={{ width: `${shownProbA * 100}%` }} />
+            <div className="bg-sky-500/90 transition-all duration-700" style={{ width: `${(1 - shownProbA) * 100}%` }} />
           </div>
-          <div className="mt-2 flex justify-between text-[11px] text-neutral-500">
+          <div className="mt-2 flex justify-between gap-3 text-[11px] text-neutral-500">
             <span>
               {finished
-                ? `Model's pre-match prediction: ${d.teamA?.name ?? 'TBD'} ${pct(d.probA)} · ${d.teamB?.name ?? 'TBD'} ${pct(1 - d.probA)}`
-                : 'Model win probability'}
+                ? `Model's pre-match prediction: ${d.teamA?.name ?? 'TBD'} ${pct(d.probA!)} · ${d.teamB?.name ?? 'TBD'} ${pct(1 - d.probA!)}`
+                : live && d.probA != null
+                  ? `Live odds from the map score · pre-match ${d.teamA?.name ?? 'TBD'} ${pct(d.probA)} · ${d.teamB?.name ?? 'TBD'} ${pct(1 - d.probA)}`
+                  : 'Model win probability'}
               {d.model ? ` · ${d.model}` : ''}
             </span>
             {!finished && d.streamUrl && (
-              <a href={d.streamUrl} target="_blank" rel="noreferrer" className="font-medium text-emerald-400 hover:text-emerald-300">Watch ↗</a>
+              <a href={d.streamUrl} target="_blank" rel="noreferrer" className="shrink-0 font-medium text-emerald-400 hover:text-emerald-300">Watch ↗</a>
             )}
           </div>
         </div>
@@ -140,6 +156,15 @@ function Why({ d }: { d: Detail }) {
           {settling.length > 1 ? 'are' : 'is'} still new to the model — {settling.length > 1 ? 'their ratings are' : 'its rating is'} settling, so treat this with extra caution.
         </p>
       )}
+      {d.live && d.live.probA != null && (() => {
+        const l = d.live!, lp = favA ? l.probA! : 1 - l.probA!
+        const lead = l.scoreA === l.scoreB ? `Level at ${l.scoreA}–${l.scoreB}` : `${l.scoreA > l.scoreB ? a.name : b.name} leads ${Math.max(l.scoreA, l.scoreB)}–${Math.min(l.scoreA, l.scoreB)}`
+        return (
+          <p className="mt-2.5 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            <b className="text-rose-300">Live:</b> {lead} → {fav.name} now {pct(lp)} (was {pct(f(e.finalProbA))} before the match). The breakdown above is the pre-match prediction.
+          </p>
+        )
+      })()}
     </section>
   )
 }
@@ -360,6 +385,8 @@ export default function MatchDetail() {
     getMatch(id!).then(setD).catch((e) => setErr(String(e)))
     window.scrollTo(0, 0)
   }, [id])
+  // live matches: refresh the score and odds every 30s
+  usePoll(d?.status === "live", () => { getMatch(id!).then(setD).catch(() => {}) })
 
   const back = (
     <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}

@@ -22,11 +22,14 @@ app.get('/upcoming', async (c) => {
     `SELECT match_id, name, scheduled_at, league, serie, bo, tier,
             team_a_id, team_a_name, team_a_elo, team_a_games, team_a_logo,
             team_b_id, team_b_name, team_b_elo, team_b_games, team_b_logo,
-            prob_a, model_version, stream_url, maps
+            prob_a, model_version, stream_url, maps, status,
+            live_score_a, live_score_b, live_maps, live_prob_a, live_updated_at
      FROM predictions
-     WHERE status = 'upcoming' AND scheduled_at > NOW() - INTERVAL '3 hours'
+     WHERE ((status = 'upcoming' AND scheduled_at > NOW() - INTERVAL '3 hours')
+            -- live rows the poller has touched recently (a stuck row ages out)
+            OR (status = 'live' AND live_updated_at > NOW() - INTERVAL '6 hours'))
        ${tierClause(c.req.query('tier'))}
-     ORDER BY scheduled_at ASC
+     ORDER BY (status = 'live') DESC, scheduled_at ASC
      LIMIT 100`
   )).rows
   return c.json(rows.map((r) => ({
@@ -43,10 +46,24 @@ app.get('/upcoming', async (c) => {
     // team is null while still to be determined; prob is null until both are known
     teamA: teamOf(r, 'a'),
     teamB: teamOf(r, 'b'),
+    // pre-match prediction (what the model said before the start)
     probA: r.prob_a ?? null,
     probB: r.prob_a == null ? null : 1 - r.prob_a,
+    live: liveOf(r),
   })))
 })
+
+/** Live block for a predictions row, or null when the match isn't live. */
+function liveOf(r: any) {
+  if (r?.status !== 'live') return null
+  return {
+    scoreA: r.live_score_a ?? 0,
+    scoreB: r.live_score_b ?? 0,
+    maps: r.live_maps || [],
+    probA: r.live_prob_a ?? null,
+    updatedAt: r.live_updated_at,
+  }
+}
 
 function teamOf(r: any, side: 'a' | 'b') {
   const id = r[`team_${side}_id`]
@@ -275,7 +292,8 @@ app.get('/match/:id', async (c) => {
     tier: src.tier ?? null,
     bo: p?.bo ?? done?.bo ?? null,
     scheduledAt: p?.scheduled_at ?? res?.finished_at ?? log?.played_at ?? null,
-    status: finished ? 'finished' : 'upcoming',
+    status: finished ? 'finished' : p?.status === 'live' ? 'live' : 'upcoming',
+    live: finished ? null : liveOf(p),
     streamUrl: p?.stream_url ?? null,
     score,
     winnerId,

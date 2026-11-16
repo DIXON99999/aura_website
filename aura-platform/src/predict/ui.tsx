@@ -2,6 +2,41 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { stageOf, type Stage } from './stage'
 
+/** Pulsing red LIVE marker. */
+export function LiveBadge({ className = '' }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 font-bold text-rose-400 ${className}`}>
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+      </span>
+      LIVE
+    </span>
+  )
+}
+
+/** One pip per map of a live series: filled in the winner's colour, ringed
+ *  while being played, hollow if not started. Team A = emerald, B = sky. */
+export function MapPips({ maps, bo }: { maps: { position: number; status: string; winner: 'a' | 'b' | null }[]; bo: number }) {
+  const slots = Array.from({ length: Math.max(bo, maps.length) }, (_, i) => maps.find((m) => m.position === i + 1) ?? null)
+  return (
+    <span className="inline-flex items-center gap-1" aria-label="Maps">
+      {slots.map((m, i) => (
+        <span
+          key={i}
+          title={m ? `Map ${i + 1}: ${m.status === 'finished' ? `won by ${m.winner === 'a' ? 'left' : 'right'} team` : m.status === 'running' ? 'in progress' : 'not started'}` : `Map ${i + 1}`}
+          className={`h-2 w-2 rounded-full ${
+            m?.winner === 'a' ? 'bg-emerald-500'
+            : m?.winner === 'b' ? 'bg-sky-500'
+            : m?.status === 'running' ? 'animate-pulse bg-rose-500/80'
+            : 'bg-white/15'
+          }`}
+        />
+      ))}
+    </span>
+  )
+}
+
 /** Makes a whole card open its match page. Uses an overlay link (not a
  *  wrapping <a>) so links inside the card stay valid — give those
  *  `relative z-20` to keep them clickable above the overlay. */

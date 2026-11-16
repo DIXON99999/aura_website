@@ -33,7 +33,13 @@ function MatchChip({ m }: { m: Prediction }) {
     >
       {m.teamA ? <TeamLogo name={m.teamA.name} logo={m.teamA.logo} size={16} /> : <span className="w-4 text-center text-[9px] text-neutral-600">?</span>}
       {m.teamB ? <TeamLogo name={m.teamB.name} logo={m.teamB.logo} size={16} /> : <span className="w-4 text-center text-[9px] text-neutral-600">?</span>}
-      <span className="ml-auto truncate text-[10px] tabular-nums text-neutral-400">{chipTime(m.scheduledAt)}</span>
+      {m.live ? (
+        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold tabular-nums text-rose-300">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />{m.live.scoreA}–{m.live.scoreB}
+        </span>
+      ) : (
+        <span className="ml-auto truncate text-[10px] tabular-nums text-neutral-400">{chipTime(m.scheduledAt)}</span>
+      )}
     </div>
   )
 }

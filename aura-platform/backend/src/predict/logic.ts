@@ -1,7 +1,7 @@
 // Pure prediction/ingest decisions — no database, no network, no env — so they
 // can be unit tested directly. ingest.ts and the routes call into these.
 import type { PSMatch } from './pandascore.js'
-import { predict, expected, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
+import { predict, expected, matchProbFromMap, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
 
 /** Matches the model can learn from: decisive, two real teams. */
 export function isScorable(m: PSMatch): boolean {
@@ -190,4 +190,63 @@ export function formString(results: { winnerId: string | number | null }[], team
     .filter((x) => x.winnerId != null)
     .map((x) => (String(x.winnerId) === String(teamId) ? 'W' : 'L'))
     .join('')
+}
+
+// ── Live matches ─────────────────────────────────────────────────────────────
+/** The per-map win probability that gives `seriesProbA` over a best-of-`bo`
+ *  (inverse of matchProbFromMap). Used so live odds start from the exact
+ *  pre-match number, head-to-head blend included. */
+export function impliedMapProb(seriesProbA: number, bo: number): number {
+  let lo = 0, hi = 1
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2
+    if (matchProbFromMap(mid, bo) < seriesProbA) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/** P(team A wins a best-of-`bo`) when A has won `aWon` maps and B `bWon`,
+ *  with each remaining map won by A with probability `pMap` (maps iid). */
+export function seriesProbGivenScore(pMap: number, bo: number, aWon: number, bWon: number): number {
+  const need = Math.floor(Math.max(bo, 1) / 2) + 1
+  if (aWon >= need) return 1
+  if (bWon >= need) return 0
+  const ra = need - aWon, rb = need - bWon
+  // A takes ra more maps while B takes k < rb: C(ra-1+k, k) pMap^ra (1-pMap)^k
+  let prob = 0
+  for (let k = 0; k < rb; k++) {
+    let c = 1
+    for (let i = 1; i <= k; i++) c = (c * (ra - 1 + i)) / i
+    prob += c * Math.pow(pMap, ra) * Math.pow(1 - pMap, k)
+  }
+  return prob
+}
+
+export interface LiveMap { position: number; status: 'finished' | 'running' | 'not_started'; winner: 'a' | 'b' | null }
+export interface LiveState { scoreA: number; scoreB: number; maps: LiveMap[] }
+
+/** A PandaScore running match → map score + per-map status, oriented so that
+ *  `a` is `teamAId` (our stored team A — PandaScore may list them the other way). */
+export function liveStateFrom(m: Pick<PSMatch, 'opponents' | 'results' | 'games'>, teamAId: number | string): LiveState {
+  const a = String(teamAId)
+  const ids = (m.opponents || []).map((o) => String(o.opponent?.id))
+  const b = ids.find((x) => x !== a) ?? ''
+  const winnerSide = (id?: number) => (id == null ? null : String(id) === a ? 'a' : String(id) === b ? 'b' : null)
+  const maps: LiveMap[] = [...(m.games || [])]
+    .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+    .map((g, i) => ({
+      position: g.position ?? i + 1,
+      status: g.finished || g.status === 'finished' ? 'finished' : g.status === 'running' ? 'running' : 'not_started',
+      winner: g.finished || g.status === 'finished' ? winnerSide(g.winner?.id) : null,
+    }))
+  // prefer PandaScore's running score; fall back to counting finished maps
+  const fromResults = (id: string) => m.results?.find((r) => String(r.team_id) === id)?.score
+  const count = (side: 'a' | 'b') => maps.filter((x) => x.winner === side).length
+  return { scoreA: fromResults(a) ?? count('a'), scoreB: fromResults(b) ?? count('b'), maps }
+}
+
+/** Live odds for team A from the pre-match series probability and the score. */
+export function liveProbA(preProbA: number, bo: number, scoreA: number, scoreB: number): number {
+  return seriesProbGivenScore(impliedMapProb(preProbA, bo), bo, scoreA, scoreB)
 }

@@ -1,13 +1,23 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 export interface Team { id: string; name: string; elo: number | null; games: number; logo?: string | null }
+/** In-progress match state (updated every minute by the backend). */
+export interface LiveInfo {
+  scoreA: number; scoreB: number
+  maps: { position: number; status: 'finished' | 'running' | 'not_started'; winner: 'a' | 'b' | null }[]
+  /** odds re-priced from the current map score (null if the match wasn't priced) */
+  probA: number | null
+  updatedAt: string
+}
 export interface Prediction {
   matchId: string; name: string; scheduledAt: string; league: string | null; serie: string | null
   bo: number; tier: string | null; streamUrl: string | null; model: string; maps?: string[] | null
   /** null while the team is still to be determined */
   teamA: Team | null; teamB: Team | null
-  /** null until both teams are known */
+  /** pre-match prediction; null until both teams are known */
   probA: number | null; probB: number | null
+  /** set while the match is in progress */
+  live: LiveInfo | null
 }
 export interface TourEvent {
   id: string; league: string | null; serie: string | null; tier: string | null
@@ -79,7 +89,8 @@ export interface Explanation {
 export interface MatchDetail {
   matchId: string; name: string
   league: string | null; serie: string | null; tier: string | null; bo: number | null
-  scheduledAt: string | null; status: 'upcoming' | 'finished'
+  scheduledAt: string | null; status: 'upcoming' | 'live' | 'finished'
+  live: LiveInfo | null
   streamUrl: string | null
   /** [team A, team B] */
   score: [number | null, number | null] | null

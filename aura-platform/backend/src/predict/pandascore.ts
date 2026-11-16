@@ -10,7 +10,7 @@ export interface PSOpponent {
   type?: string
   opponent?: { id?: number; name?: string; image_url?: string; dark_mode_image_url?: string | null; location?: string | null }
 }
-export interface PSGame { position?: number; finished?: boolean; winner?: { id?: number } }
+export interface PSGame { position?: number; finished?: boolean; status?: string; winner?: { id?: number } }
 export interface PSMatch {
   id: number
   name: string
@@ -59,6 +59,11 @@ export async function paginate(path: string, maxPages = 500): Promise<PSMatch[]>
 }
 
 /** Upcoming CS2 matches (one page is plenty — soonest first). */
+/** CS2 matches in progress right now (results = maps won so far). */
+export function running(): Promise<PSMatch[]> {
+  return get(`/csgo/matches/running?per_page=100`)
+}
+
 export function upcoming(perPage = 50): Promise<PSMatch[]> {
   return get(`/csgo/matches/upcoming?per_page=${perPage}&sort=scheduled_at`)
 }

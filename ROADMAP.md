@@ -11,12 +11,15 @@ _Last updated: 2026-11-16_
 - **Live features:** Matches tab (Tier 1 / Other, List / Calendar, tier-1 events
   incl. TBD matches), History tab (final scores, pre-match pick bar, green/red
   for correct/wrong), Accuracy tab, organizer corner tabs (BLAST/ESL/PGL/…),
-  playoff stage badges, all times in Melbourne time.
+  playoff stage badges, all times in Melbourne time, match detail pages,
+  live matches (map score + live odds, 60s poll).
 - **Model:** `elo-v3` (live since 2026-11-16) = v2 map-Elo + head-to-head, plus
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** 3. Live matches.
+- **Next up:** 4. Correct-prediction moment. **Also:** check live mode against a
+  real live match (PGL Major starts Tue 24 Nov, 3 pm AEDT) — so far it has only
+  been tested with a simulated live row.
 
 ## Up next (in order)
 
@@ -49,11 +52,21 @@ _Last updated: 2026-11-16_
 - Note: head-to-head can *lower* a favourite who leads the record (the blend
   pulls toward the shrunk H2H rate); the page says "pulls toward X%" for that reason.
 
-### 3. Live matches  ⬅ start here
-- [ ] LIVE state on cards with current map score (PandaScore per-game results).
-- [ ] Odds that update between maps.
+### 3. Live matches  ✅ done (2026-11-16)
+- [x] `pollLive` every 60s (`/csgo/matches/running`): predicted matches in
+      progress get `status='live'`, map score, per-map status, live odds; the
+      30m refresh never overwrites a live row. A match that leaves the running
+      feed is settled straight away (one early attempt; the 30m settle backs it up).
+- [x] Live odds = series probability from the current map score, starting from
+      the exact pre-match number (`impliedMapProb` → `seriesProbGivenScore` in
+      `logic.ts`). E.g. 57% favourite who takes map 1 of a BO3 → 79%.
+- [x] UI: LIVE badge, map score + map pips, live % with "was X%", live cards
+      first, 30s auto-refresh (paused in hidden tabs), calendar chip, match page.
+- Free tier has no round scores, so odds move between maps only.
+- ⚠ Only tested with a simulated live row (scratchpad `simlive.ts`) — verify
+  against a real live match.
 
-### 4. Correct-prediction moment
+### 4. Correct-prediction moment  ⬅ start here
 - [ ] When a watched match finishes and the pick was right: card flips to the
       result with a green burst.
 - [ ] Streaks in History ("model 7/8 this week").
@@ -79,6 +92,7 @@ _Last updated: 2026-11-16_
 
 ## Done
 
+- 2026-11-16 — Live matches: 60s poller, live odds from map score, LIVE UI. 134 tests.
 - 2026-11-16 — Match detail page + `match_log`. Fixed: backfill applied a match
   twice when paging overlapped (now de-duplicated by id). 123 tests.
 - 2026-11-16 — Predictor v3 (`elo-v3`): backtest harness, configurable model,
