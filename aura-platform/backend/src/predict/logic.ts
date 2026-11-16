@@ -1,7 +1,21 @@
 // Pure prediction/ingest decisions — no database, no network, no env — so they
 // can be unit tested directly. ingest.ts and the routes call into these.
 import type { PSMatch } from './pandascore.js'
-import { predict, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
+import { predict, expected, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
+
+/** Matches the model can learn from: decisive, two real teams. */
+export function isScorable(m: PSMatch): boolean {
+  if (m.draw || m.forfeit || !m.winner_id || m.opponents?.length !== 2) return false
+  return m.opponents.every((o) => o.type === 'Team' && o.opponent?.id)
+}
+
+/** Matches worth showing in form / head-to-head: anything with a winner between
+ *  two real teams — INCLUDING forfeits, because the head-to-head record the
+ *  model uses (recordH2H) counts them. Ratings skip forfeits (isScorable). */
+export function isLoggable(m: PSMatch): boolean {
+  if (m.draw || !m.winner_id || m.opponents?.length !== 2) return false
+  return m.opponents.every((o) => o.type === 'Team' && o.opponent?.id)
+}
 
 // ── Head-to-head ─────────────────────────────────────────────────────────────
 // Shrink the pair's historical match record toward 50% with a prior, then mix
@@ -117,4 +131,63 @@ export function orientProbA(
 ): number | null {
   if (predProbA == null) return null
   return String(predTeamAId) === String(rowTeamAId) ? predProbA : 1 - predProbA
+}
+
+// ── Match detail ─────────────────────────────────────────────────────────────
+export interface Explanation {
+  /** effective ratings used for the prediction */
+  eloA: number
+  eloB: number
+  /** eloA − eloB */
+  gap: number
+  /** P(A wins a single map) */
+  mapProbA: number
+  bo: number
+  /** P(A wins the series) from ratings alone */
+  seriesProbA: number
+  /** `rate` = the H2H record shrunk toward 50% — the value the blend pulls
+   *  toward (null if they've never met). It can lower a favourite who leads. */
+  h2h: { aWins: number; bWins: number; shift: number; rate: number | null }
+  /** what the model actually predicts (= modelProb) */
+  finalProbA: number
+  /** team still in its provisional period (rating moving fast, less certain) */
+  provisional: { a: boolean; b: boolean }
+  gamesA: number
+  gamesB: number
+}
+
+/** Step-by-step breakdown of modelProb for the match page. Built from the same
+ *  functions as the live model, so finalProbA always equals modelProb(...). */
+export function explainPrediction(r: Ratings, h2h: H2HMap, m: PSMatch, cfg: ModelConfig = V2_CONFIG): Explanation | null {
+  const p = predict(r, m, cfg)
+  if (!p) return null
+  const he = h2h.get(pairKey(p.teamA.id, p.teamB.id))
+  const aWins = he ? (p.teamA.id === he.loId ? he.loWins : he.hiWins) : 0
+  const bWins = he ? (p.teamA.id === he.loId ? he.hiWins : he.loWins) : 0
+  const finalProbA = h2hAdjust(p.probA, aWins, bWins, cfg.h2hMaxWeight)
+  const provGames = cfg.provisional?.games ?? 0
+  return {
+    eloA: p.teamA.elo,
+    eloB: p.teamB.elo,
+    gap: p.teamA.elo - p.teamB.elo,
+    mapProbA: expected(p.teamA.elo, p.teamB.elo, cfg.scale),
+    bo: p.bo,
+    seriesProbA: p.probA,
+    h2h: {
+      aWins, bWins, shift: finalProbA - p.probA,
+      rate: aWins + bWins ? (aWins + H2H_PRIOR * 0.5) / (aWins + bWins + H2H_PRIOR) : null,
+    },
+    finalProbA,
+    provisional: { a: p.teamA.games < provGames, b: p.teamB.games < provGames },
+    gamesA: p.teamA.games,
+    gamesB: p.teamB.games,
+  }
+}
+
+/** "WWLWL" for `teamId` over `results` (in the order given — pass newest first). */
+export function formString(results: { winnerId: string | number | null }[], teamId: string | number): string {
+  return results
+    .filter((x) => x.winnerId != null)
+    .map((x) => (String(x.winnerId) === String(teamId) ? 'W' : 'L'))
+    .join('')
 }

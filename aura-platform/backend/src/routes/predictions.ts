@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
-import { orientProbA } from '../predict/logic.js'
+import { orientProbA, explainPrediction, formString, pairKey, type H2HMap } from '../predict/logic.js'
 import { CURRENT_MODEL, MODELS } from '../predict/model.js'
+import { START, type Ratings } from '../predict/elo.js'
+import type { PSMatch } from '../predict/pandascore.js'
 
 const app = new Hono()
 
@@ -147,6 +149,144 @@ app.get('/history', async (c) => {
       correct: probA == null ? null : (probA >= 0.5) === winnerA,
     }
   }))
+})
+
+// ── Match detail ─────────────────────────────────────────────────────────────
+const RECENT = 10
+const TREND = 30
+
+/** A match_log row seen from `teamId`'s side. */
+function fromSide(row: any, teamId: string) {
+  const isA = String(row.team_a_id) === teamId
+  return {
+    matchId: String(row.match_id),
+    playedAt: row.played_at,
+    opponent: {
+      id: String(isA ? row.team_b_id : row.team_a_id),
+      name: isA ? row.team_b_name : row.team_a_name,
+      logo: (isA ? row.team_b_logo : row.team_a_logo) || null,
+    },
+    won: String(row.winner_id) === teamId,
+    score: [isA ? row.score_a : row.score_b, isA ? row.score_b : row.score_a] as [number | null, number | null],
+    event: [row.league, row.serie].filter(Boolean).join(' · ') || null,
+    forfeit: !!row.forfeit,
+    eloAfter: isA ? row.elo_a_after : row.elo_b_after,
+  }
+}
+
+async function teamDetail(teamId: string, fallback: { name: string | null; logo: string | null }, excludeMatch: number) {
+  const rating = (await pool.query(`SELECT name, map_elo, games, logo FROM team_ratings WHERE team_id=$1`, [teamId])).rows[0]
+  const rank = rating && rating.games >= 20
+    ? (await pool.query(`SELECT COUNT(*)::int + 1 AS rank FROM team_ratings WHERE games >= 20 AND map_elo > $1`, [rating.map_elo])).rows[0].rank
+    : null
+  const log = (await pool.query(
+    `SELECT * FROM match_log WHERE (team_a_id=$1 OR team_b_id=$1) AND match_id <> $2
+     ORDER BY played_at DESC LIMIT $3`,
+    [teamId, excludeMatch, TREND]
+  )).rows.map((row) => fromSide(row, teamId))
+  const recent = log.slice(0, RECENT)
+  return {
+    id: teamId,
+    name: rating?.name ?? fallback.name,
+    logo: fallback.logo ?? rating?.logo ?? null,
+    elo: rating ? Math.round(rating.map_elo) : null,
+    games: rating?.games ?? 0,
+    rank,
+    form: formString(recent.map((x) => ({ winnerId: x.won ? teamId : x.opponent.id })), teamId),
+    recent: recent.map(({ eloAfter: _e, ...x }) => x),
+    // oldest → newest, rating after each match (forfeits don't move ratings)
+    eloTrend: log.filter((x) => x.eloAfter != null && !x.forfeit).reverse().map((x) => ({ t: x.playedAt, elo: Math.round(x.eloAfter) })),
+  }
+}
+
+app.get('/match/:id', async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isSafeInteger(id)) return c.json({ error: 'not found' }, 404)
+  const [p, res, log] = await Promise.all([
+    pool.query(`SELECT * FROM predictions WHERE match_id=$1`, [id]),
+    pool.query(`SELECT * FROM results WHERE match_id=$1`, [id]),
+    pool.query(`SELECT * FROM match_log WHERE match_id=$1`, [id]).catch(() => ({ rows: [] as any[] })),
+  ]).then((rs) => rs.map((r) => r.rows[0]))
+  if (!p && !res && !log) return c.json({ error: 'not found' }, 404)
+
+  // header team order: the prediction's if there is one, else the result's
+  const src = p ?? res ?? log
+  const aId = src.team_a_id != null ? String(src.team_a_id) : null
+  const bId = src.team_b_id != null ? String(src.team_b_id) : null
+  const done = res ?? log
+  const finished = !!done || p?.status === 'finished'
+  // scores from the finished row, re-oriented to the header order
+  let score: [number | null, number | null] | null = null
+  if (done) {
+    const same = String(done.team_a_id) === aId
+    score = same ? [done.score_a, done.score_b] : [done.score_b, done.score_a]
+  }
+  const live = orientProbA(p?.prob_a, p?.team_a_id, aId)
+  const replay = res ? orientProbA(res.replay_prob_a, res.team_a_id, aId) : null
+  const probA = live ?? replay
+  const winnerId = done?.winner_id != null ? String(done.winner_id) : p?.winner_id != null ? String(p.winner_id) : null
+
+  const [teamA, teamB] = await Promise.all([
+    aId ? teamDetail(aId, { name: src.team_a_name, logo: src.team_a_logo }, id) : null,
+    bId ? teamDetail(bId, { name: src.team_b_name, logo: src.team_b_logo }, id) : null,
+  ])
+
+  // head-to-head from the match log (all meetings, newest first)
+  let h2h = null
+  if (aId && bId) {
+    const rows = (await pool.query(
+      `SELECT * FROM match_log WHERE ((team_a_id=$1 AND team_b_id=$2) OR (team_a_id=$2 AND team_b_id=$1)) AND match_id <> $3
+       ORDER BY played_at DESC`,
+      [aId, bId, id]
+    )).rows.map((row) => fromSide(row, aId))
+    h2h = {
+      aWins: rows.filter((x) => x.won).length,
+      bWins: rows.filter((x) => !x.won).length,
+      meetings: rows.slice(0, RECENT).map(({ eloAfter: _e, opponent: _o, ...x }) => x),
+    }
+  }
+
+  // "why this prediction" — only for matches still to be played, from current ratings
+  let explain = null
+  if (!finished && aId && bId) {
+    const r: Ratings = new Map()
+    for (const row of (await pool.query(`SELECT team_id, name, map_elo, form_elo, games FROM team_ratings WHERE team_id = ANY($1::bigint[])`, [[aId, bId]])).rows)
+      r.set(Number(row.team_id), { elo: row.map_elo, formElo: row.form_elo ?? row.map_elo, games: row.games, name: row.name })
+    const h: H2HMap = new Map()
+    const hr = (await pool.query(`SELECT lo_id, hi_id, lo_wins, hi_wins FROM h2h WHERE pair_key=$1`, [pairKey(Number(aId), Number(bId))])).rows[0]
+    if (hr) h.set(pairKey(Number(aId), Number(bId)), { loId: Number(hr.lo_id), hiId: Number(hr.hi_id), loWins: hr.lo_wins, hiWins: hr.hi_wins })
+    const stub = {
+      id, name: src.name, status: 'not_started', winner_id: null, begin_at: null,
+      scheduled_at: p?.scheduled_at ? new Date(p.scheduled_at).toISOString() : null,
+      number_of_games: p?.bo ?? 1,
+      opponents: [
+        { type: 'Team', opponent: { id: Number(aId), name: src.team_a_name } },
+        { type: 'Team', opponent: { id: Number(bId), name: src.team_b_name } },
+      ],
+    } as PSMatch
+    explain = explainPrediction(r, h, stub, CURRENT_MODEL.config)
+  }
+
+  return c.json({
+    matchId: String(id),
+    name: src.name,
+    league: src.league ?? null,
+    serie: src.serie ?? null,
+    tier: src.tier ?? null,
+    bo: p?.bo ?? done?.bo ?? null,
+    scheduledAt: p?.scheduled_at ?? res?.finished_at ?? log?.played_at ?? null,
+    status: finished ? 'finished' : 'upcoming',
+    streamUrl: p?.stream_url ?? null,
+    score,
+    winnerId,
+    forfeit: !!res?.forfeit,
+    probA,
+    pickSource: live != null ? 'live' : replay != null ? 'replay' : null,
+    model: p?.model_version ?? (replay != null ? CURRENT_MODEL.version : null),
+    correct: probA == null || !winnerId || !aId ? null : (probA >= 0.5) === (winnerId === aId),
+    teamA, teamB, h2h, explain,
+    startElo: START,
+  })
 })
 
 export default app

@@ -49,6 +49,50 @@ export function eventName(league: string | null, serie: string | null): string {
   return serie.toLowerCase().startsWith(league.toLowerCase()) ? serie : `${league} ${serie}`
 }
 
+export interface RecentMatch {
+  matchId: string; playedAt: string
+  opponent: { id: string; name: string; logo: string | null }
+  won: boolean
+  /** [own score, opponent score] */
+  score: [number | null, number | null]
+  event: string | null
+  /** won/lost by forfeit — counts in head-to-head, not in ratings */
+  forfeit: boolean
+}
+export interface TeamDetail {
+  id: string; name: string; logo: string | null
+  elo: number | null; games: number; rank: number | null
+  /** newest first, e.g. "WWLWL" */
+  form: string
+  recent: RecentMatch[]
+  /** oldest → newest rating after each match */
+  eloTrend: { t: string; elo: number }[]
+}
+export interface Explanation {
+  eloA: number; eloB: number; gap: number
+  mapProbA: number; bo: number; seriesProbA: number
+  h2h: { aWins: number; bWins: number; shift: number; rate: number | null }
+  finalProbA: number
+  provisional: { a: boolean; b: boolean }
+  gamesA: number; gamesB: number
+}
+export interface MatchDetail {
+  matchId: string; name: string
+  league: string | null; serie: string | null; tier: string | null; bo: number | null
+  scheduledAt: string | null; status: 'upcoming' | 'finished'
+  streamUrl: string | null
+  /** [team A, team B] */
+  score: [number | null, number | null] | null
+  winnerId: string | null; forfeit: boolean
+  probA: number | null; pickSource: 'live' | 'replay' | null; model: string | null
+  correct: boolean | null
+  /** null while still to be determined */
+  teamA: TeamDetail | null; teamB: TeamDetail | null
+  h2h: { aWins: number; bWins: number; meetings: Omit<RecentMatch, 'opponent'>[] } | null
+  /** step-by-step prediction breakdown (upcoming matches only) */
+  explain: Explanation | null
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`)
   if (!res.ok) throw new Error(`${res.status}`)
@@ -59,3 +103,4 @@ export const getUpcoming = (tier: TierFilter) => get<Prediction[]>(`/predictions
 export const getEvents = () => get<TourEvent[]>('/predictions/events')
 export const getHistory = (tier?: TierFilter) => get<HistoryRow[]>(`/predictions/history${tier ? `?tier=${tier}` : ''}`)
 export const getAccuracy = () => get<Accuracy>('/predictions/accuracy')
+export const getMatch = (id: string) => get<MatchDetail>(`/predictions/match/${encodeURIComponent(id)}`)

@@ -10,10 +10,10 @@ import {
   upcoming, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
   type PSMatch, type PSTournament,
 } from './pandascore.js'
-import { applyMatch, type Ratings } from './elo.js'
+import { applyMatch, isLan, type Ratings } from './elo.js'
 import { CURRENT_MODEL } from './model.js'
 import {
-  pairKey, modelProb, recordH2H, isTier1, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
+  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
 } from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -138,6 +138,70 @@ async function ensureTables() {
       live BOOLEAN NOT NULL DEFAULT FALSE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+  // Every scorable match the backfill replays (all teams, not just popular
+  // ones), with each team's rating right after it — powers recent form,
+  // head-to-head lists and rating trends on the match page.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS match_log (
+      match_id BIGINT PRIMARY KEY,
+      played_at TIMESTAMPTZ,
+      name TEXT, league TEXT, serie TEXT, tier TEXT, lan BOOLEAN, bo INTEGER,
+      team_a_id BIGINT, team_a_name TEXT, team_a_logo TEXT,
+      team_b_id BIGINT, team_b_name TEXT, team_b_logo TEXT,
+      score_a INTEGER, score_b INTEGER, winner_id BIGINT,
+      elo_a_after DOUBLE PRECISION, elo_b_after DOUBLE PRECISION
+    )`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS match_log_a_idx ON match_log (team_a_id, played_at DESC)`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS match_log_b_idx ON match_log (team_b_id, played_at DESC)`)
+  await pool.query(`ALTER TABLE match_log ADD COLUMN IF NOT EXISTS forfeit BOOLEAN NOT NULL DEFAULT FALSE`)
+}
+
+const LOG_COLS = [
+  'match_id', 'played_at', 'name', 'league', 'serie', 'tier', 'lan', 'bo',
+  'team_a_id', 'team_a_name', 'team_a_logo', 'team_b_id', 'team_b_name', 'team_b_logo',
+  'score_a', 'score_b', 'winner_id', 'elo_a_after', 'elo_b_after', 'forfeit',
+]
+
+/** One match_log row (values in LOG_COLS order). Elo is null when unknown. */
+function logRow(m: PSMatch, eloA: number | null = null, eloB: number | null = null): unknown[] {
+  const [oa, ob] = m.opponents.map((o) => o.opponent!)
+  return [
+    m.id, m.scheduled_at || m.begin_at, m.name, m.league?.name ?? null, m.serie?.full_name ?? null,
+    m.tournament?.tier ?? null, isLan(m), m.number_of_games ?? null,
+    oa.id, oa.name ?? null, oa.image_url ?? null, ob.id, ob.name ?? null, ob.image_url ?? null,
+    scoreOf(m, oa.id!), scoreOf(m, ob.id!), m.winner_id, eloA, eloB, !!m.forfeit,
+  ]
+}
+
+/** Upsert match_log rows. `replace` swaps the whole table atomically (backfill). */
+async function saveMatchLog(rows: unknown[][], replace = false) {
+  // one row per match_id (Postgres rejects a batch that upserts a row twice)
+  rows = [...new Map(rows.map((r) => [r[0], r])).values()]
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (replace) await client.query('DELETE FROM match_log')
+    const n = LOG_COLS.length
+    for (let i = 0; i < rows.length; i += 300) {
+      const chunk = rows.slice(i, i + 300)
+      const ph = chunk.map((_, j) => `(${LOG_COLS.map((_, k) => `$${j * n + k + 1}`).join(',')})`)
+      await client.query(
+        `INSERT INTO match_log (${LOG_COLS.join(',')}) VALUES ${ph.join(',')}
+         ON CONFLICT (match_id) DO UPDATE SET
+           score_a=EXCLUDED.score_a, score_b=EXCLUDED.score_b, winner_id=EXCLUDED.winner_id,
+           team_a_logo=EXCLUDED.team_a_logo, team_b_logo=EXCLUDED.team_b_logo,
+           elo_a_after=COALESCE(EXCLUDED.elo_a_after, match_log.elo_a_after),
+           elo_b_after=COALESCE(EXCLUDED.elo_b_after, match_log.elo_b_after)`,
+        chunk.flat()
+      )
+    }
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
 }
 
 async function loadRatings(): Promise<Ratings> {
@@ -204,14 +268,18 @@ async function saveH2H(h: H2HMap) {
 async function backfill(): Promise<Ratings> {
   console.log(`[backfill] fetching ${BACKFILL_PAGES} pages of history...`)
   // most-recent-first pages, then sort chronologically to apply Elo in order
-  const all: PSMatch[] = []
+  // Keyed by id: while we page (~3.5 min), newly finished matches push older
+  // ones onto the next page, so the same match can be fetched twice. Applying
+  // it twice would double-count it in ratings and head-to-head.
+  const byId = new Map<number, PSMatch>()
   for (let p = 1; p <= BACKFILL_PAGES; p++) {
     const batch = await pastPage(p)
-    all.push(...batch)
+    for (const m of batch) byId.set(m.id, m)
     if (batch.length < 100) break
-    if (p % 20 === 0) console.log(`  page ${p} (${all.length})`)
+    if (p % 20 === 0) console.log(`  page ${p} (${byId.size})`)
     await new Promise((r) => setTimeout(r, 1100))
   }
+  const all = [...byId.values()]
   all.sort((a, b) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
   console.log(`[backfill] applying ${all.length} matches...`)
   const r: Ratings = new Map()
@@ -222,17 +290,24 @@ async function backfill(): Promise<Ratings> {
   // applied — i.e. only information available pre-match.
   const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000).toISOString()
   const replay = new Map<number, number>() // match id -> P(opponents[0] wins)
+  const log: unknown[][] = []
   for (const m of all) {
     if (m.winner_id && (m.scheduled_at || '') >= since && shouldShow(m)) {
       const p = modelProb(r, h2h, m, MODEL_CONFIG)
       if (p) replay.set(m.id, p.probA)
     }
     applyMatch(r, m, MODEL_CONFIG)
+    if (isLoggable(m)) {
+      const [a, b] = m.opponents.map((o) => o.opponent!.id!)
+      log.push(logRow(m, r.get(a)?.elo ?? null, r.get(b)?.elo ?? null))
+    }
     for (const o of m.opponents || []) if (o.opponent?.id && o.opponent.image_url) logos.set(o.opponent.id, o.opponent.image_url)
     recordH2H(h2h, m)
   }
   await saveRatings(r)
   await saveH2H(h2h)
+  await saveMatchLog(log, true)
+  console.log(`[backfill] match_log: ${log.length} matches`)
   // persist logos for the rankings page
   for (const [id, url] of logos) await pool.query('UPDATE team_ratings SET logo=$2 WHERE team_id=$1', [id, url])
 
@@ -390,15 +465,18 @@ async function predictUpcoming(r: Ratings) {
  *  rating recompute; ratings refresh on the full backfill). Returns #settled. */
 export async function settleRecent(pages = 2): Promise<number> {
   let settled = 0
+  const fresh: unknown[][] = []
   for (let p = 1; p <= pages; p++) {
     const batch = await pastPage(p)
     for (const m of batch) {
       settled += await settleMatch(m)
       await recordResult(m)
+      if (isLoggable(m)) fresh.push(logRow(m)) // ratings catch up at the next backfill
     }
     if (batch.length < 100) break
     await sleep(1100)
   }
+  if (fresh.length) await saveMatchLog(fresh)
   if (settled) console.log(`[settle] ${settled} predictions settled`)
   return settled
 }

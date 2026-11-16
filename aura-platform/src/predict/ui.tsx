@@ -1,6 +1,20 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { stageOf, type Stage } from './stage'
 
+/** Makes a whole card open its match page. Uses an overlay link (not a
+ *  wrapping <a>) so links inside the card stay valid — give those
+ *  `relative z-20` to keep them clickable above the overlay. */
+export function CardLink({ to, label, children }: { to: string; label: string; children: ReactNode }) {
+  return (
+    // min-w-0: as a grid item this wrapper must be allowed to shrink below its
+    // content's width (the card inside truncates), or phones scroll sideways
+    <div className="relative min-w-0 rounded-2xl transition-transform duration-150 hover:-translate-y-0.5">
+      {children}
+      <Link to={to} aria-label={label} className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400" />
+    </div>
+  )
+}
 
 // Organizer themes, matched on the PandaScore league name. Each card gets a
 // solid header in the organizer's own colours (sampled from their logos) with

@@ -7,9 +7,11 @@
 //
 //   bun src/predict/backtest.ts            # needs data/history.json (see history.ts)
 import { applyMatch, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
-import { modelProb, recordH2H, isTier1, type H2HMap } from './logic.js'
+import { modelProb, recordH2H, isTier1, isScorable, type H2HMap } from './logic.js'
 import { brier, logLoss, accuracy, type Scored } from './metrics.js'
 import type { PSMatch } from './pandascore.js'
+
+export { isScorable }
 
 export const WARM_GAMES = 5 // score only matches where both teams have ≥ this many prior matches
 /** A parameter must cut TUNE log-loss by at least this much to be added —
@@ -17,12 +19,6 @@ export const WARM_GAMES = 5 // score only matches where both teams have ≥ this
 const MIN_GAIN = 0.001
 
 export interface Row extends Scored { i: number; warm: boolean; tier1: boolean }
-
-/** Matches the model can learn from: decisive, two real teams. */
-export function isScorable(m: PSMatch): boolean {
-  if (m.draw || m.forfeit || !m.winner_id || m.opponents?.length !== 2) return false
-  return m.opponents.every((o) => o.type === 'Team' && o.opponent?.id)
-}
 
 /** Predict-then-update over `history` (must be oldest first). */
 export function walkForward(history: PSMatch[], cfg: ModelConfig): Row[] {

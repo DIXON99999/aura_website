@@ -16,8 +16,7 @@ _Last updated: 2026-11-16_
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** 2. Match detail page (step 1's free-tier work is done; map-aware
-  model is parked on a data source — see Later).
+- **Next up:** 3. Live matches.
 
 ## Up next (in order)
 
@@ -36,13 +35,21 @@ _Last updated: 2026-11-16_
   (`games[].map` is null everywhere; `/csgo/*` detail is 403). See Later.
 - Ideas for v4 (need the backtest to prove them): LAN rating with more LAN
   data, region strength offsets (`tournament.region` vs `opponent.location`),
-  series-score margin.
+  series-score margin, **excluding forfeits from head-to-head** (`recordH2H`
+  counts them — ~9% of matches are forfeits; ratings already skip them).
 
-### 2. Match detail page  ⬅ start here
-- [ ] Click a card → recent form, H2H history, per-map win rates, "why this
-      prediction" (rating gap, H2H, map edge).
+### 2. Match detail page  ✅ done (2026-11-16)
+- [x] `/match/:id` from any Matches / History card (overlay `CardLink`; calendar
+      day list cards too): hero, "why this prediction" (ratings → one map →
+      best-of → head-to-head → final, built by `logic.explainPrediction` so it
+      always equals the live model), rating trend chart, recent form, head-to-head.
+- [x] `match_log` table: every match the backfill replays (incl. forfeits,
+      flagged) with post-match ratings; light refresh appends new results.
+- Per-map win rates dropped — no map data on the free tier.
+- Note: head-to-head can *lower* a favourite who leads the record (the blend
+  pulls toward the shrunk H2H rate); the page says "pulls toward X%" for that reason.
 
-### 3. Live matches
+### 3. Live matches  ⬅ start here
 - [ ] LIVE state on cards with current map score (PandaScore per-game results).
 - [ ] Odds that update between maps.
 
@@ -72,6 +79,8 @@ _Last updated: 2026-11-16_
 
 ## Done
 
+- 2026-11-16 — Match detail page + `match_log`. Fixed: backfill applied a match
+  twice when paging overlapped (now de-duplicated by id). 123 tests.
 - 2026-11-16 — Predictor v3 (`elo-v3`): backtest harness, configurable model,
   provisional K; Accuracy page model comparison. 110 tests.
 - 2026-11-16 — Unit tests (86, `bun test`) + GitHub Actions CI (typecheck, tests,

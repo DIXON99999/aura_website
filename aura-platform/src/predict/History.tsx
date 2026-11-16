@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getHistory, eventName, type HistoryRow, type TierFilter } from './api'
-import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented } from './ui'
+import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink } from './ui'
 import { clock, dayLabel, melbourneDay } from './time'
 
 const FILTERS: { value: TierFilter | undefined; label: string }[] = [
@@ -25,6 +25,7 @@ function ResultRow({ m }: { m: HistoryRow }) {
     </div>
   )
   return (
+    <CardLink to={`/match/${m.matchId}`} label={`${m.teamA.name} vs ${m.teamB.name}`}>
     <ThemedCard
       league={m.league}
       event={`${eventName(m.league, m.serie)}${m.bo ? ` · BO${m.bo}` : ''}`}
@@ -53,6 +54,7 @@ function ResultRow({ m }: { m: HistoryRow }) {
         </div>
       )}
     </ThemedCard>
+    </CardLink>
   )
 }
 

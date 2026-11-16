@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { getUpcoming, getEvents, eventName, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
-import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented } from './ui'
+import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink } from './ui'
 import { stageOf } from './stage'
 
 import { dayAndClock as timeLabel, shortDate } from './time'
@@ -48,6 +48,7 @@ function MatchCard({ m }: { m: Prediction }) {
   )
 
   return (
+    <CardLink to={`/match/${m.matchId}`} label={`${m.teamA?.name ?? "TBD"} vs ${m.teamB?.name ?? "TBD"}`}>
     <ThemedCard
       league={m.league}
       event={`${eventName(m.league, m.serie)} · BO${m.bo}`}
@@ -81,13 +82,14 @@ function MatchCard({ m }: { m: Prediction }) {
           {cold && <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-400">low data</span>}
           {m.streamUrl && (
             <a href={m.streamUrl} target="_blank" rel="noreferrer"
-               className="rounded-md px-1.5 py-0.5 font-medium text-emerald-400 hover:bg-emerald-400/10">
+               className="relative z-20 rounded-md px-1.5 py-0.5 font-medium text-emerald-400 hover:bg-emerald-400/10">
               Watch ↗
             </a>
           )}
         </div>
       </div>
     </ThemedCard>
+    </CardLink>
   )
 }
 

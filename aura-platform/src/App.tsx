@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import Upcoming from './predict/Upcoming'
 import History from './predict/History'
+import MatchDetail from './predict/MatchDetail'
 import Accuracy from './predict/Accuracy'
 
 const tabs = [
@@ -55,6 +56,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Upcoming />} />
             <Route path="/history" element={<History />} />
+            <Route path="/match/:id" element={<MatchDetail />} />
             <Route path="/accuracy" element={<Accuracy />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
