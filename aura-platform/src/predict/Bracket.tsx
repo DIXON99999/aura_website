@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { getBracket, eventName, type BracketStage, type EventBracket } from './api'
 import {
-  layoutBracket, bracketMoves, swissLayout, pickReplay, defaultStage, SWISS_WINS,
+  layoutBracket, bracketMoves, swissLayout, pickReplay, batchMoves, defaultStage, SWISS_WINS,
   type LaidMatch, type Move, type Slot, type BracketLayout, type SwissLayout, type BTeam,
 } from './bracketGraph'
 import { ThemedCard, TeamLogo, LiveBadge, Segmented, Spinner, ErrorNote } from './ui'
@@ -75,14 +75,12 @@ function useReplay(stageId: string, moves: Move[], refs: {
   const [state, setState] = useState<ReplayState>(EMPTY)
   const [info, setInfo] = useState<{ count: number; reason: string; running: boolean } | null>(null)
   const token = useRef(0)
-  const lastList = useRef<Move[]>([])
   const known = useRef<Set<number> | null>(null)
   /** last-visit time, read once before we overwrite it (survives StrictMode's remount) */
   const since = useRef<number | null | undefined>(undefined)
 
   const run = useCallback(async (list: Move[], reason: string) => {
     const my = ++token.current
-    lastList.current = list
     if (!list.length) { setState(EMPTY); setInfo({ count: 0, reason, running: false }); return }
     if (reducedMotion()) { setState(EMPTY); setInfo({ count: list.length, reason, running: false }); return }
     const hidden = new Set<string>(), pending = new Set<number>()
@@ -95,24 +93,28 @@ function useReplay(stageId: string, moves: Move[], refs: {
     push()
     setInfo({ count: list.length, reason, running: true })
     await wait(800)
-    for (const mv of list) {
+    // a round at a time: every score in the round lands, then all chips fly together
+    for (const round of batchMoves(list)) {
       if (token.current !== my) return
-      pending.delete(mv.matchId) // the score lands
+      for (const mv of round) pending.delete(mv.matchId)
       push()
       await wait(600)
       if (token.current !== my) return
       const { content, scroller, overlay } = refs
       if (content.current && overlay.current) {
-        await Promise.all([
-          mv.winner.to ? fly(content.current, scroller.current, overlay.current, mv.winner.from, mv.winner.to, 'win') : null,
-          mv.loser?.to ? fly(content.current, scroller.current, overlay.current, mv.loser.from, mv.loser.to, 'lose') : null,
-        ])
+        const c = content.current, s = scroller.current, o = overlay.current
+        await Promise.all(round.flatMap((mv) => [
+          mv.winner.to ? fly(c, s, o, mv.winner.from, mv.winner.to, 'win') : null,
+          mv.loser?.to ? fly(c, s, o, mv.loser.from, mv.loser.to, 'lose') : null,
+        ]))
       }
       if (token.current !== my) return
-      if (mv.winner.to) hidden.delete(mv.winner.to)
-      if (mv.loser?.to) hidden.delete(mv.loser.to)
+      for (const mv of round) {
+        if (mv.winner.to) hidden.delete(mv.winner.to)
+        if (mv.loser?.to) hidden.delete(mv.loser.to)
+      }
       push()
-      await wait(300)
+      await wait(350)
     }
     if (token.current === my) setInfo({ count: list.length, reason, running: false })
   }, [refs])
@@ -128,7 +130,7 @@ function useReplay(stageId: string, moves: Move[], refs: {
       }
       const s = since.current
       const list = pickReplay(moves, s, Date.now())
-      void run(list, s == null ? (list.length && list[0].at > Date.now() - 86_400_000 ? 'in the last 24 hours' : 'latest results') : 'since your last visit')
+      void run(list, s == null ? 'from the start' : 'since your last visit')
       return
     }
     const fresh = moves.filter((m) => !known.current!.has(m.matchId))
@@ -141,10 +143,8 @@ function useReplay(stageId: string, moves: Move[], refs: {
   useEffect(() => () => { token.current++; known.current = null }, [])
 
   const skip = useCallback(() => { token.current++; refs.overlay.current?.replaceChildren(); setState(EMPTY); setInfo((i) => i && { ...i, running: false }) }, [refs])
-  const replay = useCallback(() => {
-    const list = lastList.current.length ? lastList.current : pickReplay(moves, null, Date.now())
-    void run(list, lastList.current.length ? (info?.reason ?? 'latest results') : 'latest results')
-  }, [moves, run, info])
+  // Replay = the whole stage from round 1
+  const replay = useCallback(() => { void run(pickReplay(moves, null, Date.now()), 'from the start') }, [moves, run])
   return { state, info, skip, replay, canReplay: moves.length > 0 }
 }
 
@@ -293,11 +293,13 @@ function Col({ label, children }: { label: string; children: ReactNode }) {
 
 function ReplayBar({ info, skip, replay, canReplay }: ReturnType<typeof useReplay>) {
   if (!canReplay) return null
-  const what = info && (info.reason === 'latest results'
-    ? `the latest ${info.count === 1 ? 'result' : `${info.count} results`}`
+  const what = info && (info.reason === 'from the start'
+    ? 'the stage from round 1'
     : `${info.count} result${info.count === 1 ? '' : 's'} ${info.reason}`)
   const text = !info ? '' : info.running ? `Replaying ${what}…`
-    : info.count ? `Showing ${what}` : 'No new results since your last visit'
+    : !info.count ? 'No new results since your last visit'
+    : info.reason === 'from the start' ? `${info.count} result${info.count === 1 ? '' : 's'} so far`
+    : `Showing ${what}`
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-neutral-400">
       {info?.running && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />}

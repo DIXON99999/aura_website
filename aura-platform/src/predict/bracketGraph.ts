@@ -229,24 +229,28 @@ export function swissLayout(matches: StageMatch[], stageTeams: BTeam[]): SwissLa
 
 // ---- What to replay on open ----
 
-export const REPLAY_MAX = 8
-const DAY = 86_400_000
-
-/** Results to animate when the page opens, oldest first: everything since the
- *  viewer's last visit; on a first visit the last 24h, or failing that the
- *  latest batch of results (all within 12h of the newest). Capped at REPLAY_MAX. */
+/** Results to animate when the page opens, oldest first: on a first visit the
+ *  whole stage from round 1; afterwards only what finished since the last visit. */
 export function pickReplay(moves: Move[], since: number | null, now: number): Move[] {
-  const sorted = moves.filter((m) => m.at > 0 && m.at <= now).sort((a, b) => a.at - b.at)
-  let out: Move[]
-  if (since != null) out = sorted.filter((m) => m.at > since)
-  else {
-    out = sorted.filter((m) => m.at > now - DAY)
-    if (!out.length && sorted.length) {
-      const newest = sorted[sorted.length - 1].at
-      out = sorted.filter((m) => m.at >= newest - DAY / 2)
-    }
+  return moves
+    .filter((m) => m.at > 0 && m.at <= now && (since == null || m.at > since))
+    .sort((a, b) => a.at - b.at)
+}
+
+/** Group moves (oldest first) into rounds that play at the same time: a new
+ *  round starts when a move's team has to arrive from a move in the current one
+ *  (e.g. a semifinal waits for the quarterfinal winners to land). */
+export function batchMoves(moves: Move[]): Move[][] {
+  const out: Move[][] = []
+  let landing = new Set<string>()
+  for (const mv of moves) {
+    const waits = landing.has(mv.winner.from) || (mv.loser != null && landing.has(mv.loser.from))
+    if (!out.length || waits) { out.push([]); landing = new Set() }
+    out[out.length - 1].push(mv)
+    if (mv.winner.to) landing.add(mv.winner.to)
+    if (mv.loser?.to) landing.add(mv.loser.to)
   }
-  return out.slice(-REPLAY_MAX)
+  return out
 }
 
 /** Stage to open by default: one with a live match, else the latest result, else the first. */

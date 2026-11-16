@@ -107,8 +107,10 @@ _Last updated: 2026-11-16_
       connectors (green once filled), ✓ called / ✗ upset per match, model % on
       unplayed ones. Stages without a bracket (Major Swiss) show a record grid
       (0–0 → 3–x), plus the matches still to play.
-- [x] Replay on open: results since your last visit to that stage (localStorage),
-      else last 24h, else the latest batch (max 8). Score lands → winner chip
+- [x] Replay on open: first visit (and the Replay button) = the whole stage
+      from round 1, a round at a time (`batchMoves`: all QF scores land, then
+      all QF winners fly together, …); later visits = only results since your
+      last visit to that stage (localStorage). Score lands → winner chip
       flies (WAAPI clone) to its next slot / Champion, loser drops to the lower
       bracket or fades. Skip / Replay buttons; new results while open animate
       too; reduced motion shows the final state. Phone: bracket scrolls inside

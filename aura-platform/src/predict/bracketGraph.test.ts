@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  layoutBracket, bracketMoves, swissLayout, pickReplay, defaultStage, roundLabel, REPLAY_MAX,
+  layoutBracket, bracketMoves, swissLayout, pickReplay, batchMoves, defaultStage, roundLabel,
   type StageMatch, type BTeam, type Move,
 } from './bracketGraph'
 
@@ -146,19 +146,33 @@ describe('pickReplay', () => {
     matchId: hoursAgo, at: now - hoursAgo * 3_600_000,
     winner: { team: T(1), from: 'a', to: 'b' }, loser: null,
   })
-  const moves = [mv(100), mv(90), mv(30), mv(20), mv(5), mv(1)]
-  test('since last visit, oldest first', () => {
+  const moves = [mv(5), mv(100), mv(90), mv(30), mv(20), mv(1)]
+  test('first visit: the whole stage, oldest first', () => {
+    expect(pickReplay(moves, null, now).map((m) => m.matchId)).toEqual([100, 90, 30, 20, 5, 1])
+  })
+  test('since last visit only', () => {
     expect(pickReplay(moves, now - 25 * 3_600_000, now).map((m) => m.matchId)).toEqual([20, 5, 1])
   })
-  test('nothing new since last visit → nothing', () => expect(pickReplay(moves, now, now)).toEqual([]))
-  test('first visit → last 24h', () => expect(pickReplay(moves, null, now).map((m) => m.matchId)).toEqual([20, 5, 1]))
-  test('first visit, finished event → the latest batch', () => {
-    expect(pickReplay([mv(100), mv(90), mv(80)], null, now).map((m) => m.matchId)).toEqual([90, 80])
+  test('nothing new since last visit: nothing', () => expect(pickReplay(moves, now, now)).toEqual([]))
+})
+
+describe('batchMoves', () => {
+  test('bracket plays round by round: QFs together, then semis, then the final', () => {
+    const rounds = batchMoves(bracketMoves(layoutBracket(blast(), true)))
+    expect(rounds.map((r) => r.map((m) => m.matchId))).toEqual([[5, 6], [7, 8], [9]])
   })
-  test('capped', () => {
-    const many = Array.from({ length: 20 }, (_, i) => mv(i + 1))
-    expect(pickReplay(many, null, now)).toHaveLength(REPLAY_MAX)
-    expect(pickReplay(many, null, now).at(-1)!.matchId).toBe(1)
+  test('lower bracket waits for the upper-bracket losers to drop in', () => {
+    const rounds = batchMoves(bracketMoves(layoutBracket(iemGroup(), false)))
+    expect(rounds[0].map((m) => m.matchId).sort()).toEqual([1, 2, 3, 4])
+    expect(rounds.findIndex((r) => r.some((m) => m.matchId === 21))).toBeGreaterThan(0)
+  })
+  test('Swiss: one batch per round', () => {
+    const teams = [1, 2, 3, 4].map(T)
+    const sw = swissLayout([
+      M(101, 'a', [], [1, 2], 1), M(102, 'b', [], [3, 4], 4),
+      M(103, 'c', [], [1, 4], 1), M(104, 'd', [], [2, 3], 3),
+    ], teams)
+    expect(batchMoves(sw.moves).map((r) => r.length)).toEqual([2, 2])
   })
 })
 
