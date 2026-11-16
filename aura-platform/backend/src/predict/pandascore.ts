@@ -31,6 +31,9 @@ export interface PSMatch {
   opponents: PSOpponent[]
   games?: PSGame[]
   streams_list?: { raw_url?: string; main?: boolean }[]
+  /** bracket endpoints only: which earlier matches feed this one */
+  previous_matches?: { type: 'winner' | 'loser'; match_id: number }[]
+  tournament_id?: number
 }
 
 async function get(path: string, tries = 0): Promise<any> {
@@ -86,6 +89,7 @@ export interface PSTournament {
   serie?: { full_name?: string }
   teams?: { id: number; name: string; image_url?: string | null; dark_mode_image_url?: string | null }[]
   matches?: { id: number; status: string }[]
+  has_bracket?: boolean
 }
 
 /** Tier S/A tournaments that are running or yet to start. */
@@ -103,4 +107,24 @@ export function upcomingForTournaments(ids: number[]): Promise<PSMatch[]> {
  *  Near match time this is where games[].map (the played/veto maps) fills in. */
 export function matchDetail(id: number): Promise<any> {
   return get(`/matches/${id}`)
+}
+
+/** Recently finished tier S/A tournaments, newest first. */
+export function recentTier1Tournaments(): Promise<PSTournament[]> {
+  return get(`/csgo/tournaments/past?filter[tier]=s,a&per_page=20&sort=-end_at`)
+}
+
+/** Every stage (tournament) of a serie — Group A, Group B, Playoffs, … */
+export function serieTournaments(serieId: number): Promise<PSTournament[]> {
+  return get(`/series/${serieId}/tournaments?per_page=50`)
+}
+
+/** All matches of a bracket stage, each with previous_matches links. */
+export function tournamentBracket(id: number): Promise<PSMatch[]> {
+  return get(`/tournaments/${id}/brackets?per_page=100`)
+}
+
+/** All matches of a stage without a bracket (e.g. Swiss). */
+export function tournamentMatches(id: number): Promise<PSMatch[]> {
+  return get(`/tournaments/${id}/matches?per_page=100`)
 }

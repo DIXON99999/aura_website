@@ -8,12 +8,14 @@
 import pg from 'pg'
 import {
   upcoming, running, pastPage, matchDetail, tier1Tournaments, upcomingForTournaments,
+  recentTier1Tournaments, serieTournaments, tournamentBracket, tournamentMatches,
   type PSMatch, type PSTournament,
 } from './pandascore.js'
 import { applyMatch, isLan, type Ratings } from './elo.js'
 import { CURRENT_MODEL } from './model.js'
 import {
-  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, liveStateFrom, liveProbA, teamLogo, type H2HMap,
+  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, liveStateFrom, liveProbA, teamLogo,
+  toStageMatch, stageNeedsRefresh, type H2HMap, type StageMatch,
 } from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -160,6 +162,19 @@ async function ensureTables() {
   await pool.query(`CREATE INDEX IF NOT EXISTS match_log_a_idx ON match_log (team_a_id, played_at DESC)`)
   await pool.query(`CREATE INDEX IF NOT EXISTS match_log_b_idx ON match_log (team_b_id, played_at DESC)`)
   await pool.query(`ALTER TABLE match_log ADD COLUMN IF NOT EXISTS forfeit BOOLEAN NOT NULL DEFAULT FALSE`)
+  // Each stage (PandaScore tournament) of a tier-1 event with all its matches —
+  // bracket links included — for the bracket page.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_stages (
+      tournament_id BIGINT PRIMARY KEY,
+      serie_id BIGINT NOT NULL,
+      league TEXT, serie TEXT, name TEXT, tier TEXT,
+      has_bracket BOOLEAN NOT NULL DEFAULT FALSE,
+      begin_at TIMESTAMPTZ, end_at TIMESTAMPTZ,
+      teams JSONB, matches JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS event_stages_serie_idx ON event_stages (serie_id)`)
 }
 
 const LOG_COLS = [
@@ -372,6 +387,74 @@ async function refreshEvents(): Promise<number[]> {
   return all.map((t) => t.id)
 }
 
+const BRACKET_KEEP_DAYS = 30
+
+/** Fetch one stage's matches (bracket links if it has a bracket) and store it. */
+async function saveStage(t: PSTournament, serie: { league: string | null; serie: string | null }) {
+  const ms = await (t.has_bracket ? tournamentBracket(t.id) : tournamentMatches(t.id))
+  const matches = ms.map(toStageMatch).sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))
+  const teams = (t.teams || []).map((tm) => ({ id: tm.id, name: tm.name, logo: teamLogo(tm) }))
+  await pool.query(
+    `INSERT INTO event_stages (tournament_id, serie_id, league, serie, name, tier, has_bracket, begin_at, end_at, teams, matches, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+     ON CONFLICT (tournament_id) DO UPDATE SET serie_id=EXCLUDED.serie_id, league=EXCLUDED.league, serie=EXCLUDED.serie,
+       name=EXCLUDED.name, tier=EXCLUDED.tier, has_bracket=EXCLUDED.has_bracket, begin_at=EXCLUDED.begin_at,
+       end_at=EXCLUDED.end_at, teams=CASE WHEN jsonb_array_length(EXCLUDED.teams) > 0 THEN EXCLUDED.teams ELSE event_stages.teams END,
+       matches=EXCLUDED.matches, updated_at=NOW()`,
+    [t.id, t.serie_id, serie.league, serie.serie, t.name, t.tier, !!t.has_bracket, t.begin_at, t.end_at,
+     JSON.stringify(teams), JSON.stringify(matches)]
+  )
+}
+
+/** Brackets for every running/upcoming tier-1 event plus ones that finished in
+ *  the last couple of weeks. Finished stages that are already stored are skipped. */
+export async function refreshBrackets(): Promise<number> {
+  const live = (await pool.query(`SELECT serie_id FROM tier1_events`)).rows.map((r) => Number(r.serie_id))
+  const past = await recentTier1Tournaments()
+  const cutoff = Date.now() - 14 * 86_400_000
+  const recent = past.filter((t) => Date.parse(t.end_at || '') > cutoff).map((t) => t.serie_id)
+  const serieIds = [...new Set([...live, ...recent])]
+  const stored = new Map<number, { matches: StageMatch[]; updatedAt: Date }>()
+  for (const r of (await pool.query(`SELECT tournament_id, matches, updated_at FROM event_stages`)).rows)
+    stored.set(Number(r.tournament_id), { matches: r.matches, updatedAt: r.updated_at })
+  let fetched = 0
+  for (const serieId of serieIds) {
+    await sleep(1100)
+    const stages = await serieTournaments(serieId)
+    for (const t of stages) {
+      if (!stageNeedsRefresh(stored.get(t.id), t.end_at)) continue
+      await sleep(1100)
+      try {
+        await saveStage(t, { league: t.league?.name ?? null, serie: t.serie?.full_name ?? null })
+        fetched++
+      } catch (e) { console.error(`[brackets] stage ${t.id} failed:`, (e as Error).message) }
+    }
+  }
+  await pool.query(`DELETE FROM event_stages WHERE end_at < NOW() - make_interval(days => $1)`, [BRACKET_KEEP_DAYS])
+  console.log(`[brackets] ${serieIds.length} events, ${fetched} stage(s) fetched`)
+  return fetched
+}
+
+/** Re-fetch the stage containing a match that just ended (so the bracket
+ *  page shows the result within a minute, not at the next 30m refresh). */
+async function refreshStageOf(matchIds: number[]) {
+  if (!matchIds.length) return
+  const rows = (await pool.query(
+    `SELECT DISTINCT tournament_id, serie_id, league, serie, name, tier, has_bracket, begin_at, end_at FROM event_stages
+     WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(matches) m WHERE (m->>'id')::bigint = ANY($1::bigint[]))`,
+    [matchIds]
+  )).rows
+  for (const r of rows) {
+    try {
+      await saveStage(
+        { id: Number(r.tournament_id), serie_id: Number(r.serie_id), name: r.name, tier: r.tier, has_bracket: r.has_bracket,
+          begin_at: r.begin_at?.toISOString() ?? null, end_at: r.end_at?.toISOString() ?? null, region: null, prizepool: null },
+        { league: r.league, serie: r.serie },
+      )
+    } catch (e) { console.error(`[brackets] stage ${r.tournament_id} failed:`, (e as Error).message) }
+  }
+}
+
 async function predictUpcoming(r: Ratings) {
   // generic soonest-100 page + every scheduled match of a tier-1 tournament
   // (big events are often further out than the generic page reaches)
@@ -529,6 +612,7 @@ export async function runRefresh(): Promise<void> {
   // history page isn't empty until the next 12h backfill
   const hasHistory = (await pool.query('SELECT 1 FROM results LIMIT 1')).rowCount
   await settleRecent(hasHistory ? 2 : 15)
+  await refreshBrackets().catch((e) => console.error('[brackets] refresh failed:', e))
   await captureMaps()
 }
 
@@ -552,10 +636,11 @@ export async function pollLive(): Promise<number> {
   )).rows
   let live = 0
   let ended = 0
+  const endedIds: number[] = []
   for (const row of rows) {
     const m = byId.get(Number(row.match_id))
     if (!m) {
-      if (row.status === 'live' && !settleTried.has(Number(row.match_id))) { settleTried.add(Number(row.match_id)); ended++ }
+      if (row.status === 'live' && !settleTried.has(Number(row.match_id))) { settleTried.add(Number(row.match_id)); ended++; endedIds.push(Number(row.match_id)) }
       continue
     }
     if (row.team_a_id == null || row.status === 'finished') continue // TBD placeholder / already settled
@@ -573,6 +658,7 @@ export async function pollLive(): Promise<number> {
   if (ended) {
     console.log(`[live] ${ended} match(es) ended — settling`)
     await settleRecent(1)
+    await refreshStageOf(endedIds)
   }
   return live
 }

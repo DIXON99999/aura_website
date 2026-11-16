@@ -1,3 +1,5 @@
+import type { BTeam, StageMatch } from './bracketGraph'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 export interface Team { id: string; name: string; elo: number | null; games: number; logo?: string | null }
@@ -102,6 +104,24 @@ export interface MatchDetail {
   h2h: { aWins: number; bWins: number; meetings: Omit<RecentMatch, 'opponent'>[] } | null
   /** step-by-step prediction breakdown (upcoming matches only) */
   explain: Explanation | null
+  /** event + stage whose bracket contains this match, if stored */
+  bracket: { serieId: string; tournamentId: string } | null
+}
+
+export interface BracketStage {
+  tournamentId: string; name: string; hasBracket: boolean
+  beginAt: string | null; endAt: string | null
+  teams: BTeam[]; matches: StageMatch[]
+}
+export interface EventBracket {
+  serieId: string; league: string | null; serie: string | null
+  stages: BracketStage[]
+  /** model probability per match, keyed by team id (pre-match; live odds while running) */
+  probs: Record<string, Record<string, number>>
+}
+export interface BracketEvent {
+  serieId: string; league: string | null; serie: string | null
+  beginAt: string | null; endAt: string | null; live: boolean
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -115,3 +135,5 @@ export const getEvents = () => get<TourEvent[]>('/predictions/events')
 export const getHistory = (tier?: TierFilter) => get<HistoryRow[]>(`/predictions/history${tier ? `?tier=${tier}` : ''}`)
 export const getAccuracy = () => get<Accuracy>('/predictions/accuracy')
 export const getMatch = (id: string) => get<MatchDetail>(`/predictions/match/${encodeURIComponent(id)}`)
+export const getBracket = (serieId: string) => get<EventBracket>(`/predictions/events/${encodeURIComponent(serieId)}/bracket`)
+export const getBrackets = () => get<BracketEvent[]>('/predictions/brackets')

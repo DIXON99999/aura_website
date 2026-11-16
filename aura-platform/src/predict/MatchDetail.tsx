@@ -422,8 +422,14 @@ export default function MatchDetail() {
   })
 
   const back = (
-    <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
-      className="mb-4 text-sm text-neutral-400 hover:text-white">← Back</button>
+    <div className="mb-4 flex items-center justify-between gap-3 text-sm">
+      <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+        className="text-neutral-400 hover:text-white">← Back</button>
+      {d?.bracket && (
+        <Link to={`/event/${d.bracket.serieId}?stage=${d.bracket.tournamentId}`}
+          className="rounded-lg bg-white/5 px-3 py-1.5 font-medium text-neutral-300 hover:bg-white/10 hover:text-white">View bracket →</Link>
+      )}
+    </div>
   )
 
   if (err) return <div>{back}<p className="rounded-xl bg-white/[0.035] p-6 text-sm text-neutral-400">{err.includes('404') ? 'Match not found.' : `Couldn't load this match (${err}).`}</p></div>

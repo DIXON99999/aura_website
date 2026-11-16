@@ -307,6 +307,61 @@ app.get('/match/:id', async (c) => {
     correct: probA == null || !winnerId || !aId ? null : (probA >= 0.5) === (winnerId === aId),
     teamA, teamB, h2h, explain,
     startElo: START,
+    bracket: await bracketOf(id),
+  })
+})
+
+/** The event + stage a match belongs to, if its bracket is stored. */
+async function bracketOf(matchId: number): Promise<{ serieId: string; tournamentId: string } | null> {
+  const r = (await pool.query(
+    `SELECT serie_id, tournament_id FROM event_stages
+     WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(matches) m WHERE (m->>'id')::bigint = $1) LIMIT 1`,
+    [matchId]
+  ).catch(() => ({ rows: [] as any[] }))).rows[0]
+  return r ? { serieId: String(r.serie_id), tournamentId: String(r.tournament_id) } : null
+}
+
+const stageOut = (r: any) => ({
+  tournamentId: String(r.tournament_id), name: r.name, hasBracket: r.has_bracket,
+  beginAt: r.begin_at, endAt: r.end_at, teams: r.teams || [], matches: r.matches || [],
+})
+
+// Events with a stored bracket (running, upcoming and recently finished), newest first.
+app.get('/brackets', async (c) => {
+  const rows = (await pool.query(
+    `SELECT serie_id, MAX(league) AS league, MAX(serie) AS serie, MIN(begin_at) AS begin_at, MAX(end_at) AS end_at,
+            BOOL_OR(EXISTS (SELECT 1 FROM jsonb_array_elements(matches) m WHERE m->>'status' = 'running')) AS live
+     FROM event_stages GROUP BY serie_id ORDER BY MIN(begin_at) DESC LIMIT 20`
+  ).catch(() => ({ rows: [] as any[] }))).rows
+  return c.json(rows.map((r) => ({
+    serieId: String(r.serie_id), league: r.league, serie: r.serie, beginAt: r.begin_at, endAt: r.end_at, live: r.live,
+  })))
+})
+
+// One event's stages with every match + bracket links, and the model's number
+// for each match (pre-match pick; live odds while running), keyed by team id.
+app.get('/events/:serieId/bracket', async (c) => {
+  const serieId = Number(c.req.param('serieId'))
+  if (!Number.isFinite(serieId)) return c.json({ error: 'bad id' }, 400)
+  const rows = (await pool.query(
+    `SELECT * FROM event_stages WHERE serie_id=$1 ORDER BY begin_at ASC NULLS LAST, tournament_id`, [serieId]
+  ).catch(() => ({ rows: [] as any[] }))).rows
+  if (!rows.length) return c.json({ error: 'not found' }, 404)
+  const ids = rows.flatMap((r) => (r.matches || []).map((m: any) => m.id))
+  const probs: Record<string, Record<string, number>> = {}
+  const put = (mid: unknown, aId: unknown, bId: unknown, pa: number | null) => {
+    if (pa == null || aId == null || bId == null || probs[String(mid)]) return
+    probs[String(mid)] = { [String(aId)]: pa, [String(bId)]: 1 - pa }
+  }
+  for (const p of (await pool.query(
+    `SELECT match_id, team_a_id, team_b_id, prob_a, live_prob_a, status FROM predictions WHERE match_id = ANY($1::bigint[])`, [ids]
+  )).rows) put(p.match_id, p.team_a_id, p.team_b_id, p.status === 'live' && p.live_prob_a != null ? p.live_prob_a : p.prob_a)
+  for (const r of (await pool.query(
+    `SELECT match_id, team_a_id, team_b_id, replay_prob_a FROM results WHERE match_id = ANY($1::bigint[])`, [ids]
+  )).rows) put(r.match_id, r.team_a_id, r.team_b_id, r.replay_prob_a)
+  return c.json({
+    serieId: String(serieId), league: rows[0].league, serie: rows[0].serie,
+    stages: rows.map(stageOut), probs,
   })
 })
 

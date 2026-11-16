@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getHistory, eventName, type HistoryRow, type TierFilter } from './api'
+import { Link } from 'react-router-dom'
+import { getHistory, getBrackets, eventName, type BracketEvent, type HistoryRow, type TierFilter } from './api'
 import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink } from './ui'
 import { clock, dayLabel, melbourneDay } from './time'
 import { currentStreak, windowRecord } from './streaks'
@@ -63,6 +64,8 @@ export default function History() {
   const [tier, setTier] = useState<TierFilter | undefined>('tier1')
   const [data, setData] = useState<HistoryRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [brackets, setBrackets] = useState<BracketEvent[]>([])
+  useEffect(() => { getBrackets().then(setBrackets).catch(() => setBrackets([])) }, [])
 
   useEffect(() => {
     setData(null)
@@ -98,6 +101,19 @@ export default function History() {
         </div>
         <Segmented options={FILTERS} value={tier} onChange={setTier} />
       </div>
+
+      {tier === 'tier1' && brackets.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-neutral-500">Brackets</span>
+          {brackets.map((b) => (
+            <Link key={b.serieId} to={`/event/${b.serieId}`}
+              className="rounded-lg bg-white/5 px-2.5 py-1 font-medium text-neutral-300 hover:bg-white/10 hover:text-white">
+              {b.live && <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-500 align-middle" />}
+              {eventName(b.league, b.serie)}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {data && data.length > 0 && (() => {
         const week = windowRecord(data, 7)

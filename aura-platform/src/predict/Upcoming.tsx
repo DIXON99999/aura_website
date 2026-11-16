@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { getUpcoming, getEvents, getMatch, eventName, type MatchDetail, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
 import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink, LiveBadge, MapPips } from './ui'
 import { stageOf } from './stage'
@@ -152,6 +153,11 @@ function EventCard({ e }: { e: TourEvent }) {
           {extra > 0 && <span className="pl-1 text-xs text-neutral-500">+{extra} more</span>}
         </div>
       )}
+      <div className="mt-3 flex justify-end">
+        <Link to={`/event/${e.id}`} className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white">
+          Bracket →
+        </Link>
+      </div>
     </ThemedCard>
   )
 }

@@ -12,17 +12,18 @@ _Last updated: 2026-11-16_
   incl. TBD matches), History tab (final scores, pre-match pick bar, green/red
   for correct/wrong), Accuracy tab, organizer corner tabs (BLAST/ESL/PGL/…),
   playoff stage badges, all times in Melbourne time, match detail pages,
-  live matches (map score + live odds, 60s poll).
+  live matches (map score + live odds, 60s poll), bracket pages with an
+  animated replay of the latest results.
 - **Model:** `elo-v3` (live since 2026-11-16) = v2 map-Elo + head-to-head, plus
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** 6. Bracket visualiser (requested by the user 2026-11-16). After
-  that, options: predictor v4 ideas (see step 1, e.g. forfeits in H2H), a map
+- **Next up:** nothing queued — options: predictor v4 ideas (see step 1, e.g. forfeits in H2H), a map
   data source (Later), merging `prediction-site` → `main` via PR.
   **Also:** check live mode and the finish animation against a
   real live match (PGL Major starts Tue 24 Nov, 3 pm AEDT) — so far both have
-  only been tested with a simulated live row.
+  only been tested with a simulated live row; same day, check the Swiss grid
+  replay with real results.
 
 ## Up next (in order)
 
@@ -93,31 +94,29 @@ _Last updated: 2026-11-16_
 - Gotcha: `Featured.tsx` + `featured.ts` clash on Windows (case-insensitive) —
   logic module is `spotlight.ts`.
 
-### 6. Bracket visualiser  ⬅ start here
-User's ask: a bracket view where, on opening it, the most recent wins/losses
-are **animated — each card moves to its spot in the bracket**.
-- **Data (verified on the free tier):** `GET /tournaments/{id}/brackets` returns
-  every match of a stage with `previous_matches: [{ type: 'winner' | 'loser',
-  match_id }]` — enough to build the graph. Example: BLAST Rivals Fall 2026
-  Playoffs = tournament `22271` (2 QF → 2 SF → GF; semis have one fed slot,
-  the other team was seeded in). A serie has several stage tournaments
-  (`/series/{id}/tournaments`: Group A, Group B, Playoffs — all `has_bracket`).
-  "loser" links = double-elimination drops to the lower bracket.
-- **Backend sketch:** store brackets in the DB (route rule: never serve the
-  live API) — refresh for running/upcoming tier-1 events alongside
-  `refreshEvents`, plus recently finished ones; endpoint
-  `/api/predictions/bracket/:tournamentId` (and stage list per event).
-- **Frontend sketch:** `/bracket/:id` (stage tabs), linked from event cards and
-  match pages. Columns by round depth from the `previous_matches` graph; upper
-  vs lower bracket from winner/loser links; SVG connector lines; model % on
-  unplayed matches; reuse `ThemedCard`/`TeamLogo`/stage badges.
-- **Animation:** on open, replay the most recent results (e.g. since the
-  viewer's last visit — localStorage, per-viewer convenience — else last 24h)
-  in end-time order: the winner's team chip slides (FLIP) from its match into
-  the next match slot; the loser drops to the lower bracket via its "loser"
-  link or fades out as eliminated. Skip under `prefers-reduced-motion`.
-- Verify with the BLAST Rivals playoffs (finished) and the PGL Major once it
-  starts (24 Nov); E2E screenshots mid-animation via the CDP script approach.
+### 6. Bracket visualiser  ✅ done (2026-11-16)
+- [x] `event_stages` table: every stage (PandaScore tournament) of running,
+      upcoming and last-14-day tier-1 events with all matches + `previous_matches`
+      links (`refreshBrackets` in the 30m refresh; finished stages aren't
+      re-fetched; a match that ends in `pollLive` re-fetches its stage at once).
+- [x] API: `/events/:serieId/bracket` (stages + model % per match),
+      `/brackets` (event list), `/match/:id` returns `bracket` for the link.
+- [x] `/event/:serieId?stage=` page (`Bracket.tsx`): stage tabs; bracket stages
+      laid out from the link graph (`bracketGraph.ts`, tested): upper / lower rows,
+      grand final, 3rd-place match, seeded slots, Champion / Advances slots, SVG
+      connectors (green once filled), ✓ called / ✗ upset per match, model % on
+      unplayed ones. Stages without a bracket (Major Swiss) show a record grid
+      (0–0 → 3–x), plus the matches still to play.
+- [x] Replay on open: results since your last visit to that stage (localStorage),
+      else last 24h, else the latest batch (max 8). Score lands → winner chip
+      flies (WAAPI clone) to its next slot / Champion, loser drops to the lower
+      bracket or fades. Skip / Replay buttons; new results while open animate
+      too; reduced motion shows the final state. Phone: bracket scrolls inside
+      its own box and follows the flying chip.
+- Links: event cards (Matches), "View bracket" on match pages, "Brackets" chips on History.
+- Verified (headless Chrome, scratchpad `brshot.ts`): BLAST Rivals playoffs,
+  IEM Beijing double-elim groups + playoffs, PGL Major Stage 1 (Swiss, not started).
+  ⚠ Check a Swiss stage with results once the Major starts (24 Nov).
 
 ### Later / parked
 - **Map-aware model** (per-map team ratings, re-price on veto). Needs a map data
@@ -133,6 +132,8 @@ are **animated — each card moves to its spot in the bracket**.
 
 ## Done
 
+- 2026-11-16 — Bracket visualiser: `event_stages`, bracket + Swiss layouts,
+  replay animation of the latest results. 175 tests.
 - 2026-11-16 — Upcoming-match polish: featured match + countdown, upset watch,
   dark-mode logos. 149 tests.
 - 2026-11-16 — Correct-prediction moment (flip + burst) and History streaks. 140 tests.
@@ -164,4 +165,7 @@ are **animated — each card moves to its spot in the bracket**.
   `ORGS` list in `src/predict/ui.tsx`.
 - **Windows + Vite:** HMR occasionally serves a stale module after an edit
   (blank page, "does not provide an export named …"). Restart Vite.
+- Same clash for brackets: page is `Bracket.tsx`, logic is `bracketGraph.ts`.
+- Scratchpad CDP scripts from Git Bash: `export MSYS_NO_PATHCONV=1` first, or
+  `/event/…` arguments get rewritten into Windows paths.
 - PandaScore free tier: `/csgo/matches/:id` is 403 — use `/matches/:id`.

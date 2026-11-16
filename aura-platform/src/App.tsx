@@ -3,6 +3,7 @@ import Upcoming from './predict/Upcoming'
 import History from './predict/History'
 import MatchDetail from './predict/MatchDetail'
 import Accuracy from './predict/Accuracy'
+import BracketPage from './predict/Bracket'
 
 const tabs = [
   { to: '/', label: 'Matches', end: true },
@@ -58,6 +59,7 @@ function App() {
             <Route path="/history" element={<History />} />
             <Route path="/match/:id" element={<MatchDetail />} />
             <Route path="/accuracy" element={<Accuracy />} />
+            <Route path="/event/:serieId" element={<BracketPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

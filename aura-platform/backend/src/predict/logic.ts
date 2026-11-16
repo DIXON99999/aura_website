@@ -257,3 +257,50 @@ export function liveProbA(preProbA: number, bo: number, scoreA: number, scoreB: 
 export function teamLogo(t: { image_url?: string | null; dark_mode_image_url?: string | null } | null | undefined): string | null {
   return t?.dark_mode_image_url || t?.image_url || null
 }
+
+// ---- Brackets ------------------------------------------------------------
+
+/** One match of an event stage, trimmed for storage (event_stages.matches). */
+export interface StageMatch {
+  id: number; name: string; status: string
+  scheduledAt: string | null; endAt: string | null; bo: number | null
+  winnerId: number | null; forfeit: boolean
+  /** which earlier matches feed this one (bracket stages only) */
+  prev: { type: 'winner' | 'loser'; matchId: number }[]
+  teams: { id: number; name: string; logo: string | null }[]
+  /** maps won, keyed by team id */
+  scores: Record<string, number>
+}
+
+export function toStageMatch(m: PSMatch): StageMatch {
+  const teams = m.opponents
+    .map((o) => o.opponent)
+    .filter((o): o is NonNullable<typeof o> => o?.id != null)
+    .map((o) => ({ id: o.id!, name: o.name ?? '?', logo: teamLogo(o) }))
+  const scores: Record<string, number> = {}
+  for (const r of m.results || []) scores[String(r.team_id)] = r.score
+  return {
+    id: m.id, name: m.name, status: m.status,
+    scheduledAt: m.scheduled_at || m.begin_at, endAt: m.end_at ?? null,
+    bo: m.number_of_games ?? null, winnerId: m.winner_id ?? null, forfeit: !!m.forfeit,
+    prev: (m.previous_matches || []).map((p) => ({ type: p.type, matchId: p.match_id })),
+    teams, scores,
+  }
+}
+
+const DONE = new Set(['finished', 'canceled'])
+
+/** A stored stage needs re-fetching unless it is over and was last fetched
+ *  after its final match (finished stages never change again). */
+export function stageNeedsRefresh(
+  stored: { matches: StageMatch[]; updatedAt: Date } | undefined,
+  endAt: string | null,
+): boolean {
+  if (!stored || stored.matches.length === 0) return true
+  if (!stored.matches.every((m) => DONE.has(m.status))) return true
+  const lastEnd = Math.max(
+    ...stored.matches.map((m) => Date.parse(m.endAt || '') || 0),
+    Date.parse(endAt || '') || 0,
+  )
+  return stored.updatedAt.getTime() <= lastEnd
+}
