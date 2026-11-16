@@ -250,3 +250,10 @@ export function liveStateFrom(m: Pick<PSMatch, 'opponents' | 'results' | 'games'
 export function liveProbA(preProbA: number, bo: number, scoreA: number, scoreB: number): number {
   return seriesProbGivenScore(impliedMapProb(preProbA, bo), bo, scoreA, scoreB)
 }
+
+// ── Team logos ───────────────────────────────────────────────────────────────
+/** The site is dark, so prefer PandaScore's dark-mode logo when a team has one
+ *  (fixes all-black marks like Spirit's vanishing on the cards). */
+export function teamLogo(t: { image_url?: string | null; dark_mode_image_url?: string | null } | null | undefined): string | null {
+  return t?.dark_mode_image_url || t?.image_url || null
+}

@@ -43,3 +43,15 @@ export const shortDate = (iso: string | null) =>
 
 /** Melbourne day key, for grouping lists by day. */
 export const melbourneDay = (iso: string | null) => (iso ? dayKey(new Date(iso)) : 'unknown')
+
+/** Time left until `iso`, e.g. "7d 18h", "5h 12m", "12:34" (final hour);
+ *  null once it has started. Used only by the featured match countdown. */
+export function timeUntil(iso: string, now = Date.now()): string | null {
+  const ms = Date.parse(iso) - now
+  if (ms <= 0) return null
+  const s = Math.floor(ms / 1000)
+  const d = Math.floor(s / 86_400), h = Math.floor((s % 86_400) / 3600), m = Math.floor((s % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}:${String(s % 60).padStart(2, '0')}`
+}

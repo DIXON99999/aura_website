@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { clock, dayLabel, melbourneDay, shortDate, tzAbbr } from './time'
+import { clock, dayLabel, melbourneDay, shortDate, timeUntil, tzAbbr } from './time'
 
 // These must hold no matter what timezone the machine (or CI runner) is in.
 
@@ -61,4 +61,14 @@ describe('dayLabel', () => {
 describe('shortDate', () => {
   test('uses the Melbourne date', () => expect(shortDate('2026-11-23T14:00:00Z')).toBe('24 Nov'))
   test('missing → TBA', () => expect(shortDate(null)).toBe('TBA'))
+})
+
+describe('timeUntil', () => {
+  const now = Date.parse('2026-11-16T00:00:00Z')
+  test('days+hours, hours+minutes, then mm:ss in the final hour', () => {
+    expect(timeUntil('2026-11-23T18:30:00Z', now)).toBe('7d 18h')
+    expect(timeUntil('2026-11-16T05:12:30Z', now)).toBe('5h 12m')
+    expect(timeUntil('2026-11-16T00:12:34Z', now)).toBe('12:34')
+  })
+  test('null once started', () => expect(timeUntil('2026-11-15T23:59:00Z', now)).toBeNull())
 })

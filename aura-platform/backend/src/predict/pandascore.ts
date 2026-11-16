@@ -84,7 +84,7 @@ export interface PSTournament {
   league?: { name?: string; image_url?: string | null }
   serie_id: number
   serie?: { full_name?: string }
-  teams?: { id: number; name: string; image_url?: string | null }[]
+  teams?: { id: number; name: string; image_url?: string | null; dark_mode_image_url?: string | null }[]
   matches?: { id: number; status: string }[]
 }
 

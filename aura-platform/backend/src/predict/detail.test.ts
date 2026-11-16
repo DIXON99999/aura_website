@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { explainPrediction, formString, modelProb, recordH2H, isScorable, isLoggable, type H2HMap } from './logic'
+import { explainPrediction, formString, modelProb, recordH2H, isScorable, isLoggable, teamLogo, type H2HMap } from './logic'
 import { applyMatch, V2_CONFIG, expected, matchProbFromMap, type Ratings } from './elo'
 import { V3_CONFIG } from './model'
 import type { PSMatch } from './pandascore'
@@ -113,5 +113,16 @@ describe('isLoggable (form / head-to-head log)', () => {
   test('excludes draws and undecided matches', () => {
     expect(isLoggable({ ...m(0, 1, 2, 1), draw: true })).toBe(false)
     expect(isLoggable({ ...m(0, 1, 2, 1), winner_id: null })).toBe(false)
+  })
+})
+
+describe('teamLogo', () => {
+  test('prefers the dark-mode logo (the site is dark)', () => {
+    expect(teamLogo({ image_url: 'light.png', dark_mode_image_url: 'dark.png' })).toBe('dark.png')
+  })
+  test('falls back to the normal logo, then null', () => {
+    expect(teamLogo({ image_url: 'light.png', dark_mode_image_url: null })).toBe('light.png')
+    expect(teamLogo({})).toBeNull()
+    expect(teamLogo(undefined)).toBeNull()
   })
 })

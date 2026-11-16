@@ -7,6 +7,7 @@ import { dayAndClock as timeLabel, shortDate } from './time'
 import CalendarView from './Calendar'
 import { usePoll } from './usePoll'
 import { FinishedCard } from './Celebrate'
+import FeaturedStrip from './Featured'
 
 const pct = (x: number) => Math.round(x * 100)
 
@@ -292,6 +293,7 @@ export default function Upcoming() {
           />
         )
       ) : <>
+      {data && <FeaturedStrip matches={data} />}
       {showEvents && (
         <section className="mb-7">
           <SectionTitle>Events</SectionTitle>

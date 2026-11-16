@@ -17,9 +17,12 @@ _Last updated: 2026-11-16_
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** 5. Upcoming-match polish. **Also:** check live mode and the
-  finish animation against a real live match (PGL Major starts Tue 24 Nov,
-  3 pm AEDT) — so far both have only been tested with a simulated live row.
+- **Next up:** the planned list (1–5) is done — pick the next direction with
+  the user. Options: predictor v4 ideas (see step 1, e.g. forfeits in H2H),
+  a map data source (Later), merging `prediction-site` → `main` via PR, or new
+  feature ideas. **Also:** check live mode and the finish animation against a
+  real live match (PGL Major starts Tue 24 Nov, 3 pm AEDT) — so far both have
+  only been tested with a simulated live row.
 
 ## Up next (in order)
 
@@ -78,12 +81,17 @@ _Last updated: 2026-11-16_
 - E2E check script (scratchpad `celebrate.ts`): drives Chrome via DevTools,
       settles a simulated live match mid-session, screenshots the flip.
 
-### 5. Upcoming-match polish  ⬅ start here
-- [ ] Countdown on the next big match only (a full countdown everywhere was
-      tried and reverted — the user prefers Melbourne times on cards).
-- [ ] "Biggest upset chance" highlight; featured grand-final card.
-- [ ] Use PandaScore `opponent.dark_mode_image_url` for team logos (fixes
-      all-black logos like Spirit disappearing on the dark cards).
+### 5. Upcoming-match polish  ✅ done (2026-11-16)
+- [x] Featured card at the top of the list view: the next grand final if one is
+      scheduled (gold ring), else the next match — the only place with a
+      countdown (a countdown everywhere was tried and reverted; the user
+      prefers Melbourne times on cards).
+- [x] Upset watch: among matches with a clear favourite (≥ 60%), the underdog
+      with the best chance (`spotlight.ts`, tested).
+- [x] Dark-mode team logos (`logic.teamLogo` prefers `dark_mode_image_url`;
+      63 of ~220 teams have one, incl. Spirit, NIP, FaZe, 100 Thieves).
+- Gotcha: `Featured.tsx` + `featured.ts` clash on Windows (case-insensitive) —
+  logic module is `spotlight.ts`.
 
 ### Later / parked
 - **Map-aware model** (per-map team ratings, re-price on veto). Needs a map data
@@ -99,6 +107,8 @@ _Last updated: 2026-11-16_
 
 ## Done
 
+- 2026-11-16 — Upcoming-match polish: featured match + countdown, upset watch,
+  dark-mode logos. 149 tests.
 - 2026-11-16 — Correct-prediction moment (flip + burst) and History streaks. 140 tests.
 - 2026-11-16 — Live matches: 60s poller, live odds from map score, LIVE UI. 134 tests.
 - 2026-11-16 — Match detail page + `match_log`. Fixed: backfill applied a match

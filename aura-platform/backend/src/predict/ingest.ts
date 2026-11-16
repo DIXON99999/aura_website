@@ -13,7 +13,7 @@ import {
 import { applyMatch, isLan, type Ratings } from './elo.js'
 import { CURRENT_MODEL } from './model.js'
 import {
-  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, liveStateFrom, liveProbA, type H2HMap,
+  pairKey, modelProb, recordH2H, isTier1, isLoggable, shouldShow, scoreOf, staleUpcomingIds, liveStateFrom, liveProbA, teamLogo, type H2HMap,
 } from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -44,7 +44,7 @@ async function recordResult(m: PSMatch, replayProbA?: number): Promise<boolean> 
   if (m.status !== 'finished' || !m.winner_id || !shouldShow(m)) return false
   const opp = (m.opponents || []).map((o) => o.opponent).filter((o) => o?.id)
   if (opp.length !== 2) return false
-  const [a, b] = opp as { id: number; name?: string; image_url?: string }[]
+  const [a, b] = opp as { id: number; name?: string; image_url?: string; dark_mode_image_url?: string | null }[]
   await pool.query(
     `INSERT INTO results (
        match_id, name, finished_at, league, serie, tier, bo, forfeit,
@@ -59,7 +59,7 @@ async function recordResult(m: PSMatch, replayProbA?: number): Promise<boolean> 
     [
       m.id, m.name, m.end_at || m.begin_at || m.scheduled_at, m.league?.name || null,
       m.serie?.full_name || null, m.tournament?.tier || null, m.number_of_games || null, !!m.forfeit,
-      a.id, a.name || null, a.image_url || null, b.id, b.name || null, b.image_url || null,
+      a.id, a.name || null, teamLogo(a), b.id, b.name || null, teamLogo(b),
       scoreOf(m, a.id), scoreOf(m, b.id), m.winner_id, replayProbA ?? null,
     ]
   )
@@ -174,7 +174,7 @@ function logRow(m: PSMatch, eloA: number | null = null, eloB: number | null = nu
   return [
     m.id, m.scheduled_at || m.begin_at, m.name, m.league?.name ?? null, m.serie?.full_name ?? null,
     m.tournament?.tier ?? null, isLan(m), m.number_of_games ?? null,
-    oa.id, oa.name ?? null, oa.image_url ?? null, ob.id, ob.name ?? null, ob.image_url ?? null,
+    oa.id, oa.name ?? null, teamLogo(oa), ob.id, ob.name ?? null, teamLogo(ob),
     scoreOf(m, oa.id!), scoreOf(m, ob.id!), m.winner_id, eloA, eloB, !!m.forfeit,
   ]
 }
@@ -307,7 +307,7 @@ async function backfill(): Promise<Ratings> {
       const [a, b] = m.opponents.map((o) => o.opponent!.id!)
       log.push(logRow(m, r.get(a)?.elo ?? null, r.get(b)?.elo ?? null))
     }
-    for (const o of m.opponents || []) if (o.opponent?.id && o.opponent.image_url) logos.set(o.opponent.id, o.opponent.image_url)
+    for (const o of m.opponents || []) if (o.opponent?.id && teamLogo(o.opponent)) logos.set(o.opponent.id, teamLogo(o.opponent)!)
     recordH2H(h2h, m)
   }
   await saveRatings(r)
@@ -348,7 +348,7 @@ async function refreshEvents(): Promise<number[]> {
   for (const [serieId, ts] of bySerie) {
     ts.sort((a, b) => (a.begin_at || '').localeCompare(b.begin_at || ''))
     const teams = new Map<number, { name: string; logo: string | null }>()
-    for (const t of ts) for (const tm of t.teams || []) teams.set(tm.id, { name: tm.name, logo: tm.image_url || null })
+    for (const t of ts) for (const tm of t.teams || []) teams.set(tm.id, { name: tm.name, logo: teamLogo(tm) })
     const first = ts[0]
     const begin = ts.map((t) => t.begin_at).filter(Boolean).sort()[0] || null
     const end = ts.map((t) => t.end_at).filter(Boolean).sort().at(-1) || null
@@ -386,12 +386,12 @@ async function predictUpcoming(r: Ratings) {
   const written: number[] = []
   for (const m of ms) {
     if (!shouldShow(m)) { skipped++; continue }
-    const logoOf = (id: number) => (m.opponents || []).find((o) => o.opponent?.id === id)?.opponent?.image_url || null
+    const logoOf = (id: number) => teamLogo((m.opponents || []).find((o) => o.opponent?.id === id)?.opponent)
     const p = modelProb(r, h2h, m, MODEL_CONFIG)
     if (!p) {
       // teams not decided yet — keep tier-1 placeholders ("TBD vs TBD")
       if (!isTier1(m)) continue
-      const known = (m.opponents || []).map((o) => o.opponent).filter((o) => o?.id) as { id: number; name?: string; image_url?: string }[]
+      const known = (m.opponents || []).map((o) => o.opponent).filter((o) => o?.id) as { id: number; name?: string; image_url?: string; dark_mode_image_url?: string | null }[]
       const [a, b] = known
       await pool.query(
         `INSERT INTO predictions (
@@ -406,8 +406,8 @@ async function predictUpcoming(r: Ratings) {
          WHERE predictions.status NOT IN ('finished', 'live')`,
         [
           m.id, m.name, m.scheduled_at, m.league?.name || null, m.number_of_games || 1,
-          a?.id ?? null, a?.name ?? null, a?.image_url ?? null,
-          b?.id ?? null, b?.name ?? null, b?.image_url ?? null,
+          a?.id ?? null, a?.name ?? null, teamLogo(a),
+          b?.id ?? null, b?.name ?? null, teamLogo(b),
           MODEL, streamOf(m), m.tournament?.tier || null, m.serie?.full_name || null,
         ]
       )
