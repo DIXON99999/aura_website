@@ -11,13 +11,15 @@ import {
   type PSMatch, type PSTournament,
 } from './pandascore.js'
 import { applyMatch, type Ratings } from './elo.js'
+import { CURRENT_MODEL } from './model.js'
 import {
-  pairKey, modelProb, isTier1, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
+  pairKey, modelProb, recordH2H, isTier1, shouldShow, scoreOf, staleUpcomingIds, type H2HMap,
 } from './logic.js'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-const MODEL = 'map-elo-h2h-v2'
+const MODEL = CURRENT_MODEL.version
+const MODEL_CONFIG = CURRENT_MODEL.config
 const BACKFILL_PAGES = Number(process.env.BACKFILL_PAGES || 180)
 const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 30)
 
@@ -222,24 +224,12 @@ async function backfill(): Promise<Ratings> {
   const replay = new Map<number, number>() // match id -> P(opponents[0] wins)
   for (const m of all) {
     if (m.winner_id && (m.scheduled_at || '') >= since && shouldShow(m)) {
-      const p = modelProb(r, h2h, m)
+      const p = modelProb(r, h2h, m, MODEL_CONFIG)
       if (p) replay.set(m.id, p.probA)
     }
-    applyMatch(r, m)
+    applyMatch(r, m, MODEL_CONFIG)
     for (const o of m.opponents || []) if (o.opponent?.id && o.opponent.image_url) logos.set(o.opponent.id, o.opponent.image_url)
-    // accumulate match-level head-to-head
-    if (m.winner_id && m.opponents?.length === 2) {
-      const ids = m.opponents.map((o) => o.opponent?.id).filter(Boolean) as number[]
-      if (ids.length === 2) {
-        const [a, b] = ids
-        const lo = Math.min(a, b), hi = Math.max(a, b)
-        const key = pairKey(lo, hi)
-        const e = h2h.get(key) || { loId: lo, hiId: hi, loWins: 0, hiWins: 0 }
-        if (m.winner_id === lo) e.loWins++
-        else if (m.winner_id === hi) e.hiWins++
-        h2h.set(key, e)
-      }
-    }
+    recordH2H(h2h, m)
   }
   await saveRatings(r)
   await saveH2H(h2h)
@@ -316,7 +306,7 @@ async function predictUpcoming(r: Ratings) {
   for (const m of ms) {
     if (!shouldShow(m)) { skipped++; continue }
     const logoOf = (id: number) => (m.opponents || []).find((o) => o.opponent?.id === id)?.opponent?.image_url || null
-    const p = modelProb(r, h2h, m)
+    const p = modelProb(r, h2h, m, MODEL_CONFIG)
     if (!p) {
       // teams not decided yet — keep tier-1 placeholders ("TBD vs TBD")
       if (!isTier1(m)) continue

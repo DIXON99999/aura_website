@@ -12,27 +12,33 @@ _Last updated: 2026-11-16_
   incl. TBD matches), History tab (final scores, pre-match pick bar, green/red
   for correct/wrong), Accuracy tab, organizer corner tabs (BLAST/ESL/PGL/…),
   playoff stage badges, all times in Melbourne time.
-- **Model:** `map-elo-h2h-v2` — one map-Elo rating per team + head-to-head blend.
-  ~62.5% on held-out matches (backtest); History replay shows ~63% on tier 1.
-- **Next up:** 1. Predictor v3 (map-aware) — see below.
+- **Model:** `elo-v3` (live since 2026-11-16) = v2 map-Elo + head-to-head, plus
+  provisional K (a team's first 10 matches move its rating 2.5× faster).
+  Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
+  tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
+- **Next up:** 2. Match detail page (step 1's free-tier work is done; map-aware
+  model is parked on a data source — see Later).
 
 ## Up next (in order)
 
-### 1. Predictor v3 — map-aware model  ⬅ start here
-Biggest lever on the site's core value. The current model ignores which maps
-are played.
-- [ ] Per-map team ratings (start from `aura-platform/ml/map_elo.py` experiment).
-- [ ] Predict each map of the series → series odds; before veto, use each
-      team's map pool / pick tendencies.
-- [ ] Re-price when the veto lands (`captureMaps` in `backend/src/predict/ingest.ts`
-      already stores played maps on `predictions.maps`).
-- [ ] Candidate extra features (keep only what backtests better): LAN vs online,
-      event importance (tier / stage), recency weighting.
-      _Note: a fast "form" Elo was tried and worsened calibration — FORM_WEIGHT=0._
-- [ ] Evaluate with Brier score / log-loss, not just accuracy; show model
-      version comparison on the Accuracy page.
+### 1. Predictor v3 — more parameters  ✅ done (2026-11-16)
+- [x] Backtest harness: `bun src/predict/backtest.ts` (walk-forward, warm-up 50% /
+      tune 25% / confirm 25%, log-loss + Brier + accuracy, tier-1 slice). History
+      cache: `bun --env-file=.env src/predict/history.ts` → `backend/data/history.json`.
+- [x] Configurable model (`ModelConfig` in `elo.ts`; `V2_CONFIG` pinned by a regression test).
+- [x] Tried: tier-weighted K, provisional K, inactivity shrink, LAN rating,
+      rating scale, base K, H2H weight. **Kept only provisional K** (×2.5 for the
+      first 10 matches). Inactivity shrink made things worse; LAN rating helped
+      tier-1 only in one window (inconsistent); H2H 0.4 hurt tier-1.
+      Add a parameter only if it cuts TUNE log-loss by ≥ 0.001.
+- [x] Accuracy page: backtest model comparison + live results per model version.
+- **Map-aware model is blocked:** PandaScore's free tier has no map names
+  (`games[].map` is null everywhere; `/csgo/*` detail is 403). See Later.
+- Ideas for v4 (need the backtest to prove them): LAN rating with more LAN
+  data, region strength offsets (`tournament.region` vs `opponent.location`),
+  series-score margin.
 
-### 2. Match detail page
+### 2. Match detail page  ⬅ start here
 - [ ] Click a card → recent form, H2H history, per-map win rates, "why this
       prediction" (rating gap, H2H, map edge).
 
@@ -49,8 +55,14 @@ are played.
 - [ ] Countdown on the next big match only (a full countdown everywhere was
       tried and reverted — the user prefers Melbourne times on cards).
 - [ ] "Biggest upset chance" highlight; featured grand-final card.
+- [ ] Use PandaScore `opponent.dark_mode_image_url` for team logos (fixes
+      all-black logos like Spirit disappearing on the dark cards).
 
 ### Later / parked
+- **Map-aware model** (per-map team ratings, re-price on veto). Needs a map data
+  source: (a) Liquipedia MediaWiki API — free, match pages list maps, but needs
+  parsing + polite rate limits; or (b) PandaScore paid tier (games include maps).
+  `captureMaps` in ingest is in place but has captured 0 maps on the free tier.
 - Player-level stats & roster changes — would help the model a lot, but needs
   PandaScore's paid tier.
 - Remove the legacy Aura app (old routes/pages; its `initTables` still runs on
@@ -60,6 +72,8 @@ are played.
 
 ## Done
 
+- 2026-11-16 — Predictor v3 (`elo-v3`): backtest harness, configurable model,
+  provisional K; Accuracy page model comparison. 110 tests.
 - 2026-11-16 — Unit tests (86, `bun test`) + GitHub Actions CI (typecheck, tests,
   build). Pure logic extracted to `backend/src/predict/logic.ts`.
 - 2026-11-16 — Tier-1 events + TBD matches, calendar view, stage badges,

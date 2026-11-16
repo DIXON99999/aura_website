@@ -26,9 +26,19 @@ export interface HistoryRow {
   /** 'live' = stored before the match; 'replay' = walk-forward model replay using only pre-match data */
   pickSource: 'live' | 'replay' | null
 }
+export interface ModelBacktest {
+  version: string; summary: string
+  logLoss: number; brier: number; accuracy: number; n: number
+  tier1Accuracy: number; tier1N: number
+}
 export interface Accuracy {
   total: number; correct: number; accuracy: number | null
   calibration: { n: number; predicted: number; actual: number }[]
+  /** live (graded) results per model version */
+  byModel: { version: string; n: number; accuracy: number | null; brier: number }[]
+  currentModel: string
+  /** walk-forward backtest per model version, oldest first */
+  backtests: ModelBacktest[]
 }
 
 /** Display name for an event: league + serie, which carries the host city for

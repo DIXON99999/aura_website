@@ -18,6 +18,12 @@ Done list whenever a piece of work lands.
 - Frontend: `cd aura-platform && npx vite` → http://localhost:5173
 - Full rebuild of ratings/history: `cd aura-platform/backend && bun --env-file=.env src/predict/ingest.ts`
 
+## Model work
+- Model versions + backtest scores: `backend/src/predict/model.ts` (`CURRENT_MODEL` is what ingest uses).
+- Backtest: `bun --env-file=.env src/predict/history.ts` once (caches ~20k matches to
+  `backend/data/`, gitignored), then `bun src/predict/backtest.ts`. Only ship a change
+  that improves CONFIRM-window log-loss; tune on the TUNE window only.
+
 ## Check before committing
 - `cd aura-platform && npm run check` (typecheck frontend + tests + backend, then `bun test`).
 - CI (`.github/workflows/ci.yml`) runs the same plus `vite build` on every push.

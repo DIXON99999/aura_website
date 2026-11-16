@@ -6,7 +6,10 @@ if (!TOKEN) throw new Error('Missing PANDASCORE_TOKEN in env')
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export interface PSOpponent { type?: string; opponent?: { id?: number; name?: string; image_url?: string } }
+export interface PSOpponent {
+  type?: string
+  opponent?: { id?: number; name?: string; image_url?: string; dark_mode_image_url?: string | null; location?: string | null }
+}
 export interface PSGame { position?: number; finished?: boolean; winner?: { id?: number } }
 export interface PSMatch {
   id: number
@@ -21,7 +24,8 @@ export interface PSMatch {
   league?: { name?: string }
   serie?: { full_name?: string; tier?: string }
   /** tier lives on the tournament (s/a/b/c/d); serie.tier is always null */
-  tournament?: { name?: string; tier?: string | null }
+  /** type: 'online' | 'offline' (LAN); region e.g. 'WEU', 'EEU', 'NA', 'SA', 'ASIA' */
+  tournament?: { name?: string; tier?: string | null; type?: string | null; region?: string | null }
   end_at?: string | null
   results?: { team_id: number; score: number }[]
   opponents: PSOpponent[]

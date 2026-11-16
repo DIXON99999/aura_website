@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { pool } from '../db/index.js'
 import { orientProbA } from '../predict/logic.js'
+import { CURRENT_MODEL, MODELS } from '../predict/model.js'
 
 const app = new Hono()
 
@@ -85,6 +86,14 @@ app.get('/accuracy', async (c) => {
      FROM predictions WHERE status = 'finished' AND correct IS NOT NULL
      GROUP BY b ORDER BY b`
   )).rows
+  // live results per model version (Brier = mean squared error of P(team A))
+  const byModel = (await pool.query(
+    `SELECT model_version, COUNT(*)::int AS n,
+            SUM(CASE WHEN correct THEN 1 ELSE 0 END)::int AS hits,
+            AVG(POWER(prob_a - CASE WHEN winner_id = team_a_id THEN 1 ELSE 0 END, 2)) AS brier
+     FROM predictions WHERE status = 'finished' AND correct IS NOT NULL
+     GROUP BY model_version ORDER BY MIN(created_at)`
+  )).rows
   return c.json({
     total: overall.n,
     correct: overall.hits,
@@ -92,6 +101,12 @@ app.get('/accuracy', async (c) => {
     calibration: buckets.map((r) => ({
       n: r.n, predicted: Number(r.predicted), actual: Number(r.actual),
     })),
+    byModel: byModel.map((r) => ({
+      version: r.model_version, n: r.n, accuracy: r.n ? r.hits / r.n : null, brier: Number(r.brier),
+    })),
+    // walk-forward backtest scores for each model version (see predict/model.ts)
+    currentModel: CURRENT_MODEL.version,
+    backtests: MODELS.map((m) => ({ version: m.version, summary: m.summary, ...m.backtest })),
   })
 })
 

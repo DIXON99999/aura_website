@@ -1,21 +1,21 @@
 // Pure prediction/ingest decisions — no database, no network, no env — so they
 // can be unit tested directly. ingest.ts and the routes call into these.
 import type { PSMatch } from './pandascore.js'
-import { predict, type Ratings } from './elo.js'
+import { predict, V2_CONFIG, type ModelConfig, type Ratings } from './elo.js'
 
 // ── Head-to-head ─────────────────────────────────────────────────────────────
 // Shrink the pair's historical match record toward 50% with a prior, then mix
-// it into the Elo probability — weighted up to 30% once two teams have met ~6+
-// times. Captures matchup effects Elo's transitivity misses.
+// it into the Elo probability — weighted up to `maxWeight` (30% in v2) once two
+// teams have met ~6+ times. Captures matchup effects Elo's transitivity misses.
 export const H2H_PRIOR = 4       // pseudo-meetings pulling toward 50/50
 export const H2H_MAX_WEIGHT = 0.30
 export const H2H_FULL_AT = 6     // meetings needed for full weight
 
-export function h2hAdjust(eloProbA: number, aWins: number, bWins: number): number {
+export function h2hAdjust(eloProbA: number, aWins: number, bWins: number, maxWeight = H2H_MAX_WEIGHT): number {
   const n = aWins + bWins
   if (n === 0) return eloProbA
   const h2hA = (aWins + H2H_PRIOR * 0.5) / (n + H2H_PRIOR)
-  const weight = (Math.min(n, H2H_FULL_AT) / H2H_FULL_AT) * H2H_MAX_WEIGHT
+  const weight = (Math.min(n, H2H_FULL_AT) / H2H_FULL_AT) * maxWeight
   return (1 - weight) * eloProbA + weight * h2hA
 }
 
@@ -24,15 +24,28 @@ export const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${
 
 export type H2HMap = Map<string, { loId: number; hiId: number; loWins: number; hiWins: number }>
 
+/** Add a finished match's result to the head-to-head record. Mutates `h2h`. */
+export function recordH2H(h2h: H2HMap, m: Pick<PSMatch, 'winner_id' | 'opponents'>): void {
+  if (!m.winner_id || m.opponents?.length !== 2) return
+  const ids = m.opponents.map((o) => o.opponent?.id).filter(Boolean) as number[]
+  if (ids.length !== 2) return
+  const lo = Math.min(ids[0], ids[1]), hi = Math.max(ids[0], ids[1])
+  const key = pairKey(lo, hi)
+  const e = h2h.get(key) || { loId: lo, hiId: hi, loWins: 0, hiWins: 0 }
+  if (m.winner_id === lo) e.loWins++
+  else if (m.winner_id === hi) e.hiWins++
+  h2h.set(key, e)
+}
+
 /** Full model: Elo match probability for opponents[0], with head-to-head blend. */
-export function modelProb(r: Ratings, h2h: H2HMap, m: PSMatch): ReturnType<typeof predict> {
-  const p = predict(r, m)
+export function modelProb(r: Ratings, h2h: H2HMap, m: PSMatch, cfg: ModelConfig = V2_CONFIG): ReturnType<typeof predict> {
+  const p = predict(r, m, cfg)
   if (!p) return null
   const he = h2h.get(pairKey(p.teamA.id, p.teamB.id))
   if (he) {
     const aWins = p.teamA.id === he.loId ? he.loWins : he.hiWins
     const bWins = p.teamA.id === he.loId ? he.hiWins : he.loWins
-    p.probA = h2hAdjust(p.probA, aWins, bWins)
+    p.probA = h2hAdjust(p.probA, aWins, bWins, cfg.h2hMaxWeight)
   }
   return p
 }
