@@ -17,10 +17,10 @@ _Last updated: 2026-11-16_
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** the planned list (1–5) is done — pick the next direction with
-  the user. Options: predictor v4 ideas (see step 1, e.g. forfeits in H2H),
-  a map data source (Later), merging `prediction-site` → `main` via PR, or new
-  feature ideas. **Also:** check live mode and the finish animation against a
+- **Next up:** 6. Bracket visualiser (requested by the user 2026-11-16). After
+  that, options: predictor v4 ideas (see step 1, e.g. forfeits in H2H), a map
+  data source (Later), merging `prediction-site` → `main` via PR.
+  **Also:** check live mode and the finish animation against a
   real live match (PGL Major starts Tue 24 Nov, 3 pm AEDT) — so far both have
   only been tested with a simulated live row.
 
@@ -92,6 +92,32 @@ _Last updated: 2026-11-16_
       63 of ~220 teams have one, incl. Spirit, NIP, FaZe, 100 Thieves).
 - Gotcha: `Featured.tsx` + `featured.ts` clash on Windows (case-insensitive) —
   logic module is `spotlight.ts`.
+
+### 6. Bracket visualiser  ⬅ start here
+User's ask: a bracket view where, on opening it, the most recent wins/losses
+are **animated — each card moves to its spot in the bracket**.
+- **Data (verified on the free tier):** `GET /tournaments/{id}/brackets` returns
+  every match of a stage with `previous_matches: [{ type: 'winner' | 'loser',
+  match_id }]` — enough to build the graph. Example: BLAST Rivals Fall 2026
+  Playoffs = tournament `22271` (2 QF → 2 SF → GF; semis have one fed slot,
+  the other team was seeded in). A serie has several stage tournaments
+  (`/series/{id}/tournaments`: Group A, Group B, Playoffs — all `has_bracket`).
+  "loser" links = double-elimination drops to the lower bracket.
+- **Backend sketch:** store brackets in the DB (route rule: never serve the
+  live API) — refresh for running/upcoming tier-1 events alongside
+  `refreshEvents`, plus recently finished ones; endpoint
+  `/api/predictions/bracket/:tournamentId` (and stage list per event).
+- **Frontend sketch:** `/bracket/:id` (stage tabs), linked from event cards and
+  match pages. Columns by round depth from the `previous_matches` graph; upper
+  vs lower bracket from winner/loser links; SVG connector lines; model % on
+  unplayed matches; reuse `ThemedCard`/`TeamLogo`/stage badges.
+- **Animation:** on open, replay the most recent results (e.g. since the
+  viewer's last visit — localStorage, per-viewer convenience — else last 24h)
+  in end-time order: the winner's team chip slides (FLIP) from its match into
+  the next match slot; the loser drops to the lower bracket via its "loser"
+  link or fades out as eliminated. Skip under `prefers-reduced-motion`.
+- Verify with the BLAST Rivals playoffs (finished) and the PGL Major once it
+  starts (24 Nov); E2E screenshots mid-animation via the CDP script approach.
 
 ### Later / parked
 - **Map-aware model** (per-map team ratings, re-price on veto). Needs a map data
