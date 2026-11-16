@@ -1,11 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { getUpcoming, getEvents, eventName, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getUpcoming, getEvents, getMatch, eventName, type MatchDetail, type Prediction, type TierFilter, type TourEvent, type Team } from './api'
 import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink, LiveBadge, MapPips } from './ui'
 import { stageOf } from './stage'
 
 import { dayAndClock as timeLabel, shortDate } from './time'
 import CalendarView from './Calendar'
 import { usePoll } from './usePoll'
+import { FinishedCard } from './Celebrate'
 
 const pct = (x: number) => Math.round(x * 100)
 
@@ -200,13 +201,48 @@ export default function Upcoming() {
   const [events, setEvents] = useState<TourEvent[]>([])
   const [err, setErr] = useState<string | null>(null)
 
+  // "Just finished": live matches that ended while this page was open
+  const [finished, setFinished] = useState<{ before: Prediction; after: MatchDetail; at: number }[]>([])
+  const [pending, setPending] = useState<Prediction[]>([]) // ended, waiting to be graded
+  const lastLive = useRef<Map<string, Prediction>>(new Map())
+
+  /** Compare with the previous poll: a live match that's gone has ended. */
+  const track = (next: Prediction[]) => {
+    const nowLive = new Map(next.filter((m) => m.live).map((m) => [m.matchId, m]))
+    const ended = [...lastLive.current.values()].filter((m) => !nowLive.has(m.matchId))
+    lastLive.current = nowLive
+    if (ended.length) setPending((p) => [...p, ...ended.filter((e) => !p.some((x) => x.matchId === e.matchId))])
+  }
+  // ended matches → fetch the result; keep retrying (each poll) until graded
+  const checkPending = () => {
+    for (const before of pending) {
+      getMatch(before.matchId).then((after) => {
+        if (after.status !== 'finished') return
+        setPending((p) => p.filter((x) => x.matchId !== before.matchId))
+        setFinished((f) => (f.some((x) => x.after.matchId === after.matchId) ? f : [{ before, after, at: Date.now() }, ...f]))
+      }).catch(() => {})
+    }
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(checkPending, [pending.length])
+
   useEffect(() => { getEvents().then(setEvents).catch(() => setEvents([])) }, [])
   useEffect(() => {
     setData(null)
-    getUpcoming(tier).then(setData).catch((e) => setErr(String(e)))
+    lastLive.current = new Map()
+    getUpcoming(tier).then((next) => { track(next); setData(next) }).catch((e) => setErr(String(e)))
   }, [tier])
-  // while any match is live, refresh scores + odds every 30s (silently, no spinner)
-  usePoll(!!data?.some((m) => m.live), () => { getUpcoming(tier).then(setData).catch(() => {}) })
+  // while any match is live (or one just ended), refresh every 30s (silently, no spinner)
+  usePoll(!!data?.some((m) => m.live) || pending.length > 0, () => {
+    getUpcoming(tier).then((next) => { track(next); setData(next) }).catch(() => {})
+    checkPending()
+  })
+  // results stay for 10 minutes (or until dismissed)
+  useEffect(() => {
+    if (!finished.length) return
+    const id = setInterval(() => setFinished((f) => f.filter((x) => Date.now() - x.at < 10 * 60_000)), 30_000)
+    return () => clearInterval(id)
+  }, [finished.length])
 
   if (err) return <ErrorNote msg={err} />
   const copy = COPY[tier]
@@ -229,6 +265,22 @@ export default function Upcoming() {
           <Segmented options={FILTERS} value={tier} onChange={setTier} />
         </div>
       </div>
+
+      {finished.length > 0 && (
+        <section className="mb-7">
+          <SectionTitle>Just finished</SectionTitle>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {finished.map((f) => (
+              <FinishedCard
+                key={f.after.matchId}
+                front={<MatchCard m={f.before} />}
+                result={f.after}
+                onDismiss={() => setFinished((xs) => xs.filter((x) => x.after.matchId !== f.after.matchId))}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {view === 'calendar' ? (
         !data ? <Spinner label="Loading predictions…" /> : (

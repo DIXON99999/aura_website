@@ -139,3 +139,44 @@
     background-clip: content-box;
   }
 }
+
+/* ── Correct-prediction moment (src/predict/Celebrate.tsx) ─────────────────── */
+.flip-card { perspective: 1200px; min-width: 0; }
+.flip-card-inner {
+  /* minmax(0,1fr) + min-width:0 so a face can never be wider than the card —
+     an overflowing back face is mirrored by the flip and would stick out LEFT */
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.flip-card-inner > * { grid-area: 1 / 1; min-width: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flip-card-back { transform: rotateY(180deg); }
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+
+@keyframes burst-particle {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3); opacity: 0; }
+}
+.burst-particle {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--size); height: var(--size); border-radius: 9999px;
+  animation: burst-particle 1100ms cubic-bezier(0.1, 0.8, 0.3, 1) var(--delay) both;
+}
+@keyframes burst-ring {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75); }
+  100% { box-shadow: 0 0 0 28px rgba(16, 185, 129, 0); }
+}
+.burst-ring { animation: burst-ring 1100ms ease-out 2; }
+@keyframes upset-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.upset-shake { animation: upset-shake 300ms ease-in-out 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-card-inner { transition: none; }
+  .burst-particle, .burst-ring, .upset-shake { animation: none; }
+  .burst-particle { display: none; }
+}

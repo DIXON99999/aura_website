@@ -237,6 +237,9 @@ app.get('/match/:id', async (c) => {
   if (done) {
     const same = String(done.team_a_id) === aId
     score = same ? [done.score_a, done.score_b] : [done.score_b, done.score_a]
+  } else if (p?.status === 'finished' && p.score_a != null) {
+    // settled seconds ago, before results/match_log caught up — the prediction row has the score
+    score = [p.score_a, p.score_b]
   }
   const live = orientProbA(p?.prob_a, p?.team_a_id, aId)
   const replay = res ? orientProbA(res.replay_prob_a, res.team_a_id, aId) : null

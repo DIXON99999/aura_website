@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getHistory, eventName, type HistoryRow, type TierFilter } from './api'
 import { TeamLogo, Spinner, ErrorNote, ThemedCard, Segmented, CardLink } from './ui'
 import { clock, dayLabel, melbourneDay } from './time'
+import { currentStreak, windowRecord } from './streaks'
 
 const FILTERS: { value: TierFilter | undefined; label: string }[] = [
   { value: 'tier1', label: 'Tier 1' },
@@ -97,6 +98,33 @@ export default function History() {
         </div>
         <Segmented options={FILTERS} value={tier} onChange={setTier} />
       </div>
+
+      {data && data.length > 0 && (() => {
+        const week = windowRecord(data, 7)
+        const streak = currentStreak(data)
+        if (!week.total && !streak) return null
+        return (
+          <div className="mb-6 flex flex-wrap gap-3">
+            {week.total > 0 && (
+              <div className="rounded-xl bg-white/[0.035] px-4 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">This week</div>
+                <div className="font-display text-lg font-bold tabular-nums text-white">
+                  {week.hits}<span className="text-neutral-500">/{week.total}</span>
+                  <span className="ml-1.5 text-sm font-medium text-neutral-400">{Math.round((week.hits / week.total) * 100)}%</span>
+                </div>
+              </div>
+            )}
+            {streak && streak.length >= 2 && (
+              <div className={`rounded-xl px-4 py-2.5 ${streak.kind === 'correct' ? 'bg-emerald-500/[0.12] ring-1 ring-emerald-400/25' : 'bg-white/[0.035]'}`}>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Current run</div>
+                <div className={`font-display text-lg font-bold tabular-nums ${streak.kind === 'correct' ? 'text-emerald-300' : 'text-neutral-300'}`}>
+                  {streak.length} {streak.kind === 'correct' ? 'correct' : 'misses'} in a row
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {!data ? (
         <Spinner label="Loading results…" />

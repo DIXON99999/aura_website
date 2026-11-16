@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getMatch, eventName, type MatchDetail as Detail, type TeamDetail, type RecentMatch } from './api'
 import { TeamLogo, Spinner, ThemedCard, LiveBadge, MapPips } from './ui'
 import { usePoll } from './usePoll'
+import { FlipCard, Burst } from './Celebrate'
 import { dayAndClock, shortDate } from './time'
 
 const pct = (x: number) => `${Math.round(x * 100)}%`
@@ -100,6 +101,30 @@ function Hero({ d }: { d: Detail }) {
         </div>
       )}
     </ThemedCard>
+  )
+}
+
+/** The match ended while the page was open: flip from the last live view to
+ *  the result, with a burst if the model called it. */
+function CelebrateHero({ from, to }: { from: Detail; to: Detail }) {
+  const [flipped, setFlipped] = useState(false)
+  const [effect, setEffect] = useState(false)
+  useEffect(() => {
+    const t1 = setTimeout(() => setFlipped(true), 350)
+    const t2 = setTimeout(() => setEffect(true), 1000)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [])
+  const good = to.correct === true
+  return (
+    <div className={`relative rounded-2xl ${effect ? (good ? "burst-ring" : to.correct === false ? "upset-shake" : "") : ""}`}>
+      <FlipCard flipped={flipped} front={<Hero d={from} />} back={<Hero d={to} />} />
+      {effect && good && <Burst />}
+      {effect && to.correct != null && (
+        <div className={`mt-2 rounded-lg px-3 py-2 text-center text-sm font-semibold ${good ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>
+          {good ? "✓ Model called it" : "Upset — the model had the other team"}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -381,12 +406,20 @@ export default function MatchDetail() {
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    setD(null); setErr(null)
+    setD(null); setErr(null); setCelebrateFrom(null)
     getMatch(id!).then(setD).catch((e) => setErr(String(e)))
     window.scrollTo(0, 0)
   }, [id])
   // live matches: refresh the score and odds every 30s
-  usePoll(d?.status === "live", () => { getMatch(id!).then(setD).catch(() => {}) })
+  // live matches: refresh the score and odds every 30s; if it finishes while
+  // the page is open, flip the hero from the last live view to the result
+  const [celebrateFrom, setCelebrateFrom] = useState<Detail | null>(null)
+  usePoll(d?.status === "live", () => {
+    getMatch(id!).then((next) => {
+      if (d?.status === "live" && next.status === "finished") setCelebrateFrom(d)
+      setD(next)
+    }).catch(() => {})
+  })
 
   const back = (
     <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
@@ -400,7 +433,7 @@ export default function MatchDetail() {
     <div>
       {back}
       <div className="space-y-7">
-        <Hero d={d} />
+        {celebrateFrom ? <CelebrateHero from={celebrateFrom} to={d} /> : <Hero d={d} />}
         {d.explain && d.teamA && d.teamB && <Why d={d} />}
         {d.teamA && d.teamB && (
           <section>

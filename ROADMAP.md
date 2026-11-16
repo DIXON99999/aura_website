@@ -17,9 +17,9 @@ _Last updated: 2026-11-16_
   provisional K (a team's first 10 matches move its rating 2.5× faster).
   Backtest (last 3,674 matches, never used for tuning): **64.2%** (v2 63.0%),
   tier-1 64.1% (v2 62.0%), Brier 0.2226 (v2 0.2243). Registry: `backend/src/predict/model.ts`.
-- **Next up:** 4. Correct-prediction moment. **Also:** check live mode against a
-  real live match (PGL Major starts Tue 24 Nov, 3 pm AEDT) — so far it has only
-  been tested with a simulated live row.
+- **Next up:** 5. Upcoming-match polish. **Also:** check live mode and the
+  finish animation against a real live match (PGL Major starts Tue 24 Nov,
+  3 pm AEDT) — so far both have only been tested with a simulated live row.
 
 ## Up next (in order)
 
@@ -66,12 +66,19 @@ _Last updated: 2026-11-16_
 - ⚠ Only tested with a simulated live row (scratchpad `simlive.ts`) — verify
   against a real live match.
 
-### 4. Correct-prediction moment  ⬅ start here
-- [ ] When a watched match finishes and the pick was right: card flips to the
-      result with a green burst.
-- [ ] Streaks in History ("model 7/8 this week").
+### 4. Correct-prediction moment  ✅ done (2026-11-16)
+- [x] A live match that ends while Matches is open moves to "Just finished":
+      the card flips (CSS 3D) from the last live view to the result — green
+      burst + ring + "Model called it" if right, red tint + shake + "Upset" if
+      not. Stays 10 min or until dismissed. Same flip on the match page.
+      Reduced-motion users get the result without animation.
+- [x] History: "This week" record and current run (`streaks.ts`, tested;
+      respects the tier filter). Note: until live predictions accumulate these
+      include replay picks.
+- E2E check script (scratchpad `celebrate.ts`): drives Chrome via DevTools,
+      settles a simulated live match mid-session, screenshots the flip.
 
-### 5. Upcoming-match polish
+### 5. Upcoming-match polish  ⬅ start here
 - [ ] Countdown on the next big match only (a full countdown everywhere was
       tried and reverted — the user prefers Melbourne times on cards).
 - [ ] "Biggest upset chance" highlight; featured grand-final card.
@@ -92,6 +99,7 @@ _Last updated: 2026-11-16_
 
 ## Done
 
+- 2026-11-16 — Correct-prediction moment (flip + burst) and History streaks. 140 tests.
 - 2026-11-16 — Live matches: 60s poller, live odds from map score, LIVE UI. 134 tests.
 - 2026-11-16 — Match detail page + `match_log`. Fixed: backfill applied a match
   twice when paging overlapped (now de-duplicated by id). 123 tests.
